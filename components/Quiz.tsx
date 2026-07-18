@@ -239,14 +239,6 @@ export default function Quiz() {
     >
       {stage === "intro" && (
         <div className="text-center">
-          <div className="mb-8 flex justify-center">
-            <div
-              className="h-20 w-20 rounded-3xl flex items-center justify-center font-display text-4xl shadow-xl animate-in zoom-in duration-700 fill-mode-both"
-              style={{ background: "var(--md-primary)", color: "var(--md-on-primary)" }}
-            >
-              M
-            </div>
-          </div>
           <h1 className="font-display text-4xl sm:text-5xl text-white mb-4 tracking-tight animate-in slide-in-from-bottom-8 fade-in duration-700 delay-150 fill-mode-both">
             What are we watching?
           </h1>
@@ -525,11 +517,9 @@ export default function Quiz() {
                 </h2>
                 <p className="text-xs sm:text-sm mb-1" style={{ color: "var(--md-on-surface-variant)" }}>
                   {current.runtime} min
-                  {current.voteAverage != null && (
-                    <span className="ml-3">
-                      ⭐ {current.voteAverage.toFixed(1)}
-                    </span>
-                  )}
+                  <span className="ml-3 font-medium text-[var(--md-primary)]">
+                    IMDb {current.voteAverage != null && current.voteAverage > 0 ? current.voteAverage.toFixed(1) : "N/A"}
+                  </span>
                 </p>
                 <div className="mt-2 sm:mt-4 leading-relaxed text-left w-full" style={{ color: "var(--md-on-surface)" }}>
                   <p className={!expandedSynopsis ? "line-clamp-1 sm:line-clamp-none text-sm sm:text-base" : "text-sm sm:text-base"}>
@@ -544,11 +534,11 @@ export default function Quiz() {
                   </button>
                 </div>
 
-                {current.providers && current.providers.length > 0 && (
-                  <div className="mt-5">
-                    <p className="text-xs font-display uppercase tracking-[0.2em] mb-2" style={{ color: "var(--md-on-surface-variant)" }}>
-                      Stream Now
-                    </p>
+                <div className="mt-5">
+                  <p className="text-xs font-display uppercase tracking-[0.2em] mb-2" style={{ color: "var(--md-on-surface-variant)" }}>
+                    Where to watch
+                  </p>
+                  {current.providers && current.providers.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
                       {current.providers.map(p => (
                         <Image 
@@ -562,8 +552,12 @@ export default function Quiz() {
                         />
                       ))}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <p className="text-xs opacity-70" style={{ color: "var(--md-on-surface)" }}>
+                      Not currently streaming in your region.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
