@@ -250,12 +250,14 @@ export default function Quiz() {
             Answer a few quick questions about your mood and the occasion. We&apos;ll hand you
             one recommendation at a time — no lists, no registration.
           </p>
-          <md-filled-button
-            onClick={() => setStage("quiz")}
-            style={{ '--md-filled-button-container-shape': '9999px' } as React.CSSProperties}
-          >
-            Start now
-          </md-filled-button>
+          <div className="mt-8">
+            <md-filled-button
+              onClick={() => setStage("quiz")}
+              style={{ '--md-sys-color-primary': 'var(--md-primary)', '--md-sys-color-on-primary': 'var(--md-on-primary)' } as React.CSSProperties}
+            >
+              Start now
+            </md-filled-button>
+          </div>
         </div>
       )}
 
@@ -581,13 +583,19 @@ export default function Quiz() {
             className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[var(--md-surface)]"
           >
             <motion.div 
-              animate={{ scale: [1, 1.05, 1], opacity: [0.5, 1, 0.5] }}
-              transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
-              className="mb-12 relative w-32 h-32"
+              animate={{ 
+                y: [0, -30, 0],
+                scaleX: [1, 0.95, 1, 1.1, 1],
+                scaleY: [1, 1.05, 1, 0.9, 1]
+              }}
+              transition={{ 
+                y: { repeat: Infinity, duration: 0.5, ease: "easeOut", repeatType: "mirror" },
+                scaleX: { repeat: Infinity, duration: 1 },
+                scaleY: { repeat: Infinity, duration: 1 }
+              }}
+              className="mb-8 text-[var(--md-primary)] flex items-center justify-center"
             >
-              <div className="absolute inset-0 rounded-full border-4 border-[var(--md-primary)] opacity-20" />
-              <div className="absolute inset-2 rounded-full border-4 border-[var(--md-primary)] border-t-transparent animate-spin duration-1000" />
-              <div className="absolute inset-6 rounded-full border-4 border-[var(--md-secondary)] border-b-transparent animate-spin" style={{ animationDirection: 'reverse', animationDuration: '2s' }} />
+              <md-icon style={{ fontSize: '80px', width: '80px', height: '80px' }}>live_tv</md-icon>
             </motion.div>
             
             <motion.h1 
@@ -618,10 +626,10 @@ export default function Quiz() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 1.5 }}
-              className="mt-6 text-xs uppercase tracking-[0.3em]"
+              className="mt-6 text-xs uppercase tracking-[0.2em] font-medium"
               style={{ color: "var(--md-on-surface-variant)" }}
             >
-              Curating Cinematic Experience...
+              Popping the corn...
             </motion.p>
           </motion.div>
         )}
