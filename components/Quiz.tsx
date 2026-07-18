@@ -251,12 +251,14 @@ export default function Quiz() {
             one recommendation at a time — no lists, no registration.
           </p>
           <div className="mt-8">
-            <md-filled-button
+            <button
               onClick={() => setStage("quiz")}
-              style={{ '--md-sys-color-primary': 'var(--md-primary)', '--md-sys-color-on-primary': 'var(--md-on-primary)' } as React.CSSProperties}
+              className="relative overflow-hidden font-display uppercase tracking-wide text-sm px-8 py-3.5 rounded-full transition-transform hover:scale-105 active:scale-95"
+              style={{ background: "var(--md-primary)", color: "var(--md-on-primary)" }}
             >
+              <md-ripple></md-ripple>
               Start now
-            </md-filled-button>
+            </button>
           </div>
         </div>
       )}
@@ -392,15 +394,23 @@ export default function Quiz() {
           </AnimatePresence>
 
           <div className="flex items-center justify-between mt-8">
-            <md-text-button onClick={back}>
+            <button
+              onClick={back}
+              className="relative overflow-hidden text-sm font-medium px-5 py-2.5 rounded-full"
+              style={{ color: "var(--md-on-surface-variant)" }}
+            >
+              <md-ripple></md-ripple>
               Back
-            </md-text-button>
-            <md-filled-button
+            </button>
+            <button
               onClick={next}
               disabled={!canAdvance}
+              className="relative overflow-hidden font-display uppercase tracking-wide text-sm px-7 py-3 rounded-full disabled:opacity-40 disabled:pointer-events-none"
+              style={{ background: "var(--md-primary)", color: "var(--md-on-primary)" }}
             >
+              <md-ripple></md-ripple>
               {stepIndex === steps.length - 1 ? "Check results" : "Next"}
-            </md-filled-button>
+            </button>
           </div>
         </div>
       )}
@@ -522,20 +532,32 @@ export default function Quiz() {
                 )}
 
                 <div className="flex flex-wrap gap-3 mt-auto pt-8">
-                  <md-filled-button onClick={nextRecommendation}>
+                  <button
+                    onClick={nextRecommendation}
+                    className="relative overflow-hidden font-display uppercase tracking-wide text-sm px-6 py-3 rounded-full"
+                    style={{ background: "var(--md-primary)", color: "var(--md-on-primary)" }}
+                  >
+                    <md-ripple></md-ripple>
                     Get another
-                  </md-filled-button>
+                  </button>
                   {current.trailerKey && (
-                    <md-filled-button
+                    <button
                       onClick={() => setShowTrailer(true)}
-                      style={{ '--md-sys-color-primary': 'var(--md-sys-color-secondary)', '--md-sys-color-on-primary': 'var(--md-sys-color-on-secondary)' } as React.CSSProperties}
+                      className="relative overflow-hidden font-display uppercase tracking-wide text-sm px-6 py-3 rounded-full"
+                      style={{ background: "var(--md-secondary)", color: "var(--md-on-secondary)" }}
                     >
+                      <md-ripple></md-ripple>
                       Watch Trailer
-                    </md-filled-button>
+                    </button>
                   )}
-                  <md-text-button onClick={restart}>
+                  <button
+                    onClick={restart}
+                    className="relative overflow-hidden text-sm font-medium px-6 py-3 rounded-full border"
+                    style={{ borderColor: "var(--md-outline-variant)", color: "var(--md-on-surface)" }}
+                  >
+                    <md-ripple></md-ripple>
                     Retake quiz
-                  </md-text-button>
+                  </button>
                 </div>
               </div>
             </div>
@@ -549,9 +571,14 @@ export default function Quiz() {
           <p className="text-[var(--md-on-surface-variant)] mb-8">
             Try broadening your answers or selecting different genres.
           </p>
-          <md-filled-button onClick={restart}>
+          <button
+            onClick={restart}
+            className="relative overflow-hidden font-display uppercase tracking-wide text-sm px-7 py-3 rounded-full"
+            style={{ background: "var(--md-primary)", color: "var(--md-on-primary)" }}
+          >
+            <md-ripple></md-ripple>
             Retake quiz
-          </md-filled-button>
+          </button>
         </div>
       )}
 
@@ -583,19 +610,13 @@ export default function Quiz() {
             className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[var(--md-surface)]"
           >
             <motion.div 
-              animate={{ 
-                y: [0, -30, 0],
-                scaleX: [1, 0.95, 1, 1.1, 1],
-                scaleY: [1, 1.05, 1, 0.9, 1]
-              }}
-              transition={{ 
-                y: { repeat: Infinity, duration: 0.5, ease: "easeOut", repeatType: "mirror" },
-                scaleX: { repeat: Infinity, duration: 1 },
-                scaleY: { repeat: Infinity, duration: 1 }
-              }}
-              className="mb-8 text-[var(--md-primary)] flex items-center justify-center"
+              animate={{ scale: [1, 1.05, 1], opacity: [0.5, 1, 0.5] }}
+              transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+              className="mb-12 relative w-32 h-32"
             >
-              <md-icon style={{ fontSize: '80px', width: '80px', height: '80px' }}>live_tv</md-icon>
+              <div className="absolute inset-0 rounded-full border-4 border-[var(--md-primary)] opacity-20" />
+              <div className="absolute inset-2 rounded-full border-4 border-[var(--md-primary)] border-t-transparent animate-spin duration-1000" />
+              <div className="absolute inset-6 rounded-full border-4 border-[var(--md-secondary)] border-b-transparent animate-spin" style={{ animationDirection: 'reverse', animationDuration: '2s' }} />
             </motion.div>
             
             <motion.h1 
@@ -626,10 +647,10 @@ export default function Quiz() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 1.5 }}
-              className="mt-6 text-xs uppercase tracking-[0.2em] font-medium"
+              className="mt-6 text-xs uppercase tracking-[0.3em]"
               style={{ color: "var(--md-on-surface-variant)" }}
             >
-              Popping the corn...
+              Curating Cinematic Experience...
             </motion.p>
           </motion.div>
         )}
