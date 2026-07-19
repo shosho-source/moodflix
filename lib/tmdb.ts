@@ -142,28 +142,8 @@ interface TMDBMovieDetail {
   };
 }
 
-// ─── Core fetch helper ───────────────────────────────────────────
-import https from "node:https";
-
+// ─── Core fetch helper (uses global fetch instead of node:https) ─
 const TMDB_BASE = "https://api.themoviedb.org/3";
-
-function httpGet(url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    https
-      .get(url, (res) => {
-        let data = "";
-        res.on("data", (chunk: Buffer) => (data += chunk.toString()));
-        res.on("end", () => {
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            resolve(data);
-          } else {
-            reject(new Error(`TMDB API error: ${res.statusCode}`));
-          }
-        });
-      })
-      .on("error", reject);
-  });
-}
 
 async function tmdbFetch<T>(path: string, params: Record<string, string> = {}): Promise<T> {
   const apiKey = process.env.TMDB_API_KEY;
@@ -177,8 +157,11 @@ async function tmdbFetch<T>(path: string, params: Record<string, string> = {}): 
     url.searchParams.set(k, v);
   }
 
-  const raw = await httpGet(url.toString());
-  return JSON.parse(raw) as T;
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`TMDB API error: ${res.status} ${res.statusText}`);
+  }
+  return res.json() as Promise<T>;
 }
 
 // ─── Fetch discover pages ────────────────────────────────────────
@@ -357,17 +340,85 @@ function hueFromGenres(genreIds: number[]): number {
   return 210;
 }
 
-// ─── Main entry: fetch & build full movie list ───────────────────
-let cachedMovies: Movie[] | null = null;
-let cacheTimestamp = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+// ─── Shared: enrich a batch of TMDBMovie[] into Movie[] ──────────
+async function enrichMovies(rawMovies: TMDBMovie[]): Promise<Movie[]> {
+  // Fetch details for each movie (runtime + certification + keywords)
+  // Batch in groups to respect rate limits (~40 req/10s)
+  const BATCH_SIZE = 40;
+  const details = new Map<number, TMDBMovieDetail>();
 
-export async function fetchTMDBMovies(): Promise<Movie[]> {
-  // In-memory cache to avoid re-fetching on every single click, but low TTL for variety
-  if (cachedMovies && Date.now() - cacheTimestamp < CACHE_TTL) {
-    return cachedMovies;
+  for (let i = 0; i < rawMovies.length; i += BATCH_SIZE) {
+    const batch = rawMovies.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map((m) => fetchMovieDetail(m.id).catch(() => null))
+    );
+    for (const detail of batchResults) {
+      if (detail) details.set(detail.id, detail);
+    }
+    // Small delay between batches to be nice to TMDB
+    if (i + BATCH_SIZE < rawMovies.length) {
+      await new Promise((r) => setTimeout(r, 300));
+    }
   }
 
+  const movies: Movie[] = [];
+
+  for (const raw of rawMovies) {
+    const detail = details.get(raw.id);
+    const rating = detail ? getUSCertification(detail) : (raw.adult ? "R" : "PG-13");
+    const keywords = detail?.keywords?.keywords ?? [];
+    const runtime = detail?.runtime ?? 120; // fallback runtime
+    const trailerKey = detail?.videos?.results?.find(v => v.site === "YouTube" && v.type === "Trailer")?.key;
+    
+    const rawProviders = detail?.["watch/providers"]?.results || {};
+    const targetRegions = ["US", "IN", "GB", "DE", "FR", "IT", "ES"]; // US, India, and major European regions
+    const providerMap = new Map<number, { provider_id: number; provider_name: string; logo_path: string }>();
+    
+    for (const region of targetRegions) {
+      const regionProviders = rawProviders[region]?.flatrate || [];
+      for (const p of regionProviders) {
+        if (!providerMap.has(p.provider_id)) {
+          providerMap.set(p.provider_id, p);
+        }
+      }
+    }
+    const providers = Array.from(providerMap.values());
+    const year = parseInt(raw.release_date?.split("-")[0], 10);
+
+    if (isNaN(year) || year < 1970) continue; // skip very old or invalid
+
+    const genres = mapGenres(raw.genre_ids);
+    const moods = inferMoods(raw.genre_ids, raw.vote_average);
+    const occasions = inferOccasions(raw.genre_ids, rating);
+    const categories = inferCategories(raw.genre_ids, keywords, raw.vote_average, raw.vote_count);
+
+    movies.push({
+      id: `tmdb-${raw.id}`,
+      tmdbId: raw.id,
+      title: raw.title,
+      year,
+      runtime,
+      genres,
+      moods,
+      occasions,
+      rating,
+      categories,
+      blurb: raw.overview || "A must-watch film.",
+      hue: hueFromGenres(raw.genre_ids),
+      posterPath: raw.poster_path ? `https://image.tmdb.org/t/p/w500${raw.poster_path}` : null,
+      backdropPath: raw.backdrop_path ? `https://image.tmdb.org/t/p/w1280${raw.backdrop_path}` : null,
+      trailerKey: trailerKey || null,
+      providers: providers || [],
+      voteAverage: raw.vote_average,
+    });
+  }
+
+  return movies;
+}
+
+// ─── Main entry: fetch & build full movie list ───────────────────
+// Caching is now handled at the route level via ISR (revalidate = 3600)
+export async function fetchTMDBMovies(): Promise<Movie[]> {
   const randomPage = (max: number) => Math.floor(Math.random() * max) + 1;
 
   // Step 1: Fetch popular + top-rated movies (broad coverage, randomized pages)
@@ -403,81 +454,43 @@ export async function fetchTMDBMovies(): Promise<Movie[]> {
   }
 
   const uniqueMovies = [...seen.values()];
+  return enrichMovies(uniqueMovies);
+}
 
-  // Step 3: Fetch details for each movie (runtime + certification + keywords)
-  // Batch in groups to respect rate limits (~40 req/10s)
-  const BATCH_SIZE = 40;
-  const details = new Map<number, TMDBMovieDetail>();
+// ─── Search movies by query ──────────────────────────────────────
+export async function searchTMDBMovies(query: string): Promise<Movie[]> {
+  if (!query || query.trim().length === 0) return [];
 
-  for (let i = 0; i < uniqueMovies.length; i += BATCH_SIZE) {
-    const batch = uniqueMovies.slice(i, i + BATCH_SIZE);
-    const batchResults = await Promise.all(
-      batch.map((m) => fetchMovieDetail(m.id).catch(() => null))
-    );
-    for (const detail of batchResults) {
-      if (detail) details.set(detail.id, detail);
-    }
-    // Small delay between batches to be nice to TMDB
-    if (i + BATCH_SIZE < uniqueMovies.length) {
-      await new Promise((r) => setTimeout(r, 300));
-    }
-  }
+  const data = await tmdbFetch<TMDBDiscoverResponse>("/search/movie", {
+    query: query.trim(),
+    include_adult: "false",
+    language: "en-US",
+    page: "1",
+  });
 
-  // Step 4: Build Movie objects
-  const movies: Movie[] = [];
+  // Filter to movies with posters and release dates for quality
+  const filtered = data.results.filter(
+    (m) => m.poster_path && m.release_date && m.title && m.vote_count > 5
+  );
 
-  for (const raw of uniqueMovies) {
-    const detail = details.get(raw.id);
-    const rating = detail ? getUSCertification(detail) : (raw.adult ? "R" : "PG-13");
-    const keywords = detail?.keywords?.keywords ?? [];
-    const runtime = detail?.runtime ?? 120; // fallback runtime
-    const trailerKey = detail?.videos?.results?.find(v => v.site === "YouTube" && v.type === "Trailer")?.key;
-    
-    const rawProviders = detail?.["watch/providers"]?.results || {};
-    const targetRegions = ["US", "IN", "GB", "DE", "FR", "IT", "ES"]; // US, India, and major European regions
-    const providerMap = new Map<number, { provider_id: number; provider_name: string; logo_path: string }>();
-    
-    for (const region of targetRegions) {
-      const regionProviders = rawProviders[region]?.flatrate || [];
-      for (const p of regionProviders) {
-        if (!providerMap.has(p.provider_id)) {
-          providerMap.set(p.provider_id, p);
-        }
-      }
-    }
-    const providers = Array.from(providerMap.values());
-    const year = parseInt(raw.release_date.split("-")[0], 10);
+  // Enrich the top 10 results with full details
+  const top = filtered.slice(0, 10);
+  return enrichMovies(top);
+}
 
-    if (isNaN(year) || year < 1970) continue; // skip very old or invalid
+// ─── Fetch similar movies ────────────────────────────────────────
+export async function fetchSimilarMovies(tmdbId: number): Promise<Movie[]> {
+  const data = await tmdbFetch<TMDBDiscoverResponse>(`/movie/${tmdbId}/similar`, {
+    language: "en-US",
+    page: "1",
+  });
 
-    const genres = mapGenres(raw.genre_ids);
-    const moods = inferMoods(raw.genre_ids, raw.vote_average);
-    const occasions = inferOccasions(raw.genre_ids, rating);
-    const categories = inferCategories(raw.genre_ids, keywords, raw.vote_average, raw.vote_count);
+  // Filter to movies with posters for quality
+  const filtered = data.results.filter(
+    (m) => m.poster_path && m.release_date && m.title
+  );
 
-    movies.push({
-      id: `tmdb-${raw.id}`,
-      tmdbId: raw.id,
-      title: raw.title,
-      year,
-      runtime,
-      genres,
-      moods,
-      occasions,
-      rating,
-      categories,
-      blurb: raw.overview || "A must-watch film.",
-      hue: hueFromGenres(raw.genre_ids),
-      posterPath: raw.poster_path ? `https://image.tmdb.org/t/p/w500${raw.poster_path}` : null,
-      backdropPath: raw.backdrop_path ? `https://image.tmdb.org/t/p/w1280${raw.backdrop_path}` : null,
-      trailerKey: trailerKey || null,
-      providers: providers || [],
-      voteAverage: raw.vote_average,
-    });
-  }
-
-  cachedMovies = movies;
-  cacheTimestamp = Date.now();
-
-  return movies;
+  // Enrich the top 12 similar movies
+  const top = filtered.slice(0, 12);
+  return enrichMovies(top);
 }

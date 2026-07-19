@@ -83,8 +83,6 @@ body {
   font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-@import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&display=swap');
-
 .font-display {
   font-family: "Roboto Condensed", "Arial Narrow", Roboto, sans-serif;
   font-stretch: condensed;
@@ -140,4 +138,114 @@ body {
   background: var(--md-primary);
   border-radius: 3px;
   transition: width 400ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ─── Search input ───────────────────────────────────────────────── */
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-input-icon {
+  position: absolute;
+  left: 16px;
+  color: var(--md-on-surface-variant);
+  font-size: 22px;
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  padding: 16px 48px 16px 52px;
+  border: 2px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-lg);
+  background: var(--md-surface-container-low);
+  color: var(--md-on-surface);
+  font-size: 16px;
+  outline: none;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.search-input::placeholder {
+  color: var(--md-outline);
+}
+
+.search-input:focus {
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--md-primary) 15%, transparent);
+}
+
+.search-input-clear {
+  position: absolute;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--md-on-surface-variant);
+  transition: background 150ms ease;
+}
+
+.search-input-clear:hover {
+  background: var(--md-surface-container-highest);
+}
+
+/* ─── Search result cards ────────────────────────────────────────── */
+.search-result-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--md-shape-md);
+  background: var(--md-surface-container-low);
+  border: 1px solid var(--md-outline-variant);
+  transition: border-color 150ms ease, background 150ms ease;
+  cursor: pointer;
+}
+
+.search-result-card:hover {
+  border-color: var(--md-outline);
+  background: var(--md-surface-container-high);
+}
+
+/* ─── Similar movies carousel ────────────────────────────────────── */
+.similar-carousel {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--md-outline-variant) transparent;
+}
+
+.similar-carousel::-webkit-scrollbar {
+  height: 4px;
+}
+
+.similar-carousel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.similar-carousel::-webkit-scrollbar-thumb {
+  background: var(--md-outline-variant);
+  border-radius: 2px;
+}
+
+.similar-card {
+  flex: none;
+  width: 120px;
+  scroll-snap-align: start;
+  transition: transform 200ms ease;
+  cursor: pointer;
+}
+
+.similar-card:hover {
+  transform: translateY(-4px);
 }

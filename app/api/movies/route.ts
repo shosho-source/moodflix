@@ -1,7 +1,10 @@
 import { fetchTMDBMovies } from "@/lib/tmdb";
 import { movies as fallbackMovies } from "@/lib/movies";
 
-export const dynamic = "force-dynamic";
+// ISR: revalidate every hour instead of force-dynamic on every request.
+// This caches the TMDB response and revalidates in the background,
+// saving rate limits and improving initial load speed.
+export const revalidate = 3600;
 
 export async function GET() {
   try {
