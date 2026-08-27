@@ -253,10 +253,13 @@ function renderSharedMovieView(data = {}) {
     };
   }
 
-  // Wire Explore Button
+  // Wire Explore Button to Log In Page
   const exploreBtn = document.getElementById('shareExploreBtn');
   if (exploreBtn) {
-    exploreBtn.onclick = () => switchTab('movies-view');
+    exploreBtn.onclick = () => {
+      state.isSharedPage = false;
+      showAuthView();
+    };
   }
 }
 
