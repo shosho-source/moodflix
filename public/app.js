@@ -84,6 +84,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function initSupabaseClient() {
+  const isShared = checkShareUrl();
+
   try {
     const res = await fetch('/api/config');
     const config = await res.json();
@@ -91,7 +93,9 @@ async function initSupabaseClient() {
       supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
       supabaseClient.auth.onAuthStateChange((event, session) => {
         if (session && session.user) showDashboardView(session.user);
-        else if (event === 'SIGNED_OUT') showAuthView();
+        else if (event === 'SIGNED_OUT') {
+          if (!state.isSharedPage) showAuthView();
+        }
       });
       await checkSession();
       return;
@@ -99,7 +103,7 @@ async function initSupabaseClient() {
   } catch (err) {
     console.warn('Failed to load backend config:', err);
   }
-  const isShared = checkShareUrl();
+
   if (!isShared) {
     showAuthView();
   }
@@ -113,10 +117,18 @@ async function checkSession() {
       return;
     }
   }
-  showAuthView();
+  if (state.isSharedPage) {
+    switchTab('share-view');
+  } else {
+    showAuthView();
+  }
 }
 
 function showAuthView() {
+  if (state.isSharedPage) {
+    switchTab('share-view');
+    return;
+  }
   document.getElementById('auth-view').classList.remove('hidden');
   document.querySelectorAll('.view-panel').forEach(v => {
     if (v.id !== 'auth-view') v.classList.add('hidden');
@@ -607,108 +619,6 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// --- URL Check & Custom Share Landing Page ---
-function renderSharedMovieView(sharedData) {
-  if (!sharedData) return;
-  const { title, year, poster, magnet, torrentName, size, quality, seeds, trailer, mediaId, mediaType } = sharedData;
-
-  const shareTitleEl = document.getElementById('shareMovieTitle');
-  if (shareTitleEl) {
-    const fullTitle = year ? `${title.toUpperCase()} (${year})` : title.toUpperCase();
-    shareTitleEl.innerText = fullTitle;
-    shareTitleEl.dataset.text = fullTitle;
-  }
-
-  const posterImg = document.getElementById('sharePosterImg');
-  if (posterImg && poster) {
-    posterImg.src = poster;
-  }
-
-  const specName = document.getElementById('shareTorrentName');
-  if (specName) specName.innerText = torrentName || title;
-
-  const specQuality = document.getElementById('shareTorrentQuality');
-  if (specQuality) specQuality.innerText = quality || '1080P HD';
-
-  const specSize = document.getElementById('shareTorrentSize');
-  if (specSize) specSize.innerText = size || 'HD';
-
-  const specSeeds = document.getElementById('shareTorrentSeeds');
-  if (specSeeds) specSeeds.innerText = seeds ? `🌱 ${seeds} Seeds` : '🌱 Healthy Seeds';
-
-  // Wire Download Button
-  const downloadBtn = document.getElementById('shareDownloadBtn');
-  if (downloadBtn) {
-    downloadBtn.onclick = () => {
-      if (magnet) {
-        copyMagnetLink(encodeURIComponent(magnet));
-        const torrentObj = { name: torrentName || title, magnet, sizeFormatted: size, qualityBadge: quality };
-        triggerDownload(encodeURIComponent(title), encodeURIComponent(JSON.stringify(torrentObj)));
-      } else {
-        openTorrentModal({ title, id: mediaId, poster }, mediaType || 'movie');
-      }
-    };
-  }
-
-  // Wire Trailer Button
-  const trailerBtn = document.getElementById('shareTrailerBtn');
-  if (trailerBtn) {
-    trailerBtn.onclick = () => {
-      if (trailer) {
-        const modal = document.getElementById('trailer-modal');
-        const iframe = document.getElementById('trailer-iframe');
-        const loader = document.getElementById('trailer-loader');
-        modal?.classList.remove('hidden');
-        loader?.classList.add('hidden');
-        if (iframe) {
-          iframe.classList.remove('hidden');
-          iframe.src = `https://www.youtube.com/embed/${trailer}?autoplay=1`;
-        }
-      } else if (mediaId) {
-        playTrailer(mediaId, mediaType || 'movie');
-      } else {
-        showToast('Searching trailer...', 'info');
-      }
-    };
-  }
-
-  // Wire Explore Button
-  const exploreBtn = document.getElementById('shareExploreBtn');
-  if (exploreBtn) {
-    exploreBtn.onclick = () => switchTab('movies-view');
-  }
-}
-
-function checkShareUrl() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.has('share')) {
-    state.isSharedPage = true;
-    const title = decodeURIComponent(params.get('title') || 'Movie');
-    const year = decodeURIComponent(params.get('year') || '');
-    const poster = decodeURIComponent(params.get('poster') || '');
-    const magnet = decodeURIComponent(params.get('magnet') || '');
-    const torrentName = decodeURIComponent(params.get('name') || title);
-    const size = decodeURIComponent(params.get('size') || '');
-    const quality = decodeURIComponent(params.get('quality') || '1080P HD');
-    const seeds = decodeURIComponent(params.get('seeds') || '');
-    const trailer = decodeURIComponent(params.get('trailer') || '');
-    const mediaId = decodeURIComponent(params.get('mediaId') || '');
-    const mediaType = decodeURIComponent(params.get('mediaType') || 'movie');
-
-    state.currentSharedMovie = {
-      title, year, poster, magnet, torrentName, size, quality, seeds, trailer, mediaId, mediaType
-    };
-
-    renderSharedMovieView(state.currentSharedMovie);
-
-    if (state.currentUser) {
-      switchTab('share-view');
-    } else {
-      switchTab('auth-view');
-    }
-  }
-}
-
 // --- Listeners ---
 function setupEventListeners() {
   document.getElementById('settingsForm')?.addEventListener('submit', saveSettings);
@@ -781,18 +691,14 @@ function setupEventListeners() {
   });
 
   // Brand Logos & Tutorial View Nav
-  document.getElementById('logo-btn')?.addEventListener('click', () => switchTab(state.lastFeedTab || 'movies-view'));
+  document.getElementById('logo-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.lastFeedTab || 'movies-view')));
   document.getElementById('shareTutorialBtn')?.addEventListener('click', () => switchTab('tutorial-view'));
-  document.getElementById('tutorial-logo-btn')?.addEventListener('click', () => switchTab(state.lastFeedTab || 'movies-view'));
-  document.getElementById('tutorial-back-feed-btn')?.addEventListener('click', () => switchTab(state.lastFeedTab || 'movies-view'));
+  document.getElementById('tutorial-logo-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.lastFeedTab || 'movies-view')));
+  document.getElementById('tutorial-back-feed-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.lastFeedTab || 'movies-view')));
   document.getElementById('back-to-download-btn')?.addEventListener('click', () => {
-    switchTab(state.lastFeedTab || 'movies-view');
+    switchTab(state.isSharedPage ? 'share-view' : (state.lastFeedTab || 'movies-view'));
   });
   document.getElementById('back-to-share-btn')?.addEventListener('click', () => switchTab('share-view'));
-  document.getElementById('shareDownloadBtn')?.addEventListener('click', () => {
-    const title = document.getElementById('shareMovieTitle')?.innerText || 'Movie';
-    openTorrentModal({ title, id: null }, 'movie');
-  });
 
   // Movies
   elements.btnClearMovieSearch.addEventListener('click', () => {
