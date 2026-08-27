@@ -6,8 +6,8 @@
 import fs from 'fs';
 import path from 'path';
 
-export const DEFAULT_TMDB_API_KEY = '2e22dca68c093bae309efd704aa6d020';
-export const DEFAULT_TMDB_READ_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIyZTIyZGNhNjhjMDkzYmFlMzA5ZWZkNzA0YWE2ZDAyMCIsIm5iZiI6MTc4MzE3Mjc3NC43ODcwMDAyLCJzdWIiOiI2YTQ5MGVhNjNhYzJkYzk4YTY3NDViNGUiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.hyizZKI38hhc3pRm_Ga1QslIsW5cJ-SkuiF1HH8p_Rc';
+export const DEFAULT_TMDB_API_KEY = process.env.TMDB_API_KEY || '';
+export const DEFAULT_TMDB_READ_TOKEN = process.env.TMDB_READ_TOKEN || '';
 
 export class Storage {
   static DATA_DIR = process.env.VERCEL ? path.join('/tmp', '.rotten-cine') : path.resolve(process.cwd(), '.rotten-cine');
@@ -83,8 +83,8 @@ export class Storage {
     return {
       ...Storage.DEFAULT_STATE.settings,
       ...settings,
-      tmdbApiKey: (settings.tmdbApiKey && String(settings.tmdbApiKey).trim()) ? String(settings.tmdbApiKey).trim() : (process.env.TMDB_API_KEY || DEFAULT_TMDB_API_KEY),
-      tmdbReadToken: (settings.tmdbReadToken && String(settings.tmdbReadToken).trim()) ? String(settings.tmdbReadToken).trim() : (process.env.TMDB_READ_TOKEN || DEFAULT_TMDB_READ_TOKEN)
+      tmdbApiKey: (settings.tmdbApiKey && String(settings.tmdbApiKey).trim()) ? String(settings.tmdbApiKey).trim() : (process.env.TMDB_API_KEY || ''),
+      tmdbReadToken: (settings.tmdbReadToken && String(settings.tmdbReadToken).trim()) ? String(settings.tmdbReadToken).trim() : (process.env.TMDB_READ_TOKEN || '')
     };
   }
 
