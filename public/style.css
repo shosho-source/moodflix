@@ -4308,47 +4308,152 @@ iframe {
   opacity: 0.6;
 }
 
-/* Public App Feature Cards on Auth Page */
-.auth-features-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-top: 20px;
-  width: 100%;
-}
-
-.auth-feature-card {
-  background: var(--retro-surface);
-  border: 1.5px solid var(--retro-border);
-  padding: 10px 8px;
-  text-align: left;
-  box-shadow: 2px 2px 0px var(--retro-border);
+/* Custom Shared Torrent Page Layout */
+.share-landing-container {
+  max-width: 580px;
+  margin: 0 auto;
+  padding: 10px 16px 40px 16px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: stretch;
+  gap: 20px;
 }
 
-.auth-feature-icon {
-  font-size: 1.2rem;
+.share-hero-section {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.auth-feature-title {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  color: var(--retro-fg);
+.share-content-box {
+  padding: 24px;
+  text-align: left;
+  background: var(--retro-surface, #ffffff);
+  border: 2px solid var(--retro-border, #000000);
+  box-shadow: 6px 6px 0px var(--retro-border, #000000);
 }
 
-.auth-feature-desc {
-  font-size: 0.68rem;
-  line-height: 1.3;
+.share-movie-title {
+  font-family: var(--font-bebas, 'Bebas Neue', cursive);
+  font-size: clamp(32px, 5vw, 48px);
+  line-height: 1.05;
+  margin: 12px 0 8px 0;
+  color: var(--retro-fg, #1a1a1a);
+  letter-spacing: 0.02em;
+}
+
+.share-movie-subtitle {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 0.8rem;
+  line-height: 1.45;
   color: #444444;
+  margin-bottom: 20px;
+}
+
+.share-specs-card {
+  background: #FAF8F5;
+  border: 1.5px solid var(--retro-border, #000000);
+  padding: 14px;
+  margin-bottom: 20px;
+  box-shadow: 3px 3px 0px var(--retro-border, #000000);
+}
+
+.share-spec-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.share-spec-badge {
+  background: var(--retro-fg, #1a1a1a);
+  color: #ffffff;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  letter-spacing: 0.05em;
+}
+
+.share-spec-size,
+.share-spec-seeds {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--retro-fg, #1a1a1a);
+}
+
+.share-spec-name {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82rem;
+  font-weight: 600;
+  word-break: break-all;
+  color: #222222;
+  line-height: 1.35;
+}
+
+.share-cta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.share-cta-primary {
+  grid-column: span 2;
+  padding: 14px !important;
+  font-size: 1.05rem !important;
+  background: var(--retro-fg, #1a1a1a) !important;
+  color: #ffffff !important;
+  font-weight: 800;
+}
+
+.share-cta-primary:hover {
+  background: #333333 !important;
+}
+
+.share-cta-secondary {
+  padding: 12px 10px !important;
+  font-size: 0.82rem !important;
+  font-weight: 700;
+}
+
+.share-cta-tertiary {
+  grid-column: span 2;
+  padding: 10px !important;
+  font-size: 0.8rem !important;
+  background: #f0ede6 !important;
+}
+
+/* Torrent Modal Share Banner & Actions */
+.modal-share-banner {
+  background: #fffae6;
+  border-bottom: 2px solid var(--retro-border, #000000);
+  padding: 10px 14px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #1a1a1a;
+  text-align: center;
+}
+
+.btn-share-torrent-action {
+  background: #FAF8F5 !important;
+}
+
+.btn-share-torrent-action:hover {
+  background: #eae6dd !important;
 }
 
 @media (max-width: 600px) {
-  .auth-features-grid {
+  .share-cta-grid {
     grid-template-columns: 1fr;
-    gap: 8px;
+  }
+
+  .share-cta-primary,
+  .share-cta-tertiary {
+    grid-column: span 1;
   }
 }

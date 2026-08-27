@@ -383,20 +383,61 @@
         </div>
       </section>
 
-      <!-- VIEW: Share Landing View -->
+      <!-- VIEW: Share Landing View (Custom Shared Torrent Page) -->
       <section id="share-view" class="view-panel hidden">
-        <div class="hero-section">
-          <div class="cassette-wrapper">
-            <img src="images/hero.webp" alt="VHS Cassette" class="cassette-img">
+        <div class="share-landing-container">
+          <!-- VHS Cassette Centerpiece -->
+          <div class="share-hero-section">
+            <div class="cassette-wrapper non-interactive">
+              <div class="halftone-circle non-interactive"></div>
+              <div class="cassette-card non-interactive">
+                <img id="sharePosterImg" src="images/hero.webp" alt="Shared Movie VHS Tape"
+                  class="cassette-img non-interactive" width="900" height="600" fetchpriority="high" decoding="async">
+              </div>
+            </div>
           </div>
-        </div>
-        <div class="content-section retro-box">
-          <div class="status-tag">[NEW MOVIE] SOMEONE SHARED A MOVIE TO YOU</div>
-          <h1 class="hero-headline scramble-text" id="shareMovieTitle">MOVIE TITLE</h1>
-          <div class="cta-section">
-            <button id="shareDownloadBtn" class="retro-btn scramble-text">DOWNLOAD TORRENT</button>
-            <button id="shareTrailerBtn" class="retro-btn scramble-text">WATCH TRAILER</button>
-            <button id="shareTutorialBtn" class="retro-btn scramble-text">HOW TO DOWNLOAD & WATCH</button>
+
+          <!-- Share Content Box -->
+          <div class="share-content-box retro-box">
+            <div class="status-tag">
+              <span class="status-dot"></span>
+              <span class="status-text scramble-text">NEW MOVIE • SHARED TO YOU</span>
+            </div>
+
+            <h1 class="share-movie-title scramble-text" id="shareMovieTitle">MOVIE TITLE</h1>
+            <p class="share-movie-subtitle scramble-text" id="shareSubtitle">
+              A CURATED MOVIE RELEASE WAS SHARED WITH YOU.<br>CLICK BELOW TO DOWNLOAD THE TORRENT AND START WATCHING.
+            </p>
+
+            <!-- Release Specifications Card -->
+            <div class="share-specs-card" id="shareSpecsCard">
+              <div class="share-spec-header">
+                <span class="share-spec-badge" id="shareTorrentQuality">1080P HD</span>
+                <span class="share-spec-size" id="shareTorrentSize">2.4 GB</span>
+                <span class="share-spec-seeds" id="shareTorrentSeeds">🌱 45 Seeds</span>
+              </div>
+              <div class="share-spec-name" id="shareTorrentName">Release filename loading...</div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="share-cta-grid">
+              <button id="shareDownloadBtn" class="retro-btn share-cta-primary scramble-text">
+                <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 4px;">download</span>
+                <span>DOWNLOAD TORRENT</span>
+              </button>
+              <button id="shareTrailerBtn" class="retro-btn share-cta-secondary scramble-text">
+                <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 4px;">play_arrow</span>
+                <span>WATCH TRAILER</span>
+              </button>
+              <button id="shareTutorialBtn" class="retro-btn share-cta-secondary scramble-text">
+                <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 4px;">help_outline</span>
+                <span>HOW TO DOWNLOAD & WATCH</span>
+              </button>
+              <button id="shareExploreBtn" class="retro-btn share-cta-tertiary scramble-text">
+                <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 4px;">explore</span>
+                <span>EXPLORE FULL MOODFLIX</span>
+              </button>
+            </div>
           </div>
         </div>
       </section>

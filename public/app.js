@@ -481,15 +481,105 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// --- URL Check ---
+// --- URL Check & Custom Share Landing Page ---
+function renderSharedMovieView(sharedData) {
+  if (!sharedData) return;
+  const { title, year, poster, magnet, torrentName, size, quality, seeds, trailer, mediaId, mediaType } = sharedData;
+
+  const shareTitleEl = document.getElementById('shareMovieTitle');
+  if (shareTitleEl) {
+    const fullTitle = year ? `${title.toUpperCase()} (${year})` : title.toUpperCase();
+    shareTitleEl.innerText = fullTitle;
+    shareTitleEl.dataset.text = fullTitle;
+  }
+
+  const posterImg = document.getElementById('sharePosterImg');
+  if (posterImg && poster) {
+    posterImg.src = poster;
+  }
+
+  const specName = document.getElementById('shareTorrentName');
+  if (specName) specName.innerText = torrentName || title;
+
+  const specQuality = document.getElementById('shareTorrentQuality');
+  if (specQuality) specQuality.innerText = quality || '1080P HD';
+
+  const specSize = document.getElementById('shareTorrentSize');
+  if (specSize) specSize.innerText = size || 'HD';
+
+  const specSeeds = document.getElementById('shareTorrentSeeds');
+  if (specSeeds) specSeeds.innerText = seeds ? `🌱 ${seeds} Seeds` : '🌱 Healthy Seeds';
+
+  // Wire Download Button
+  const downloadBtn = document.getElementById('shareDownloadBtn');
+  if (downloadBtn) {
+    downloadBtn.onclick = () => {
+      if (magnet) {
+        copyMagnetLink(encodeURIComponent(magnet));
+        const torrentObj = { name: torrentName || title, magnet, sizeFormatted: size, qualityBadge: quality };
+        triggerDownload(encodeURIComponent(title), encodeURIComponent(JSON.stringify(torrentObj)));
+      } else {
+        openTorrentModal({ title, id: mediaId, poster }, mediaType || 'movie');
+      }
+    };
+  }
+
+  // Wire Trailer Button
+  const trailerBtn = document.getElementById('shareTrailerBtn');
+  if (trailerBtn) {
+    trailerBtn.onclick = () => {
+      if (trailer) {
+        const modal = document.getElementById('trailer-modal');
+        const iframe = document.getElementById('trailer-iframe');
+        const loader = document.getElementById('trailer-loader');
+        modal?.classList.remove('hidden');
+        loader?.classList.add('hidden');
+        if (iframe) {
+          iframe.classList.remove('hidden');
+          iframe.src = `https://www.youtube.com/embed/${trailer}?autoplay=1`;
+        }
+      } else if (mediaId) {
+        playTrailer(mediaId, mediaType || 'movie');
+      } else {
+        showToast('Searching trailer...', 'info');
+      }
+    };
+  }
+
+  // Wire Explore Button
+  const exploreBtn = document.getElementById('shareExploreBtn');
+  if (exploreBtn) {
+    exploreBtn.onclick = () => switchTab('movies-view');
+  }
+}
+
 function checkShareUrl() {
   const params = new URLSearchParams(window.location.search);
   if (params.has('share')) {
+    state.isSharedPage = true;
     const title = decodeURIComponent(params.get('title') || 'Movie');
-    switchTab('share-view');
-    const shareTitleEl = document.getElementById('shareMovieTitle');
-    shareTitleEl.innerText = title;
-    shareTitleEl.dataset.text = title;
+    const year = decodeURIComponent(params.get('year') || '');
+    const poster = decodeURIComponent(params.get('poster') || '');
+    const magnet = decodeURIComponent(params.get('magnet') || '');
+    const torrentName = decodeURIComponent(params.get('name') || title);
+    const size = decodeURIComponent(params.get('size') || '');
+    const quality = decodeURIComponent(params.get('quality') || '1080P HD');
+    const seeds = decodeURIComponent(params.get('seeds') || '');
+    const trailer = decodeURIComponent(params.get('trailer') || '');
+    const mediaId = decodeURIComponent(params.get('mediaId') || '');
+    const mediaType = decodeURIComponent(params.get('mediaType') || 'movie');
+
+    state.currentSharedMovie = {
+      title, year, poster, magnet, torrentName, size, quality, seeds, trailer, mediaId, mediaType
+    };
+
+    renderSharedMovieView(state.currentSharedMovie);
+
+    if (state.currentUser) {
+      switchTab('share-view');
+    } else {
+      switchTab('auth-view');
+    }
   }
 }
 
@@ -861,19 +951,9 @@ function openDetailView(m, type, isDiagnostic = false) {
   elements.detailMeta.innerText = `★ ${m.rating} / 10  •  ${m.year}  •  ${type.toUpperCase()}`;
   elements.detailSynopsis.innerText = m.synopsis || 'No synopsis available.';
 
-  elements.detailTorrentsBtn.onclick = () => openTorrentModal(m, type);
+  elements.detailTorrentsBtn.onclick = () => openTorrentModal(m, type, false);
   elements.detailTrailerBtn.onclick = () => playTrailer(m.id, type);
-  elements.detailShareBtn.onclick = async () => {
-    const url = `${window.location.origin}/?share=1&title=${encodeURIComponent(m.title)}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      showToast('Share link copied to clipboard!');
-    } catch (err) {
-      console.error('Clipboard write failed:', err);
-      // Fallback if clipboard API is not available
-      showToast(`Copy this URL: ${url}`);
-    }
-  };
+  elements.detailShareBtn.onclick = () => openTorrentModal(m, type, true);
 
   switchTab('detail-view');
   window.scrollTo(0, 0);
@@ -922,10 +1002,12 @@ async function loadSimilarMedia(id, type) {
   }
 }
 
-function generateTorrentRows(torrents, searchTitle) {
+function generateTorrentRows(torrents, searchTitle, mediaObj = {}) {
   if (!torrents || torrents.length === 0) {
     return '<div style="padding:20px;text-align:center;">No torrents found.</div>';
   }
+  const safeMediaJson = encodeURIComponent(JSON.stringify(mediaObj || { title: searchTitle }));
+
   return torrents.map((t, i) => {
     const safeName = escapeHtml(t.name);
     const safeQuality = escapeHtml(t.qualityBadge || 'HD');
@@ -943,11 +1025,14 @@ function generateTorrentRows(torrents, searchTitle) {
         <span>S: ${safeSeeds} / P: ${safePeers}</span>
         <span>${safeSize}</span>
         <div class="torrent-actions-cell">
-          <button class="retro-btn" onclick="triggerDownload('${safeSearchTitle}', '${safeTorrentJson}')" title="Download .torrent file">
+          <button class="retro-btn btn-torrent-action" onclick="triggerDownload('${safeSearchTitle}', '${safeTorrentJson}')" title="Download .torrent file">
             <span class="material-symbols-outlined" style="vertical-align: middle;">download</span>
           </button>
-          <button class="retro-btn btn-magnet-action" onclick="copyMagnetLink('${safeMagnet}')" title="Copy Magnet Link">
+          <button class="retro-btn btn-torrent-action btn-magnet-action" onclick="copyMagnetLink('${safeMagnet}')" title="Copy Magnet Link">
             <span class="material-symbols-outlined" style="vertical-align: middle;">link</span>
+          </button>
+          <button class="retro-btn btn-torrent-action btn-share-torrent-action" onclick="shareSelectedTorrent('${safeSearchTitle}', '${safeTorrentJson}', '${safeMediaJson}')" title="Generate Custom Share Link">
+            <span class="material-symbols-outlined" style="vertical-align: middle;">share</span>
           </button>
         </div>
       </div>
@@ -1048,7 +1133,7 @@ window.toggleEpisodeAccordion = async function(seasonNumber, episodeNumber, mStr
             <div class="torrent-list-header" style="display:flex; margin-bottom:10px;">
               <span>Release</span><span>Quality</span><span>Seeds/Peers</span><span>Size</span><span>Action</span>
             </div>
-            ${generateTorrentRows(filteredTorrents, searchTitle)}
+            ${generateTorrentRows(filteredTorrents, searchTitle, { ...m, mediaType: 'tv', season: seasonNumber, episode: episodeNumber })}
           `;
         }
       }
@@ -1088,27 +1173,45 @@ async function playTrailer(id, type) {
   }
 }
 
-async function openTorrentModal(m, type) {
-  elements.modalMovieTitle.innerText = m.title;
+async function openTorrentModal(m, type, isShareMode = false) {
+  elements.modalMovieTitle.innerText = isShareMode ? `SHARE: ${m.title}` : m.title;
   elements.torrentModal.classList.remove('hidden');
-  
+
+  let banner = document.getElementById('modalShareBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'modalShareBanner';
+    banner.className = 'modal-share-banner';
+    const header = elements.torrentModal.querySelector('.modal-header');
+    if (header) header.insertAdjacentElement('afterend', banner);
+  }
+
+  if (isShareMode) {
+    banner.classList.remove('hidden');
+    banner.innerHTML = '<span>🔗 SELECT A TORRENT RELEASE BELOW TO SHARE</span>';
+  } else {
+    banner.classList.add('hidden');
+  }
+
   if (type === 'tv') {
     if (elements.modalTorrentHeader) elements.modalTorrentHeader.classList.add('hidden');
     loadTVSeasonsAccordion(m);
   } else {
     if (elements.modalTorrentHeader) elements.modalTorrentHeader.classList.remove('hidden');
-    fetchTorrentsForModal(m.title, type);
+    fetchTorrentsForModal(m.title, type, m);
   }
 }
 
-async function fetchTorrentsForModal(searchTitle, type) {
+async function fetchTorrentsForModal(searchTitle, type, mediaObj = {}) {
   elements.modalTorrentList.innerHTML = 'Loading torrents...';
   try {
     const category = type === 'tv' ? '205' : '200';
-    const res = await fetch(`/api/search?q=${encodeURIComponent(searchTitle)}&minSeeds=5&category=${category}`);
+    const res = await fetch(`/api/search?q=${encodeURIComponent(searchTitle)}&minSeeds=0&category=${category}`);
     const data = await res.json();
-    if (data.success) {
-      elements.modalTorrentList.innerHTML = generateTorrentRows(data.torrents, searchTitle);
+    if (data.success && data.torrents && data.torrents.length > 0) {
+      elements.modalTorrentList.innerHTML = generateTorrentRows(data.torrents, searchTitle, mediaObj);
+    } else {
+      elements.modalTorrentList.innerHTML = '<div style="padding:20px;text-align:center;">No torrents found.</div>';
     }
   } catch (err) {
     elements.modalTorrentList.innerHTML = '<div style="padding:20px;text-align:center;">Failed to fetch torrents.</div>';
@@ -1137,6 +1240,80 @@ window.copyMagnetLink = async function(magnetDec) {
   } catch (err) {
     showToast('Failed to copy magnet link', 'error');
   }
+};
+
+window.shareSelectedTorrent = async function(titleDec, torrentStr, mediaStr) {
+  const title = decodeURIComponent(titleDec);
+  let torrent = {};
+  try {
+    torrent = JSON.parse(decodeURIComponent(torrentStr || '{}'));
+  } catch (e) {}
+
+  let media = {};
+  try {
+    media = JSON.parse(decodeURIComponent(mediaStr || '{}'));
+  } catch (e) {}
+
+  let trailerKey = media.trailerKey || '';
+  if (!trailerKey && media.id) {
+    try {
+      const res = await fetch(`/api/details?id=${media.id}&type=${media.mediaType || media.type || 'movie'}`);
+      const data = await res.json();
+      if (data.success && data.details && data.details.trailerKey) {
+        trailerKey = data.details.trailerKey;
+      }
+    } catch (e) {}
+  }
+
+  const queryParams = new URLSearchParams();
+  queryParams.set('share', '1');
+  queryParams.set('title', media.title || title);
+  if (media.year) queryParams.set('year', media.year);
+  if (media.poster) queryParams.set('poster', media.poster);
+  if (media.id) queryParams.set('mediaId', media.id);
+  if (media.mediaType || media.type) queryParams.set('mediaType', media.mediaType || media.type);
+  if (torrent.magnet) queryParams.set('magnet', torrent.magnet);
+  if (torrent.name) queryParams.set('name', torrent.name);
+  if (torrent.sizeFormatted || torrent.size) queryParams.set('size', torrent.sizeFormatted || torrent.size);
+  if (torrent.qualityBadge || torrent.quality) queryParams.set('quality', torrent.qualityBadge || torrent.quality);
+  if (torrent.seeders) queryParams.set('seeds', torrent.seeders);
+  if (trailerKey) queryParams.set('trailer', trailerKey);
+
+  const shareUrl = `${window.location.origin}/?${queryParams.toString()}`;
+
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(shareUrl);
+    } else {
+      const textArea = document.createElement("textarea");
+      textArea.value = shareUrl;
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+    }
+    showToast('Custom share link copied to clipboard! 🎬', 'success');
+  } catch (err) {
+    showToast('Custom share link ready!', 'info');
+  }
+
+  if (elements.torrentModal) elements.torrentModal.classList.add('hidden');
+
+  renderSharedMovieView({
+    title: media.title || title,
+    year: media.year || '',
+    poster: media.poster || '',
+    magnet: torrent.magnet || '',
+    torrentName: torrent.name || title,
+    size: torrent.sizeFormatted || torrent.size || 'HD',
+    quality: torrent.qualityBadge || '1080P HD',
+    seeds: torrent.seeders || 0,
+    trailer: trailerKey,
+    mediaId: media.id || '',
+    mediaType: media.mediaType || media.type || 'movie'
+  });
+  switchTab('share-view');
 };
 
 window.triggerDownload = async function(titleDec, torrentStr) {
