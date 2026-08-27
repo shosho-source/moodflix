@@ -5,6 +5,7 @@
 
 import { Ranker } from './ranker.js';
 import { NameCleaner } from './nameCleaner.js';
+import { TMDB } from './tmdb.js';
 
 export class CineBay {
   static API_URL = 'https://apibay.org/q.php';
@@ -105,7 +106,19 @@ export class CineBay {
   static async queryTorrentio(query, options = {}) {
     try {
       let imdbId = options.imdbId;
-      const isTv = options.category === '205' || options.type === 'tv';
+      let isTv = options.category === '205' || options.type === 'tv';
+      let season = options.season;
+      let episode = options.episode;
+
+      // Extract season and episode from query if present (e.g. S01E01, 1x01, Season 1 Episode 2)
+      if (!season || !episode) {
+        const seMatch = query.match(/S(\d+)E(\d+)/i) || query.match(/(\d+)x(\d+)/i) || query.match(/Season\s*(\d+).*?Episode\s*(\d+)/i);
+        if (seMatch) {
+          isTv = true;
+          season = parseInt(seMatch[1], 10);
+          episode = parseInt(seMatch[2], 10);
+        }
+      }
 
       if (!imdbId) {
         imdbId = await CineBay.lookupImdbId(query, isTv ? 'tv' : 'movie');
@@ -115,9 +128,9 @@ export class CineBay {
 
       let url = `https://torrentio.strem.fun/stream/movie/${imdbId}.json`;
       if (isTv) {
-        const season = options.season || 1;
-        const episode = options.episode || 1;
-        url = `https://torrentio.strem.fun/stream/series/${imdbId}:${season}:${episode}.json`;
+        const s = season || 1;
+        const e = episode || 1;
+        url = `https://torrentio.strem.fun/stream/series/${imdbId}:${s}:${e}.json`;
       }
 
       const controller = new AbortController();
@@ -174,17 +187,43 @@ export class CineBay {
    */
   static async lookupImdbId(query, type = 'movie') {
     try {
-      const apiKey = process.env.TMDB_API_KEY || '2e22dca68c093bae309efd704aa6d020';
-      const cleanTitle = NameCleaner.clean(query) || query;
-      const searchUrl = `https://api.themoviedb.org/3/search/${type}?query=${encodeURIComponent(cleanTitle)}&api_key=${apiKey}`;
-      const searchRes = await fetch(searchUrl);
-      if (!searchRes.ok) return null;
-      const searchData = await searchRes.json();
-      const media = searchData.results?.[0];
+      // Strip S01E01, 1x01, Season 1, Episode 1, 1080p, etc. from query to find the show/movie
+      let cleanQuery = query
+        .replace(/S\d+E\d+/gi, ' ')
+        .replace(/\d+x\d+/gi, ' ')
+        .replace(/Season\s*\d+/gi, ' ')
+        .replace(/Episode\s*\d+/gi, ' ')
+        .replace(/\b(1080p|720p|4k|2160p|bluray|web-dl|x264|x265|hevc|h264|h265)\b/gi, ' ')
+        .trim();
+
+      const cleanTitle = NameCleaner.clean(cleanQuery) || cleanQuery;
+      const { headers, queryParams } = TMDB.getAuthHeadersAndParams();
+
+      // Try primary type
+      const p1 = new URLSearchParams(queryParams);
+      p1.set('query', cleanTitle);
+      let searchUrl = `${TMDB.BASE_URL}/search/${type}?${p1.toString()}`;
+      let searchRes = await fetch(searchUrl, { headers });
+      let searchData = searchRes.ok ? await searchRes.json() : null;
+      let media = searchData?.results?.[0];
+
+      // If not found and type was tv, try movie (or vice versa)
+      if (!media || !media.id) {
+        const altType = type === 'tv' ? 'movie' : 'tv';
+        const p2 = new URLSearchParams(queryParams);
+        p2.set('query', cleanTitle);
+        searchUrl = `${TMDB.BASE_URL}/search/${altType}?${p2.toString()}`;
+        searchRes = await fetch(searchUrl, { headers });
+        searchData = searchRes.ok ? await searchRes.json() : null;
+        media = searchData?.results?.[0];
+        if (media) type = altType;
+      }
+
       if (!media || !media.id) return null;
 
-      const extUrl = `https://api.themoviedb.org/3/${type}/${media.id}/external_ids?api_key=${apiKey}`;
-      const extRes = await fetch(extUrl);
+      const p3 = new URLSearchParams(queryParams);
+      const extUrl = `${TMDB.BASE_URL}/${type}/${media.id}/external_ids?${p3.toString()}`;
+      const extRes = await fetch(extUrl, { headers });
       if (!extRes.ok) return null;
       const extData = await extRes.json();
       return extData.imdb_id || null;
@@ -198,7 +237,8 @@ export class CineBay {
    */
   static async queryApibay(term, category = '200') {
     try {
-      const url = `${CineBay.API_URL}?q=${encodeURIComponent(term)}&cat=${category}`;
+      const catParam = category === 'all' ? '0' : category;
+      const url = `${CineBay.API_URL}?q=${encodeURIComponent(term)}&cat=${catParam}`;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 6000);
 
@@ -231,6 +271,35 @@ export class CineBay {
               source: 'TheCineBay'
             };
           });
+        }
+      }
+
+      // If category search returned nothing and category was not 0, try universal category 0
+      if (catParam !== '0') {
+        const fallbackUrl = `${CineBay.API_URL}?q=${encodeURIComponent(term)}&cat=0`;
+        const fbRes = await fetch(fallbackUrl, { headers: { 'User-Agent': 'TheMovieCine/2.0 (Node.js)' } });
+        if (fbRes.ok) {
+          const fbData = await fbRes.json();
+          if (Array.isArray(fbData) && fbData.length > 0 && fbData[0].id !== '0' && fbData[0].name !== 'No results returned') {
+            return fbData.map(item => {
+              const magnet = CineBay.buildMagnet(item.info_hash, item.name);
+              return {
+                id: item.id,
+                name: item.name,
+                infoHash: item.info_hash,
+                seeders: parseInt(item.seeders || 0, 10),
+                leechers: parseInt(item.leechers || 0, 10),
+                size: parseInt(item.size || 0, 10),
+                added: item.added ? new Date(parseInt(item.added, 10) * 1000).toISOString() : null,
+                status: item.status || 'member',
+                username: item.username || 'Anonymous',
+                category: item.category,
+                imdb: item.imdb || null,
+                magnet,
+                source: 'TheCineBay'
+              };
+            });
+          }
         }
       }
     } catch (err) {}

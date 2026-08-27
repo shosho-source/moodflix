@@ -153,12 +153,16 @@ app.get('/api/search', async (req, res) => {
     const query = req.query.q || '';
     const minSeeds = req.query.minSeeds ? parseInt(req.query.minSeeds, 10) : 0;
     const category = req.query.category || '200'; // 200 = All Video, 205 = TV, 201 = Movies
+    const season = req.query.season ? parseInt(req.query.season, 10) : undefined;
+    const episode = req.query.episode ? parseInt(req.query.episode, 10) : undefined;
+    const imdbId = req.query.imdbId || req.query.imdb || undefined;
+    const type = req.query.type || (category === '205' ? 'tv' : 'movie');
 
     if (!query.trim()) {
       return res.status(400).json({ success: false, error: 'Search query is required' });
     }
 
-    const torrents = await CineBay.search(query, { minSeeds, category });
+    const torrents = await CineBay.search(query, { minSeeds, category, season, episode, imdbId, type });
     res.json({ success: true, count: torrents.length, query, torrents });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

@@ -1002,42 +1002,96 @@ async function loadSimilarMedia(id, type) {
   }
 }
 
-function generateTorrentRows(torrents, searchTitle, mediaObj = {}) {
+function renderTorrentRows(container, torrents, searchTitle, mediaObj = {}, isShareMode = false) {
+  if (!container) return;
   if (!torrents || torrents.length === 0) {
-    return '<div style="padding:20px;text-align:center;">No torrents found.</div>';
+    container.innerHTML = '<div style="padding:24px;text-align:center;font-family:var(--font-mono);font-size:0.9rem;">No torrents found.</div>';
+    return;
   }
-  const safeMediaJson = encodeURIComponent(JSON.stringify(mediaObj || { title: searchTitle }));
 
-  return torrents.map((t, i) => {
+  const rowsHtml = torrents.map((t, i) => {
     const safeName = escapeHtml(t.name);
     const safeQuality = escapeHtml(t.qualityBadge || 'HD');
-    const safeSeeds = escapeHtml(t.seeders || 0);
-    const safePeers = escapeHtml(t.leechers || 0);
-    const safeSize = escapeHtml(t.sizeFormatted || 'N/A');
-    const safeTorrentJson = encodeURIComponent(JSON.stringify(t));
-    const safeSearchTitle = encodeURIComponent(searchTitle || '');
-    const safeMagnet = encodeURIComponent(t.magnet || '');
+    const safeSeeds = escapeHtml(t.seeders !== undefined ? t.seeders : 0);
+    const safePeers = escapeHtml(t.leechers !== undefined ? t.leechers : 0);
+    const safeSize = escapeHtml(t.sizeFormatted || (t.size ? `${(t.size / (1024*1024*1024)).toFixed(2)} GB` : 'N/A'));
 
     return `
-      <div class="torrent-row">
+      <div class="torrent-row ${isShareMode ? 'torrent-share-row' : ''}" data-idx="${i}" style="cursor: pointer;">
         <span class="torrent-name" title="${safeName}">#${i+1} ${safeName}</span>
         <span>${safeQuality}</span>
         <span>S: ${safeSeeds} / P: ${safePeers}</span>
         <span>${safeSize}</span>
-        <div class="torrent-actions-cell">
-          <button class="retro-btn btn-torrent-action" onclick="triggerDownload('${safeSearchTitle}', '${safeTorrentJson}')" title="Download .torrent file">
-            <span class="material-symbols-outlined" style="vertical-align: middle;">download</span>
-          </button>
-          <button class="retro-btn btn-torrent-action btn-magnet-action" onclick="copyMagnetLink('${safeMagnet}')" title="Copy Magnet Link">
-            <span class="material-symbols-outlined" style="vertical-align: middle;">link</span>
-          </button>
-          <button class="retro-btn btn-torrent-action btn-share-torrent-action" onclick="shareSelectedTorrent('${safeSearchTitle}', '${safeTorrentJson}', '${safeMediaJson}')" title="Generate Custom Share Link">
-            <span class="material-symbols-outlined" style="vertical-align: middle;">share</span>
-          </button>
+        <div class="torrent-actions-cell" style="display:flex;gap:6px;align-items:center;">
+          ${isShareMode ? `
+            <button type="button" class="retro-btn btn-share-select-action" data-idx="${i}" title="Select this torrent to share">
+              <span class="material-symbols-outlined" style="vertical-align: middle;">share</span>
+              <span style="margin-left:3px;">SELECT & SHARE</span>
+            </button>
+          ` : `
+            <button type="button" class="retro-btn btn-torrent-action btn-download-action" data-idx="${i}" title="Download .torrent file">
+              <span class="material-symbols-outlined" style="vertical-align: middle;">download</span>
+            </button>
+            <button type="button" class="retro-btn btn-torrent-action btn-magnet-action" data-idx="${i}" title="Copy Magnet Link">
+              <span class="material-symbols-outlined" style="vertical-align: middle;">link</span>
+            </button>
+            <button type="button" class="retro-btn btn-torrent-action btn-share-action" data-idx="${i}" title="Share this Torrent">
+              <span class="material-symbols-outlined" style="vertical-align: middle;">share</span>
+            </button>
+          `}
         </div>
       </div>
     `;
   }).join('');
+
+  container.innerHTML = rowsHtml;
+
+  // Bind clean click handlers to each row and action button
+  container.querySelectorAll('.torrent-row').forEach(row => {
+    const idx = parseInt(row.dataset.idx, 10);
+    const selectedTorrent = torrents[idx];
+
+    // Clicking anywhere on the row in Share Mode shares it
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      if (isShareMode) {
+        executeTorrentShare(selectedTorrent, mediaObj, searchTitle);
+      } else {
+        triggerDownloadDirect(searchTitle, selectedTorrent);
+      }
+    });
+
+    const shareBtn = row.querySelector('.btn-share-select-action, .btn-share-action');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        executeTorrentShare(selectedTorrent, mediaObj, searchTitle);
+      });
+    }
+
+    const downloadBtn = row.querySelector('.btn-download-action');
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        triggerDownloadDirect(searchTitle, selectedTorrent);
+      });
+    }
+
+    const magnetBtn = row.querySelector('.btn-magnet-action');
+    if (magnetBtn) {
+      magnetBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        copyMagnetLink(selectedTorrent.magnet);
+      });
+    }
+  });
+}
+
+function generateTorrentRows(torrents, searchTitle, mediaObj = {}) {
+  // Retained for backward compatibility
+  const tempDiv = document.createElement('div');
+  renderTorrentRows(tempDiv, torrents, searchTitle, mediaObj, false);
+  return tempDiv.innerHTML;
 }
 
 async function loadTVSeasonsAccordion(m) {
@@ -1133,8 +1187,10 @@ window.toggleEpisodeAccordion = async function(seasonNumber, episodeNumber, mStr
             <div class="torrent-list-header" style="display:flex; margin-bottom:10px;">
               <span>Release</span><span>Quality</span><span>Seeds/Peers</span><span>Size</span><span>Action</span>
             </div>
-            ${generateTorrentRows(filteredTorrents, searchTitle, { ...m, mediaType: 'tv', season: seasonNumber, episode: episodeNumber })}
+            <div class="ep-torrent-items"></div>
           `;
+          const itemsContainer = content.querySelector('.ep-torrent-items');
+          renderTorrentRows(itemsContainer, filteredTorrents, searchTitle, { ...m, mediaType: 'tv', season: seasonNumber, episode: episodeNumber }, false);
         }
       }
     } catch (err) {
@@ -1198,23 +1254,135 @@ async function openTorrentModal(m, type, isShareMode = false) {
     loadTVSeasonsAccordion(m);
   } else {
     if (elements.modalTorrentHeader) elements.modalTorrentHeader.classList.remove('hidden');
-    fetchTorrentsForModal(m.title, type, m);
+    fetchTorrentsForModal(m.title, type, m, isShareMode);
   }
 }
 
-async function fetchTorrentsForModal(searchTitle, type, mediaObj = {}) {
-  elements.modalTorrentList.innerHTML = 'Loading torrents...';
+async function fetchTorrentsForModal(searchTitle, type, mediaObj = {}, isShareMode = false) {
+  elements.modalTorrentList.innerHTML = '<div style="padding:24px;text-align:center;font-family:var(--font-mono);">Loading torrents...</div>';
   try {
     const category = type === 'tv' ? '205' : '200';
     const res = await fetch(`/api/search?q=${encodeURIComponent(searchTitle)}&minSeeds=0&category=${category}`);
     const data = await res.json();
     if (data.success && data.torrents && data.torrents.length > 0) {
-      elements.modalTorrentList.innerHTML = generateTorrentRows(data.torrents, searchTitle, mediaObj);
+      renderTorrentRows(elements.modalTorrentList, data.torrents, searchTitle, mediaObj, isShareMode);
     } else {
-      elements.modalTorrentList.innerHTML = '<div style="padding:20px;text-align:center;">No torrents found.</div>';
+      elements.modalTorrentList.innerHTML = '<div style="padding:24px;text-align:center;font-family:var(--font-mono);">No torrents found.</div>';
     }
   } catch (err) {
-    elements.modalTorrentList.innerHTML = '<div style="padding:20px;text-align:center;">Failed to fetch torrents.</div>';
+    elements.modalTorrentList.innerHTML = '<div style="padding:24px;text-align:center;font-family:var(--font-mono);">Failed to fetch torrents.</div>';
+  }
+}
+
+async function executeTorrentShare(torrent, mediaObj = {}, searchTitle = '') {
+  if (!torrent) return;
+  const title = mediaObj.title || searchTitle || torrent.name || 'Movie';
+
+  let trailerKey = mediaObj.trailerKey || '';
+  if (!trailerKey && mediaObj.id) {
+    try {
+      const res = await fetch(`/api/details?id=${mediaObj.id}&type=${mediaObj.mediaType || mediaObj.type || 'movie'}`);
+      const data = await res.json();
+      if (data.success && data.details && data.details.trailerKey) {
+        trailerKey = data.details.trailerKey;
+      }
+    } catch (e) {}
+  }
+
+  const queryParams = new URLSearchParams();
+  queryParams.set('share', '1');
+  queryParams.set('title', title);
+  if (mediaObj.year) queryParams.set('year', mediaObj.year);
+  if (mediaObj.poster) queryParams.set('poster', mediaObj.poster);
+  if (mediaObj.id) queryParams.set('mediaId', mediaObj.id);
+  if (mediaObj.mediaType || mediaObj.type) queryParams.set('mediaType', mediaObj.mediaType || mediaObj.type);
+  if (torrent.magnet) queryParams.set('magnet', torrent.magnet);
+  if (torrent.name) queryParams.set('name', torrent.name);
+  if (torrent.sizeFormatted || torrent.size) queryParams.set('size', torrent.sizeFormatted || `${(torrent.size / (1024*1024*1024)).toFixed(2)} GB`);
+  if (torrent.qualityBadge || torrent.quality) queryParams.set('quality', torrent.qualityBadge || torrent.quality);
+  if (torrent.seeders !== undefined) queryParams.set('seeds', torrent.seeders);
+  if (trailerKey) queryParams.set('trailer', trailerKey);
+
+  const shareUrl = `${window.location.origin}/?${queryParams.toString()}`;
+
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(shareUrl);
+    } else {
+      const textArea = document.createElement("textarea");
+      textArea.value = shareUrl;
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+    }
+    showToast('Custom share link copied to clipboard! 🎬', 'success');
+  } catch (err) {
+    showToast('Custom share link ready!', 'info');
+  }
+
+  if (elements.torrentModal) elements.torrentModal.classList.add('hidden');
+
+  renderSharedMovieView({
+    title: title,
+    year: mediaObj.year || '',
+    poster: mediaObj.poster || '',
+    magnet: torrent.magnet || '',
+    torrentName: torrent.name || title,
+    size: torrent.sizeFormatted || (torrent.size ? `${(torrent.size / (1024*1024*1024)).toFixed(2)} GB` : 'HD'),
+    quality: torrent.qualityBadge || '1080P HD',
+    seeds: torrent.seeders || 0,
+    trailer: trailerKey,
+    mediaId: mediaObj.id || '',
+    mediaType: mediaObj.mediaType || mediaObj.type || 'movie'
+  });
+  switchTab('share-view');
+}
+
+function triggerDownloadDirect(title, torrent) {
+  if (!torrent) return;
+  const safeName = (torrent.name || title || 'download').replace(/[^a-zA-Z0-9_.-]/g, '_');
+  const hash = torrent.infoHash || (torrent.magnet && torrent.magnet.match(/xt=urn:btih:([a-zA-Z0-9]+)/i)?.[1]);
+
+  showToast('Downloading .torrent file...', 'info');
+
+  if (torrent.magnet) {
+    copyMagnetLink(torrent.magnet);
+  }
+
+  fetch('/api/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ movieTitle: title, torrent, openMagnet: false })
+  }).catch(() => {});
+
+  if (hash) {
+    fetch(`/api/torrent-file?hash=${hash}&name=${encodeURIComponent(safeName)}`)
+      .then(res => {
+        if (res.ok) return res.blob();
+        throw new Error('Torrent file not cached');
+      })
+      .then(blob => {
+        if (blob && blob.size > 0) {
+          const downloadUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.download = `${safeName}.torrent`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
+          showToast('Downloaded .torrent file! 💾', 'success');
+        }
+      })
+      .catch(() => {
+        if (torrent.magnet) {
+          window.location.href = torrent.magnet;
+        }
+      });
+  } else if (torrent.magnet) {
+    window.location.href = torrent.magnet;
   }
 }
 
@@ -1242,78 +1410,17 @@ window.copyMagnetLink = async function(magnetDec) {
   }
 };
 
-window.shareSelectedTorrent = async function(titleDec, torrentStr, mediaStr) {
+window.shareSelectedTorrent = function(titleDec, torrentStr, mediaStr) {
   const title = decodeURIComponent(titleDec);
   let torrent = {};
   try {
     torrent = JSON.parse(decodeURIComponent(torrentStr || '{}'));
   } catch (e) {}
-
   let media = {};
   try {
     media = JSON.parse(decodeURIComponent(mediaStr || '{}'));
   } catch (e) {}
-
-  let trailerKey = media.trailerKey || '';
-  if (!trailerKey && media.id) {
-    try {
-      const res = await fetch(`/api/details?id=${media.id}&type=${media.mediaType || media.type || 'movie'}`);
-      const data = await res.json();
-      if (data.success && data.details && data.details.trailerKey) {
-        trailerKey = data.details.trailerKey;
-      }
-    } catch (e) {}
-  }
-
-  const queryParams = new URLSearchParams();
-  queryParams.set('share', '1');
-  queryParams.set('title', media.title || title);
-  if (media.year) queryParams.set('year', media.year);
-  if (media.poster) queryParams.set('poster', media.poster);
-  if (media.id) queryParams.set('mediaId', media.id);
-  if (media.mediaType || media.type) queryParams.set('mediaType', media.mediaType || media.type);
-  if (torrent.magnet) queryParams.set('magnet', torrent.magnet);
-  if (torrent.name) queryParams.set('name', torrent.name);
-  if (torrent.sizeFormatted || torrent.size) queryParams.set('size', torrent.sizeFormatted || torrent.size);
-  if (torrent.qualityBadge || torrent.quality) queryParams.set('quality', torrent.qualityBadge || torrent.quality);
-  if (torrent.seeders) queryParams.set('seeds', torrent.seeders);
-  if (trailerKey) queryParams.set('trailer', trailerKey);
-
-  const shareUrl = `${window.location.origin}/?${queryParams.toString()}`;
-
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(shareUrl);
-    } else {
-      const textArea = document.createElement("textarea");
-      textArea.value = shareUrl;
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-    }
-    showToast('Custom share link copied to clipboard! 🎬', 'success');
-  } catch (err) {
-    showToast('Custom share link ready!', 'info');
-  }
-
-  if (elements.torrentModal) elements.torrentModal.classList.add('hidden');
-
-  renderSharedMovieView({
-    title: media.title || title,
-    year: media.year || '',
-    poster: media.poster || '',
-    magnet: torrent.magnet || '',
-    torrentName: torrent.name || title,
-    size: torrent.sizeFormatted || torrent.size || 'HD',
-    quality: torrent.qualityBadge || '1080P HD',
-    seeds: torrent.seeders || 0,
-    trailer: trailerKey,
-    mediaId: media.id || '',
-    mediaType: media.mediaType || media.type || 'movie'
-  });
-  switchTab('share-view');
+  executeTorrentShare(torrent, media, title);
 };
 
 window.triggerDownload = async function(titleDec, torrentStr) {
@@ -1385,45 +1492,30 @@ window.triggerDownload = async function(titleDec, torrentStr) {
 };
 
 async function performDirectSearch(query, minSeeds, category) {
-  elements.directSearchResults.innerHTML = 'Searching...';
+  if (!elements.directSearchResults) return;
+  elements.directSearchResults.innerHTML = '<div class="retro-box" style="padding: 24px; text-align: center; font-family: var(--font-mono);">Searching torrent databases...</div>';
   try {
-    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&minSeeds=${minSeeds}&category=${category}`);
+    const minS = minSeeds || 0;
+    const cat = category || '200';
+    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&minSeeds=${minS}&category=${cat}`);
     const data = await res.json();
-    if (data.success) {
+    if (data.success && data.torrents && data.torrents.length > 0) {
       elements.directSearchResults.innerHTML = `
-        <div class="retro-box" style="padding: 10px;">
+        <div class="retro-box" style="padding: 14px;">
           <div class="torrent-list-header">
-            <span>Release</span><span>Quality</span><span>Seeds</span><span>Size</span><span>Action</span>
+            <span>Release</span><span>Quality</span><span>Seeds/Peers</span><span>Size</span><span>Action</span>
           </div>
-          ${data.torrents.map((t, i) => {
-            const safeName = escapeHtml(t.name);
-            const safeQuality = escapeHtml(t.qualityBadge || 'HD');
-            const safeSeeds = escapeHtml(t.seeders || 0);
-            const safeSize = escapeHtml(t.sizeFormatted || 'N/A');
-            const safeTorrentJson = encodeURIComponent(JSON.stringify(t));
-            const safeQuery = encodeURIComponent(query || '');
-            const safeMagnet = encodeURIComponent(t.magnet || '');
-            return `
-              <div class="torrent-row">
-                <span class="torrent-name" title="${safeName}">${safeName}</span>
-                <span>${safeQuality}</span>
-                <span>${safeSeeds}</span>
-                <span>${safeSize}</span>
-                <div class="torrent-actions-cell">
-                  <button class="retro-btn" onclick="triggerDownload('${safeQuery}', '${safeTorrentJson}')" title="Download .torrent file">
-                    <span class="material-symbols-outlined" style="vertical-align: middle;">download</span>
-                  </button>
-                  <button class="retro-btn btn-magnet-action" onclick="copyMagnetLink('${safeMagnet}')" title="Copy Magnet Link">
-                    <span class="material-symbols-outlined" style="vertical-align: middle;">link</span>
-                  </button>
-                </div>
-              </div>
-            `;
-          }).join('')}
+          <div id="directSearchItemsContainer"></div>
         </div>
       `;
+      const container = document.getElementById('directSearchItemsContainer');
+      renderTorrentRows(container, data.torrents, query, { title: query }, false);
+    } else {
+      elements.directSearchResults.innerHTML = '<div class="retro-box" style="padding: 24px; text-align: center; font-family: var(--font-mono);">No torrents found matching your query.</div>';
     }
-  } catch (err) {}
+  } catch (err) {
+    elements.directSearchResults.innerHTML = '<div class="retro-box" style="padding: 24px; text-align: center; font-family: var(--font-mono); color: #b30000;">Search failed. Please check network connection.</div>';
+  }
 }
 
 function showToast(msg) {
