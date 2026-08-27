@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Privacy Policy - MoodFlix</title>
+  <title>Moodflix</title>
   <meta name="description" content="Privacy Policy for MoodFlix - Learn how we handle your data and authentication.">
   <meta name="theme-color" content="#181818">
   <link rel="icon" type="image/svg+xml" href="images/favicon.svg">
@@ -11,7 +12,9 @@
   <link rel="apple-touch-icon" sizes="192x192" href="images/favicon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap"
+    rel="stylesheet">
   <style>
     :root {
       --retro-bg: #F7F5F0;
@@ -22,12 +25,15 @@
       --font-display: 'Bebas Neue', cursive;
       --font-body: 'Inter', sans-serif;
     }
+
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
-    html, body {
+
+    html,
+    body {
       overflow-y: auto !important;
       overflow-x: hidden !important;
       height: auto !important;
@@ -37,10 +43,12 @@
       color: var(--retro-fg);
       font-family: var(--font-body);
     }
+
     body {
       display: flex;
       flex-direction: column;
     }
+
     .legal-container {
       max-width: 860px;
       margin: 40px auto;
@@ -50,11 +58,13 @@
       box-shadow: 6px 6px 0px var(--retro-border, #000000);
       box-sizing: border-box;
     }
+
     .legal-header {
       border-bottom: 2px solid var(--retro-border, #000000);
       padding-bottom: 20px;
       margin-bottom: 28px;
     }
+
     .legal-brand {
       font-family: var(--font-display, 'Bebas Neue', cursive);
       font-size: 2.2rem;
@@ -64,6 +74,7 @@
       justify-content: space-between;
       margin-bottom: 12px;
     }
+
     .legal-back-btn {
       font-family: var(--font-mono, 'JetBrains Mono', monospace);
       font-size: 0.85rem;
@@ -76,10 +87,12 @@
       box-shadow: 3px 3px 0px var(--retro-border, #000000);
       transition: transform 0.1s ease;
     }
+
     .legal-back-btn:hover {
       transform: translate(-2px, -2px);
       box-shadow: 5px 5px 0px var(--retro-border, #000000);
     }
+
     .legal-title {
       font-family: var(--font-mono, 'JetBrains Mono', monospace);
       font-size: 1.6rem;
@@ -87,11 +100,13 @@
       text-transform: uppercase;
       margin: 0 0 6px 0;
     }
+
     .legal-meta {
       font-family: var(--font-mono, 'JetBrains Mono', monospace);
       font-size: 0.85rem;
       color: #666;
     }
+
     .legal-content h2 {
       font-family: var(--font-mono, 'JetBrains Mono', monospace);
       font-size: 1.15rem;
@@ -102,18 +117,23 @@
       border-left: 4px solid var(--retro-border, #000000);
       padding-left: 10px;
     }
-    .legal-content p, .legal-content li {
+
+    .legal-content p,
+    .legal-content li {
       font-size: 0.95rem;
       line-height: 1.65;
       color: #2c2c2c;
     }
+
     .legal-content ul {
       padding-left: 20px;
       margin-bottom: 16px;
     }
+
     .legal-content li {
       margin-bottom: 6px;
     }
+
     .legal-callout {
       background: #faf8f5;
       border: 2px dashed var(--retro-border, #000000);
@@ -122,6 +142,7 @@
       font-family: var(--font-mono, 'JetBrains Mono', monospace);
       font-size: 0.9rem;
     }
+
     .legal-footer {
       text-align: center;
       padding: 24px;
@@ -129,6 +150,7 @@
       font-size: 0.8rem;
       color: #777;
     }
+
     .legal-footer a {
       color: inherit;
       text-decoration: underline;
@@ -136,6 +158,7 @@
     }
   </style>
 </head>
+
 <body>
 
   <main class="legal-container">
@@ -150,15 +173,22 @@
 
     <article class="legal-content">
       <div class="legal-callout">
-        <strong>SUMMARY:</strong> MoodFlix operates with minimal data footprint. We do not sell your personal data or store passwords. Authentication is handled securely through Google OAuth via Supabase.
+        <strong>SUMMARY:</strong> MoodFlix operates with minimal data footprint. We do not sell your personal data or
+        store passwords. Authentication is handled securely through Google OAuth via Supabase.
       </div>
 
       <h2>1. Information We Collect</h2>
       <p>When you access or use MoodFlix, we may collect the following types of information:</p>
       <ul>
-        <li><strong>Account Data:</strong> When you authenticate via Google Sign-In, we receive basic profile info (email address and public profile identifier) through Supabase Authentication. We never receive or store your Google account password.</li>
-        <li><strong>Client-Side Preferences & Diagnostic State:</strong> Selected movie moods, diagnostic answers, search filters, and playback configurations are processed and saved locally in your browser (LocalStorage / IndexedDB / OPFS).</li>
-        <li><strong>Transfer & Library Data:</strong> Information regarding saved torrent metadata or watch history is stored in your personal Supabase account library or local browser cache for synchronization across your sessions.</li>
+        <li><strong>Account Data:</strong> When you authenticate via Google Sign-In, we receive basic profile info
+          (email address and public profile identifier) through Supabase Authentication. We never receive or store your
+          Google account password.</li>
+        <li><strong>Client-Side Preferences & Diagnostic State:</strong> Selected movie moods, diagnostic answers,
+          search filters, and playback configurations are processed and saved locally in your browser (LocalStorage /
+          IndexedDB / OPFS).</li>
+        <li><strong>Transfer & Library Data:</strong> Information regarding saved torrent metadata or watch history is
+          stored in your personal Supabase account library or local browser cache for synchronization across your
+          sessions.</li>
       </ul>
 
       <h2>2. How We Use Information</h2>
@@ -174,23 +204,31 @@
       <ul>
         <li><strong>Google OAuth:</strong> Secure authentication provider for single sign-on.</li>
         <li><strong>Supabase:</strong> Cloud database and authentication infrastructure.</li>
-        <li><strong>The Movie Database (TMDB):</strong> Public media metadata provider for posters, ratings, overviews, and release schedules.</li>
+        <li><strong>The Movie Database (TMDB):</strong> Public media metadata provider for posters, ratings, overviews,
+          and release schedules.</li>
       </ul>
 
       <h2>4. Data Storage and Security</h2>
-      <p>We implement industry-standard encryption protocols (HTTPS / TLS) for all network communications. Authentication tokens are handled via secure JWTs managed by Supabase. We do not host, store, or distribute copyrighted video files on our servers.</p>
+      <p>We implement industry-standard encryption protocols (HTTPS / TLS) for all network communications.
+        Authentication tokens are handled via secure JWTs managed by Supabase. We do not host, store, or distribute
+        copyrighted video files on our servers.</p>
 
       <h2>5. Your Rights and Data Deletion</h2>
-      <p>You may request the deletion of your account and synchronized data at any time by signing out and clearing your browser storage, or by submitting a data removal request to our team.</p>
+      <p>You may request the deletion of your account and synchronized data at any time by signing out and clearing your
+        browser storage, or by submitting a data removal request to our team.</p>
 
       <h2>6. Contact Us</h2>
-      <p>If you have any questions or inquiries regarding this Privacy Policy, you can reach out via our repository or contact us at <a href="mailto:support@moodflix.app" style="color:var(--retro-fg); font-weight:600;">support@moodflix.app</a>.</p>
+      <p>If you have any questions or inquiries regarding this Privacy Policy, you can reach out via our repository or
+        contact us at <a href="mailto:support@moodflix.app"
+          style="color:var(--retro-fg); font-weight:600;">support@moodflix.app</a>.</p>
     </article>
   </main>
 
   <footer class="legal-footer">
-    &copy; 2026 MoodFlix. All rights reserved. • <a href="/terms">Terms of Service</a> • <a href="/privacy">Privacy Policy</a>
+    &copy; 2026 MoodFlix. All rights reserved. • <a href="/terms">Terms of Service</a> • <a href="/privacy">Privacy
+      Policy</a>
   </footer>
 
 </body>
+
 </html>
