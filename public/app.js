@@ -12,7 +12,8 @@ const state = {
   lastFeedTab: 'movies-view',
   previousTab: 'diagnostic-view',
   currentMediaForModal: null,
-  currentTorrents: []
+  currentTorrents: [],
+  isSharedPage: false
 };
 
 // Global HTML entity escaping helper to prevent XSS
@@ -98,7 +99,10 @@ async function initSupabaseClient() {
   } catch (err) {
     console.warn('Failed to load backend config:', err);
   }
-  showAuthView();
+  const isShared = checkShareUrl();
+  if (!isShared) {
+    showAuthView();
+  }
 }
 
 async function checkSession() {
@@ -132,11 +136,13 @@ function showDashboardView(user) {
   document.getElementById('mobileBottomNav')?.classList.remove('hidden');
   document.querySelector('.site-header')?.classList.remove('hidden');
   
-  checkShareUrl();
+  const isShared = checkShareUrl();
   if (state.movies.length === 0) loadMovies();
   if (state.tvShows.length === 0) loadTVShows();
-  if (state.activeTab === 'auth-view' || state.activeTab === 'movies-view' || document.getElementById('diagnostic-view').classList.contains('hidden')) {
-    switchTab('diagnostic-view');
+  if (!isShared) {
+    if (state.activeTab === 'auth-view' || state.activeTab === 'movies-view' || document.getElementById('diagnostic-view').classList.contains('hidden')) {
+      switchTab('diagnostic-view');
+    }
   }
 }
 
@@ -146,7 +152,7 @@ async function handleGoogleLogin() {
   if (!supabaseClient) return;
   const { error } = await supabaseClient.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.origin }
+    options: { redirectTo: window.location.href }
   });
   if (error && btnText) {
     btnText.textContent = 'CONTINUE WITH GOOGLE';
@@ -156,6 +162,126 @@ async function handleGoogleLogin() {
 async function handleSignOut() {
   if (supabaseClient) await supabaseClient.auth.signOut();
   showAuthView();
+}
+
+function renderSharedMovieView(data = {}) {
+  const {
+    title,
+    year,
+    poster,
+    magnet,
+    torrentName,
+    size,
+    quality,
+    seeds,
+    trailer,
+    mediaId,
+    mediaType
+  } = data;
+
+  const titleEl = document.getElementById('shareMovieTitle');
+  if (titleEl) titleEl.innerText = (title || 'MOVIE TITLE').toUpperCase();
+
+  const subEl = document.getElementById('shareSubtitle');
+  if (subEl) {
+    subEl.innerText = `${(title || 'Movie').toUpperCase()}${year ? ` (${year})` : ''} WAS SHARED WITH YOU.\nCLICK BELOW TO DOWNLOAD THE TORRENT AND START WATCHING.`;
+  }
+
+  const posterEl = document.getElementById('sharePosterImg');
+  if (posterEl) {
+    posterEl.src = poster || 'images/hero.webp';
+    posterEl.alt = `${title || 'Movie'} VHS Tape`;
+  }
+
+  const specName = document.getElementById('shareTorrentName');
+  if (specName) specName.innerText = torrentName || title || 'Verified Release';
+
+  const specQuality = document.getElementById('shareTorrentQuality');
+  if (specQuality) specQuality.innerText = quality || '1080P HD';
+
+  const specSize = document.getElementById('shareTorrentSize');
+  if (specSize) specSize.innerText = size || 'HD';
+
+  const specSeeds = document.getElementById('shareTorrentSeeds');
+  if (specSeeds) specSeeds.innerText = seeds ? `🌱 ${seeds} Seeds` : '🌱 Healthy Seeds';
+
+  // Wire Download Button
+  const downloadBtn = document.getElementById('shareDownloadBtn');
+  if (downloadBtn) {
+    downloadBtn.onclick = () => {
+      if (magnet) {
+        copyMagnetLink(encodeURIComponent(magnet));
+        const torrentObj = { name: torrentName || title, magnet, sizeFormatted: size, qualityBadge: quality };
+        triggerDownloadDirect(title, torrentObj);
+      } else {
+        openTorrentModal({ title, id: mediaId, poster }, mediaType || 'movie');
+      }
+    };
+  }
+
+  // Wire Trailer Button
+  const trailerBtn = document.getElementById('shareTrailerBtn');
+  if (trailerBtn) {
+    trailerBtn.onclick = () => {
+      if (trailer) {
+        const modal = document.getElementById('trailer-modal');
+        const iframe = document.getElementById('trailer-iframe');
+        const loader = document.getElementById('trailer-loader');
+        modal?.classList.remove('hidden');
+        loader?.classList.add('hidden');
+        if (iframe) {
+          iframe.classList.remove('hidden');
+          iframe.src = `https://www.youtube.com/embed/${trailer}?autoplay=1`;
+        }
+      } else if (mediaId) {
+        playTrailer(mediaId, mediaType || 'movie');
+      } else {
+        showToast('Searching trailer...', 'info');
+      }
+    };
+  }
+
+  // Wire Explore Button
+  const exploreBtn = document.getElementById('shareExploreBtn');
+  if (exploreBtn) {
+    exploreBtn.onclick = () => switchTab('movies-view');
+  }
+}
+
+function checkShareUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('share')) {
+    state.isSharedPage = true;
+    const title = decodeURIComponent(params.get('title') || 'Movie');
+    const year = decodeURIComponent(params.get('year') || '');
+    const poster = decodeURIComponent(params.get('poster') || '');
+    const magnet = decodeURIComponent(params.get('magnet') || '');
+    const torrentName = decodeURIComponent(params.get('name') || title);
+    const size = decodeURIComponent(params.get('size') || '');
+    const quality = decodeURIComponent(params.get('quality') || '1080P HD');
+    const seeds = decodeURIComponent(params.get('seeds') || '');
+    const trailer = decodeURIComponent(params.get('trailer') || '');
+    const mediaId = decodeURIComponent(params.get('mediaId') || '');
+    const mediaType = decodeURIComponent(params.get('mediaType') || 'movie');
+
+    renderSharedMovieView({
+      title,
+      year,
+      poster,
+      magnet,
+      torrentName,
+      size,
+      quality,
+      seeds,
+      trailer,
+      mediaId,
+      mediaType
+    });
+
+    switchTab('share-view');
+    return true;
+  }
+  return false;
 }
 
 
