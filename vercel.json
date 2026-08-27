@@ -5,6 +5,14 @@
   "outputDirectory": "public",
   "rewrites": [
     {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/index.js"
     },

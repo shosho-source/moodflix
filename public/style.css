@@ -4275,3 +4275,35 @@ iframe {
     font-size: 22px;
   }
 }
+
+/* Auth Page Footer */
+.auth-footer {
+  margin-top: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.auth-footer-link {
+  color: var(--retro-fg, #1a1a1a);
+  text-decoration: none;
+  border-bottom: 1.5px solid transparent;
+  transition: all 0.12s ease;
+  padding-bottom: 2px;
+}
+
+.auth-footer-link:hover {
+  border-bottom-color: var(--retro-fg, #1a1a1a);
+  transform: translateY(-1px);
+}
+
+.auth-footer-divider {
+  color: var(--retro-border, #666666);
+  opacity: 0.6;
+}
