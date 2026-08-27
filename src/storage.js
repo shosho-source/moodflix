@@ -6,6 +6,9 @@
 import fs from 'fs';
 import path from 'path';
 
+export const DEFAULT_TMDB_API_KEY = '2e22dca68c093bae309efd704aa6d020';
+export const DEFAULT_TMDB_READ_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIyZTIyZGNhNjhjMDkzYmFlMzA5ZWZkNzA0YWE2ZDAyMCIsIm5iZiI6MTc4MzE3Mjc3NC43ODcwMDAyLCJzdWIiOiI2YTQ5MGVhNjNhYzJkYzk4YTY3NDViNGUiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.hyizZKI38hhc3pRm_Ga1QslIsW5cJ-SkuiF1HH8p_Rc';
+
 export class Storage {
   static DATA_DIR = path.resolve(process.cwd(), '.rotten-cine');
   static DATA_FILE = path.join(Storage.DATA_DIR, 'data.json');
@@ -14,8 +17,8 @@ export class Storage {
     settings: {
       minRating: 7.0,
       minSeeds: 5,
-      tmdbApiKey: process.env.TMDB_API_KEY || '',
-      tmdbReadToken: process.env.TMDB_READ_TOKEN || '',
+      tmdbApiKey: DEFAULT_TMDB_API_KEY,
+      tmdbReadToken: DEFAULT_TMDB_READ_TOKEN,
       autoOpenMagnets: false
     },
     downloads: [],
@@ -63,8 +66,8 @@ export class Storage {
     return {
       ...Storage.DEFAULT_STATE.settings,
       ...settings,
-      tmdbApiKey: (settings.tmdbApiKey && String(settings.tmdbApiKey).trim()) ? String(settings.tmdbApiKey).trim() : (process.env.TMDB_API_KEY || ''),
-      tmdbReadToken: (settings.tmdbReadToken && String(settings.tmdbReadToken).trim()) ? String(settings.tmdbReadToken).trim() : (process.env.TMDB_READ_TOKEN || '')
+      tmdbApiKey: (settings.tmdbApiKey && String(settings.tmdbApiKey).trim()) ? String(settings.tmdbApiKey).trim() : (process.env.TMDB_API_KEY || DEFAULT_TMDB_API_KEY),
+      tmdbReadToken: (settings.tmdbReadToken && String(settings.tmdbReadToken).trim()) ? String(settings.tmdbReadToken).trim() : (process.env.TMDB_READ_TOKEN || DEFAULT_TMDB_READ_TOKEN)
     };
   }
 

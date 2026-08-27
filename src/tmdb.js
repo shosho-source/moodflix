@@ -4,7 +4,7 @@
  * multi-page search, and tiered relevance ranking.
  */
 
-import { Storage } from './storage.js';
+import { Storage, DEFAULT_TMDB_API_KEY, DEFAULT_TMDB_READ_TOKEN } from './storage.js';
 import { FuzzyMatcher } from './fuzzyMatcher.js';
 import { NameCleaner } from './nameCleaner.js';
 
@@ -90,12 +90,12 @@ export class TMDB {
     const token = (options.token && String(options.token).trim()) ||
                   (settings.tmdbReadToken && String(settings.tmdbReadToken).trim()) ||
                   (process.env.TMDB_READ_TOKEN && String(process.env.TMDB_READ_TOKEN).trim()) ||
-                  '';
+                  DEFAULT_TMDB_READ_TOKEN;
                   
     const apiKey = (options.apiKey && String(options.apiKey).trim()) ||
                    (settings.tmdbApiKey && String(settings.tmdbApiKey).trim()) ||
                    (process.env.TMDB_API_KEY && String(process.env.TMDB_API_KEY).trim()) ||
-                   '';
+                   DEFAULT_TMDB_API_KEY;
 
     const headers = {
       'Accept': 'application/json',
