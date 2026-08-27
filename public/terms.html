@@ -12,15 +12,32 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
   <style>
-    body {
-      background-color: var(--retro-bg, #F7F5F0);
-      color: var(--retro-fg, #1a1a1a);
-      font-family: var(--font-body, 'Inter', sans-serif);
+    :root {
+      --retro-bg: #F7F5F0;
+      --retro-surface: #ffffff;
+      --retro-border: #000000;
+      --retro-fg: #1a1a1a;
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-display: 'Bebas Neue', cursive;
+      --font-body: 'Inter', sans-serif;
+    }
+    * {
+      box-sizing: border-box;
       margin: 0;
       padding: 0;
+    }
+    html, body {
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+      height: auto !important;
       min-height: 100vh;
+      -webkit-overflow-scrolling: touch;
+      background-color: var(--retro-bg);
+      color: var(--retro-fg);
+      font-family: var(--font-body);
+    }
+    body {
       display: flex;
       flex-direction: column;
     }
