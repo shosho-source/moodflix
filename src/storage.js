@@ -59,7 +59,13 @@ export class Storage {
 
   static getSettings() {
     const data = Storage.read();
-    return { ...Storage.DEFAULT_STATE.settings, ...data.settings };
+    const settings = data.settings || {};
+    return {
+      ...Storage.DEFAULT_STATE.settings,
+      ...settings,
+      tmdbApiKey: (settings.tmdbApiKey && String(settings.tmdbApiKey).trim()) ? String(settings.tmdbApiKey).trim() : (process.env.TMDB_API_KEY || ''),
+      tmdbReadToken: (settings.tmdbReadToken && String(settings.tmdbReadToken).trim()) ? String(settings.tmdbReadToken).trim() : (process.env.TMDB_READ_TOKEN || '')
+    };
   }
 
   static updateSettings(newSettings) {

@@ -87,8 +87,15 @@ export class TMDB {
    */
   static getAuthHeadersAndParams(options = {}) {
     const settings = Storage.getSettings();
-    const token = options.token || settings.tmdbReadToken || process.env.TMDB_READ_TOKEN;
-    const apiKey = options.apiKey || settings.tmdbApiKey || process.env.TMDB_API_KEY;
+    const token = (options.token && String(options.token).trim()) ||
+                  (settings.tmdbReadToken && String(settings.tmdbReadToken).trim()) ||
+                  (process.env.TMDB_READ_TOKEN && String(process.env.TMDB_READ_TOKEN).trim()) ||
+                  '';
+                  
+    const apiKey = (options.apiKey && String(options.apiKey).trim()) ||
+                   (settings.tmdbApiKey && String(settings.tmdbApiKey).trim()) ||
+                   (process.env.TMDB_API_KEY && String(process.env.TMDB_API_KEY).trim()) ||
+                   '';
 
     const headers = {
       'Accept': 'application/json',

@@ -36,4 +36,10 @@ describe('TMDB Movie & TV Provider', () => {
     assert.ok(topRated.length > 0);
     assert.ok(topRated.every(s => s.category === 'top_rated'));
   });
+
+  it('falls back to default environment TMDB credentials when user has not entered one', () => {
+    const auth = TMDB.getAuthHeadersAndParams({ apiKey: '', token: '' });
+    assert.strictEqual(auth.hasAuth, true);
+    assert.ok(auth.headers['Authorization'] || auth.queryParams.has('api_key'));
+  });
 });
