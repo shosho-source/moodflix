@@ -1,0 +1,27 @@
+{
+  "name": "the-rotten-cine",
+  "version": "2.0.0",
+  "description": "Automatic movie finder and torrent downloader - Rotten Tomatoes ratings meets The Cine Bay in clean, modern JavaScript",
+  "main": "src/rottenCine.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "serve": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "rotten-tomatoes",
+    "cine-bay",
+    "torrent",
+    "movies",
+    "automation",
+    "tpb",
+    "crawler"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2",
+    "webtorrent": "^3.0.21"
+  }
+}

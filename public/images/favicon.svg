@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <style>
+    .film-reel { stroke: #1a1a1a; stroke-width: 1.8; fill: none; }
+    .film-dot { fill: #1a1a1a; stroke: none; }
+    @media (prefers-color-scheme: dark) {
+      .film-reel { stroke: #F7F5F0; }
+      .film-dot { fill: #F7F5F0; }
+    }
+  </style>
+  <circle class="film-reel" cx="12" cy="12" r="9" />
+  <circle class="film-dot" cx="12" cy="12" r="2.5" />
+  <circle class="film-dot" cx="8" cy="8.5" r="1.25" />
+  <circle class="film-dot" cx="16" cy="8.5" r="1.25" />
+  <circle class="film-dot" cx="8" cy="15.5" r="1.25" />
+  <circle class="film-dot" cx="16" cy="15.5" r="1.25" />
+</svg>

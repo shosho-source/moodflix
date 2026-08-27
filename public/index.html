@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MoodFlix x The Cine Bay - Retro Brutalist Edition</title>
+  <meta name="theme-color" content="#181818">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MoodFlix">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="images/favicon.svg">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <!-- 1. Minimal SVG Loading Screen -->
+  <div id="loader" class="loader-overlay" role="status" aria-label="Loading animation">
+    <div class="loader-content">
+      <div class="loader-spinner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+          <circle cx="8" cy="8.5" r="1.25" fill="currentColor" />
+          <circle cx="16" cy="8.5" r="1.25" fill="currentColor" />
+          <circle cx="8" cy="15.5" r="1.25" fill="currentColor" />
+          <circle cx="16" cy="15.5" r="1.25" fill="currentColor" />
+        </svg>
+      </div>
+      <div class="loader-text">
+        <span class="loader-title">MOODFLIX ARCHIVE</span>
+        <span class="loader-subtitle">loading content...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- WebGL Fluid Canvas -->
+  <canvas id="fluid-canvas" aria-hidden="true"></canvas>
+
+  <div class="content-wrapper">
+    <!-- Header -->
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="brand-logo" id="logo-btn" role="button" tabindex="0">
+          <span class="logo-title scramble-text">MoodFlix</span>
+        </div>
+        <!-- Header Actions: Mobile quick shortcuts & User Profile -->
+        <div class="header-actions">
+          <button id="header-tutorial-btn" class="header-icon-btn mobile-only-btn" title="How to Download & Watch" aria-label="Tutorial">
+            <span class="material-symbols-outlined">school</span>
+          </button>
+          <button id="header-settings-btn" class="header-icon-btn mobile-only-btn" title="System Configuration" aria-label="Settings">
+            <span class="material-symbols-outlined">settings</span>
+          </button>
+          <!-- User Profile (Visible when Authenticated) -->
+          <div id="user-profile" class="user-profile hidden">
+            <span id="user-email" class="user-email"></span>
+            <button id="signout-btn" class="signout-btn" title="Sign Out" aria-label="Sign Out">
+              <span class="signout-text">LOGOUT</span>
+              <span class="material-symbols-outlined signout-icon">logout</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="header-divider"></div>
+
+      <!-- Nav Bar -->
+      <nav class="nav-tabs" id="mainNav">
+        <button class="nav-tab active" data-tab="diagnostic-view">
+          <span class="material-symbols-outlined">psychology</span> <span class="scramble-text">Explore</span>
+        </button>
+        <button class="nav-tab" data-tab="movies-view">
+          <span class="material-symbols-outlined">movie</span> <span class="scramble-text">Movies Feed</span>
+        </button>
+        <button class="nav-tab" data-tab="tv-view">
+          <span class="material-symbols-outlined">tv</span> <span class="scramble-text">TV Series Feed</span>
+        </button>
+        <button class="nav-tab" data-tab="search-view">
+          <span class="material-symbols-outlined">search</span> <span class="scramble-text">Piratebay Direct search</span>
+        </button>
+        <button class="nav-tab" data-tab="download-view">
+          <span class="material-symbols-outlined">download</span> <span class="scramble-text">Download</span>
+        </button>
+        <button class="nav-tab" data-tab="tutorial-view">
+          <span class="material-symbols-outlined">school</span> <span class="scramble-text">Tutorial</span>
+        </button>
+        <button class="nav-tab" data-tab="settings-view">
+          <span class="material-symbols-outlined">settings</span> <span class="scramble-text">Settings</span>
+        </button>
+      </nav>
+    </header>
+
+    <main class="site-main">
+
+      <!-- VIEW: Google Log In View -->
+      <section id="auth-view" class="view-panel hidden">
+
+        <!-- Top Brand Header on Login View -->
+        <div class="auth-top-brand">
+          <span class="auth-brand-logo scramble-text">MOODFLIX</span>
+        </div>
+
+        <div class="auth-content-group">
+          <!-- Retro Hero Section -->
+          <section class="hero-section">
+            <!-- Non-Interactive VHS Cassette Centerpiece -->
+            <div class="cassette-wrapper non-interactive">
+              <div class="halftone-circle non-interactive"></div>
+              <div class="cassette-card non-interactive">
+                <img src="images/hero.webp" alt="Retro VHS Cassette Tape - Movie Night"
+                  class="cassette-img non-interactive" width="900" height="600" fetchpriority="high" decoding="async"
+                  loading="eager">
+              </div>
+            </div>
+          </section>
+
+          <section class="content-section">
+            <!-- Status Tag -->
+            <div class="status-tag">
+              <span class="status-dot"></span>
+              <span class="status-text scramble-text">RESTRICTED ARCHIVE</span>
+            </div>
+
+            <!-- Auth Headline -->
+            <h1 class="hero-headline scramble-text">
+              <span>AUTHENTICATION</span>
+              <span>REQUIRED</span>
+            </h1>
+
+            <!-- Subtitle -->
+            <p class="hero-subtitle scramble-text">
+              PLEASE SIGN IN WITH YOUR GOOGLE ACCOUNT<br>TO UNLOCK THE CINE BAY PORTAL.
+            </p>
+          </section>
+
+          <!-- Google Sign In Button -->
+          <section class="cta-section">
+            <button id="google-login-btn" class="google-login-btn">
+              <div class="google-icon-box">
+                <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20">
+                  <path fill="#4285F4"
+                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
+                  <path fill="#34A853"
+                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z" />
+                  <path fill="#FBBC05"
+                    d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
+                  <path fill="#EA4335"
+                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
+                </svg>
+              </div>
+              <div class="cta-divider"></div>
+              <div class="cta-text-box">
+                <span id="login-btn-text" class="cta-title scramble-text">CONTINUE WITH GOOGLE</span>
+              </div>
+            </button>
+          </section>
+        </div>
+      </section>
+
+      <!-- VIEW: MoodFlix Diagnostic -->
+      <section id="diagnostic-view" class="view-panel hidden">
+        <div class="diagnostic-landing">
+
+
+          <h1 class="diag-hero scramble-text">
+            EVOLVE<br>
+            THE WAY<br>
+            YOU WATCH
+          </h1>
+
+          <p class="diag-subtext">
+            ANSWER CURATED QUESTIONS TO UNLOCK A CINEMATIC FEED TAILORED FOR YOUR EXACT TASTE & MOOD.
+          </p>
+
+          <div class="diag-actions">
+            <button id="btnStartDiagnostic" class="retro-btn diag-primary-btn">
+              <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 4px;">psychology</span>
+              <span class="scramble-text">START ASSESSMENT &gt;&gt;&gt;</span>
+            </button>
+            <button id="btnOverrideDiagnostic" class="retro-btn diag-secondary-btn">
+              <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 4px;">shuffle</span>
+              <span class="scramble-text">OVERRIDE</span>
+            </button>
+          </div>
+
+          <!-- Quick Mood Presets Section -->
+          <div class="diag-quick-section">
+            <div class="diag-section-title">
+              <span>QUICK MOOD STARTERS</span>
+              <div class="diag-title-line"></div>
+            </div>
+            <div class="diag-mood-grid">
+              <div class="mood-card" data-mood="action" role="button" tabindex="0">
+                <div class="mood-card-header">
+                  <span class="material-symbols-outlined mood-icon">bolt</span>
+                  <strong class="mood-title">ADRENALINE</strong>
+                </div>
+                <span class="mood-desc">Action, Thrillers & Sci-Fi</span>
+              </div>
+              <div class="mood-card" data-mood="chill" role="button" tabindex="0">
+                <div class="mood-card-header">
+                  <span class="material-symbols-outlined mood-icon">favorite</span>
+                  <strong class="mood-title">DATE NIGHT</strong>
+                </div>
+                <span class="mood-desc">Romance, Drama & Comedy</span>
+              </div>
+              <div class="mood-card" data-mood="mind" role="button" tabindex="0">
+                <div class="mood-card-header">
+                  <span class="material-symbols-outlined mood-icon">psychology</span>
+                  <strong class="mood-title">MIND BENDERS</strong>
+                </div>
+                <span class="mood-desc">Mystery & Psychological</span>
+              </div>
+              <div class="mood-card" data-mood="top" role="button" tabindex="0">
+                <div class="mood-card-header">
+                  <span class="material-symbols-outlined mood-icon">workspace_premium</span>
+                  <strong class="mood-title">TOP RATED</strong>
+                </div>
+                <span class="mood-desc">Acclaimed Masterpieces</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- VIEW: Assessment Quiz -->
+      <section id="quiz-view" class="view-panel hidden">
+        <div class="retro-box quiz-container">
+          <div class="quiz-header">
+            <span class="scramble-text" id="quizStepIndicator">STEP 1/5</span>
+            <button class="retro-btn" id="btnCancelQuiz">CANCEL</button>
+          </div>
+          <h2 class="scramble-text quiz-title" id="quizTitle">How are you today?</h2>
+          <p class="quiz-hint" id="quizHint"></p>
+          <div class="quiz-options-grid" id="quizOptionsGrid">
+            <!-- Options dynamically injected here -->
+          </div>
+          <div class="quiz-footer">
+            <button class="retro-btn" id="btnQuizBack" disabled>&lt;&lt; BACK</button>
+            <button class="retro-btn" id="btnQuizNext" disabled>NEXT &gt;&gt;</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: Movies Feed -->
+      <section id="movies-view" class="view-panel active">
+        <div class="filter-bar retro-box">
+          <div class="filter-group search-group">
+            <span class="material-symbols-outlined">search</span>
+            <input type="text" id="movieSearchInput" placeholder="Search any movie..." autocomplete="off">
+            <button class="clear-input-btn retro-btn" id="btnClearMovieSearch">✕</button>
+            <button class="retro-btn" id="btnExecuteMovieSearch" style="margin-left: 8px;">SEARCH</button>
+          </div>
+          <div class="filter-group select-group">
+            <select id="movieCategorySelect" class="styled-select">
+              <option value="all">Trending Movies</option>
+              <option value="top_rated">Top Rated</option>
+              <option value="popular">Popular</option>
+              <option value="now_playing">In Theatres</option>
+            </select>
+          </div>
+        </div>
+        <div class="movie-grid" id="movieGrid"></div>
+      </section>
+
+      <!-- VIEW: TV Series Feed -->
+      <section id="tv-view" class="view-panel hidden">
+        <div class="filter-bar retro-box">
+          <div class="filter-group search-group">
+            <span class="material-symbols-outlined">search</span>
+            <input type="text" id="tvSearchInput" placeholder="Search TV series..." autocomplete="off">
+            <button class="clear-input-btn retro-btn" id="btnClearTvSearch">✕</button>
+            <button class="retro-btn" id="btnExecuteTvSearch" style="margin-left: 8px;">SEARCH</button>
+          </div>
+          <div class="filter-group select-group">
+            <select id="tvCategorySelect" class="styled-select">
+              <option value="all">Trending TV Shows</option>
+              <option value="top_rated">Top Rated</option>
+              <option value="popular">Popular</option>
+              <option value="on_the_air">On The Air</option>
+            </select>
+          </div>
+        </div>
+        <div class="movie-grid" id="tvGrid"></div>
+      </section>
+
+      <!-- VIEW: TPB Search -->
+      <section id="search-view" class="view-panel hidden">
+        <div class="retro-box search-hero">
+          <h2 class="scramble-text">Piratebay Direct search</h2>
+          <form id="directSearchForm" class="direct-search-form">
+            <input type="text" id="directSearchInput" placeholder="Search query..." required autocomplete="off">
+            <select id="directCategory" class="styled-select">
+              <option value="200">All Video</option>
+              <option value="205">TV Shows</option>
+              <option value="201">Movies</option>
+            </select>
+            <input type="number" id="directMinSeeds" value="5" min="0" placeholder="Min Seeds" title="Minimum Seeds Filter">
+            <button type="submit" class="retro-btn scramble-text">Execute Search</button>
+          </form>
+        </div>
+        <div id="directSearchResults" class="search-results-container"></div>
+      </section>
+
+      <!-- VIEW: Torrent Lite Download View -->
+      <section id="download-view" class="view-panel hidden">
+        <div class="torrent-container">
+
+          <!-- Add Magnet & Torrent Input / Dropzone Area -->
+          <div class="retro-box torrent-add-box">
+            <div class="magnet-input-row">
+              <input type="text" id="torrentMagnetInput" class="retro-input magnet-input" placeholder="Paste magnet URI (magnet:?xt=urn:btih:...) or .torrent URL..." autocomplete="off">
+              <button id="btnPasteMagnet" class="retro-btn" title="Paste from clipboard">
+                <span class="material-symbols-outlined" style="vertical-align: middle;">content_paste</span> PASTE
+              </button>
+              <button id="btnAddTorrent" class="retro-btn btn-primary-accent">
+                <span class="material-symbols-outlined" style="vertical-align: middle;">add_circle</span> <span class="scramble-text">ADD TORRENT</span>
+              </button>
+            </div>
+            
+            <!-- Drag and Drop Torrent File Zone -->
+            <div class="torrent-dropzone" id="torrentDropzone">
+              <input type="file" id="torrentFileInput" accept=".torrent" style="display: none;">
+              <span class="material-symbols-outlined dropzone-icon">file_upload</span>
+              <div class="dropzone-text">
+                <strong>DROP .TORRENT FILE HERE</strong> or <button type="button" class="link-btn" id="btnBrowseTorrentFile">Browse File</button>
+              </div>
+              <span class="dropzone-sub">Streams multi-gigabyte chunks directly to private browser storage (OPFS) without RAM overload.</span>
+            </div>
+          </div>
+
+          <!-- Controls & Filter Toolbar -->
+          <div class="torrent-toolbar">
+            <div class="toolbar-filter-tabs" id="torrentFilterTabs">
+              <button class="filter-tab active" data-filter="all">ALL (<span id="filterCountAll">0</span>)</button>
+              <button class="filter-tab" data-filter="downloading">DOWNLOADING (<span id="filterCountDownloading">0</span>)</button>
+              <button class="filter-tab" data-filter="completed">COMPLETED (<span id="filterCountCompleted">0</span>)</button>
+              <button class="filter-tab" data-filter="paused">PAUSED (<span id="filterCountPaused">0</span>)</button>
+            </div>
+            <div class="toolbar-stats-ribbon">
+              <span class="speed-stat"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">arrow_downward</span> <strong id="globalDownSpeed">0.0 KB/s</strong></span>
+              <span class="speed-stat"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">arrow_upward</span> <strong id="globalUpSpeed">0.0 KB/s</strong></span>
+              <span class="speed-stat"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">hub</span> <strong id="globalPeerCount">0 Peers</strong></span>
+              <span class="speed-stat storage-stat" id="storageQuotaStat" title="OPFS Storage Estimate"><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">hard_drive</span> <strong id="globalStorageEst">OPFS: 0 MB Used</strong></span>
+            </div>
+          </div>
+
+          <!-- Active Transfers Container -->
+          <div class="torrent-transfers-list" id="torrentTransfersList"></div>
+
+        </div>
+      </section>
+
+      <!-- VIEW: Share Landing View -->
+      <section id="share-view" class="view-panel hidden">
+        <div class="hero-section">
+          <div class="cassette-wrapper">
+            <img src="images/hero.webp" alt="VHS Cassette" class="cassette-img">
+          </div>
+        </div>
+        <div class="content-section retro-box">
+          <div class="status-tag">[NEW MOVIE] SOMEONE SHARED A MOVIE TO YOU</div>
+          <h1 class="hero-headline scramble-text" id="shareMovieTitle">MOVIE TITLE</h1>
+          <div class="cta-section">
+            <button id="shareDownloadBtn" class="retro-btn scramble-text">DOWNLOAD TORRENT</button>
+            <button id="shareTrailerBtn" class="retro-btn scramble-text">WATCH TRAILER</button>
+            <button id="shareTutorialBtn" class="retro-btn scramble-text">HOW TO DOWNLOAD & WATCH</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: Detail View -->
+      <section id="detail-view" class="view-panel hidden">
+        <div class="retro-box detail-layout">
+          <img id="detailPoster" src="" alt="Poster" class="detail-poster">
+          <div class="detail-info">
+            <!-- Diagnostic Nav -->
+            <div id="diagnosticNav" class="retro-box"
+              style="display: none; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px;">
+              <span class="scramble-text" style="font-weight: bold; color: var(--retro-fg);">DIAGNOSTIC MATCH <span
+                  id="diagMatchIndex">1</span>/<span id="diagMatchTotal">10</span></span>
+              <div style="display: flex; gap: 10px;">
+                <button id="btnDiagExit" class="retro-btn">EXIT</button>
+                <button id="btnDiagNext" class="retro-btn">NEXT MATCH >></button>
+              </div>
+            </div>
+
+            <h1 class="scramble-text" id="detailTitle">TITLE</h1>
+            <p id="detailMeta" class="detail-meta"></p>
+            <p id="detailSynopsis" class="detail-synopsis"></p>
+
+            <div class="detail-actions">
+              <button id="detailTorrentsBtn" class="retro-btn">TORRENTS</button>
+              <button id="detailTrailerBtn" class="retro-btn">TRAILER</button>
+              <button id="detailShareBtn" class="retro-btn">SHARE</button>
+              <button id="back-to-feed-btn" class="retro-btn">BACK TO FEED</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Similar Media -->
+        <div class="similar-section retro-box" id="similarSection"
+          style="display: none; margin-top: 20px; padding: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h2 class="scramble-text" style="margin: 0;">SIMILAR TITLES</h2>
+            <div style="display: flex; gap: 10px;">
+              <button class="retro-btn" id="btnSimilarLeft">&lt;</button>
+              <button class="retro-btn" id="btnSimilarRight">&gt;</button>
+            </div>
+          </div>
+          <div class="similar-grid" id="similarMediaContainer"></div>
+        </div>
+      </section>
+
+
+
+      <!-- VIEW: Settings View -->
+      <section id="settings-view" class="view-panel hidden">
+        <div class="retro-box settings-container">
+          <div class="settings-header-row">
+            <h2 class="scramble-text settings-title">SYSTEM CONFIGURATION</h2>
+            <button type="button" id="btn-close-settings" class="retro-btn close-settings-btn" title="Close Settings">✕ CLOSE</button>
+          </div>
+          <form id="settingsForm" class="settings-form" autocomplete="off">
+            <div class="form-group full-width">
+              <label for="tmdbApiKey" class="scramble-text">TMDB API KEY</label>
+              <input type="text" id="tmdbApiKey" name="tmdb_api_key_custom" class="styled-input" placeholder="Enter v3 API Key" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other">
+            </div>
+            <div class="form-group full-width">
+              <label for="tmdbReadToken" class="scramble-text">TMDB READ TOKEN</label>
+              <input type="text" id="tmdbReadToken" name="tmdb_read_token_custom" class="styled-input" placeholder="Enter v4 Read Token" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other">
+            </div>
+            <div class="form-group">
+              <label for="minRating" class="scramble-text">MINIMUM RATING</label>
+              <input type="number" id="minRating" class="styled-input" min="0" max="10" step="0.1" placeholder="7.0">
+            </div>
+            <div class="form-group">
+              <label for="minSeeds" class="scramble-text">MINIMUM SEEDS</label>
+              <input type="number" id="minSeeds" class="styled-input" min="0" placeholder="5">
+            </div>
+            <div class="form-group checkbox-group full-width"
+              style="display: flex; align-items: center; gap: 15px; margin-top: 10px;">
+              <input type="checkbox" id="autoOpenMagnets" class="retro-toggle">
+              <label for="autoOpenMagnets" class="scramble-text" style="margin: 0; cursor: pointer;">AUTO-OPEN MAGNET
+                LINKS IN CLIENT</label>
+            </div>
+            <button type="submit" class="retro-btn submit-settings-btn"
+              style="width: 100%; padding: 15px; font-size: 1.2rem;">SAVE CONFIGURATION</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- VIEW: Tutorial View (How to Download & Watch) -->
+      <section id="tutorial-view" class="view-panel hidden">
+        <div class="tutorial-retro-container">
+          
+          <!-- Inner Header Bar -->
+          <div class="tutorial-inner-header">
+            <div class="brand-logo inner-header-left" id="tutorial-logo-btn" role="button" tabindex="0" title="Click to return to Feed">
+              <span class="logo-title scramble-text">MoodFlix</span>
+            </div>
+            <div class="inner-header-right">
+              <button id="tutorial-back-feed-btn" class="tutorial-back-link" title="Return to Movie Feed">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span>BACK TO MOVIE FEED</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Main Split Layout -->
+          <div class="tutorial-main-grid">
+            
+            <!-- Left Column: Hero, Steps & Tip Box -->
+            <div class="tutorial-left-col">
+              
+              <!-- Top Hero Section -->
+              <div class="tutorial-top-section">
+                <div class="tutorial-top-text">
+                  <h1 class="tutorial-pixel-title">TUTORIAL</h1>
+                  <p class="tutorial-top-subtitle">HOW TO DOWNLOAD AND WATCH</p>
+                </div>
+                <div class="tutorial-top-graphic">
+                  <div class="halftone-circle-hero"></div>
+                  <img src="images/hero.webp" alt="Movie Night VHS Tape" class="cassette-hero-img" />
+                </div>
+              </div>
+
+              <!-- Steps Row -->
+              <div class="tutorial-steps-row">
+                <!-- Step 1 -->
+                <div class="tutorial-step-col">
+                  <div class="tutorial-step-header">
+                    <span class="tutorial-step-num">1</span>
+                    <h3 class="tutorial-step-title">DOWNLOAD A<br>TORRENT APP</h3>
+                  </div>
+                  <p class="tutorial-step-desc">GET FLUD OR BITTORRENT<br>FROM THE APP STORE<br>OR PLAY STORE.</p>
+                  <div class="tutorial-step-graphic">
+                    <div class="halftone-circle-step">
+                      <svg viewBox="0 0 48 48" class="step-svg" width="42" height="42" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="13" y="5" width="22" height="38" rx="4" fill="#FAF8F5" stroke="#000" stroke-width="2.2"/>
+                        <line x1="20" y1="9" x2="28" y2="9" stroke="#000" stroke-width="1.8"/>
+                        <line x1="24" y1="16" x2="24" y2="28" stroke="#000" stroke-width="2.2"/>
+                        <polyline points="19 23 24 28 29 23" stroke="#000" stroke-width="2.2"/>
+                        <line x1="18" y1="33" x2="30" y2="33" stroke="#000" stroke-width="2.2"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="tutorial-step-col">
+                  <div class="tutorial-step-header">
+                    <span class="tutorial-step-num">2</span>
+                    <h3 class="tutorial-step-title">DOWNLOAD<br>THE TORRENT</h3>
+                  </div>
+                  <p class="tutorial-step-desc">CLICK THE DOWNLOAD<br>BUTTON ON THE<br>PREVIOUS PAGE TO<br>GET THE .TORRENT FILE.</p>
+                  <div class="tutorial-step-graphic">
+                    <div class="halftone-circle-step">
+                      <svg viewBox="0 0 54 48" class="step-svg" width="48" height="42" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 14h14l4 4h24v22H6z" fill="#FAF8F5" stroke="#000" stroke-width="2"/>
+                        <rect x="22" y="9" width="23" height="9" rx="1" fill="#000"/>
+                        <text x="33.5" y="15.5" font-family="'Space Mono', monospace" font-size="4.5" font-weight="900" fill="#FAF8F5" text-anchor="middle">TORRENT</text>
+                        <line x1="27" y1="2" x2="27" y2="10" stroke="#000" stroke-width="2.2"/>
+                        <polyline points="23 6 27 10 31 6" stroke="#000" stroke-width="2.2"/>
+                        <polygon points="4 40 10 22 50 22 44 40" fill="#FAF8F5" stroke="#000" stroke-width="2"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="tutorial-step-col">
+                  <div class="tutorial-step-header">
+                    <span class="tutorial-step-num">3</span>
+                    <h3 class="tutorial-step-title">OPEN IN<br>TORRENT APP</h3>
+                  </div>
+                  <p class="tutorial-step-desc">OPEN THE .TORRENT FILE<br>USING FLUD OR BITTORRENT<br>TO START DOWNLOADING.</p>
+                  <div class="tutorial-step-graphic">
+                    <div class="halftone-circle-step">
+                      <svg viewBox="0 0 48 48" class="step-svg" width="42" height="42" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="13" y="5" width="22" height="38" rx="4" fill="#FAF8F5" stroke="#000" stroke-width="2.2"/>
+                        <line x1="20" y1="9" x2="28" y2="9" stroke="#000" stroke-width="1.8"/>
+                        <circle cx="24" cy="23" r="7.5" fill="#000"/>
+                        <path d="M28 24.5a4.5 4.5 0 1 1-4-4.5" fill="none" stroke="#FAF8F5" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M26.5 24.5a3 3 0 1 1-2.5-3" fill="none" stroke="#FAF8F5" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M25 24.5a1.5 1.5 0 1 1-1-1.5" fill="none" stroke="#FAF8F5" stroke-width="1.2" stroke-linecap="round"/>
+                        <circle cx="24" cy="37" r="1.2" fill="#000"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Step 4 -->
+                <div class="tutorial-step-col">
+                  <div class="tutorial-step-header">
+                    <span class="tutorial-step-num">4</span>
+                    <h3 class="tutorial-step-title">WATCH<br>WITH VLC</h3>
+                  </div>
+                  <p class="tutorial-step-desc">FOR MAXIMUM<br>COMPATIBILITY, USE<br>VLC MEDIA PLAYER TO<br>PLAY YOUR MOVIE.</p>
+                  <div class="tutorial-step-graphic">
+                    <div class="halftone-circle-step">
+                      <svg viewBox="0 0 48 48" class="step-svg" width="42" height="42" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="6" y="38" width="36" height="5" rx="1" fill="#000" stroke="#000" stroke-width="1.5"/>
+                        <polygon points="12 38 36 38 32 30 16 30" fill="#FAF8F5" stroke="#000" stroke-width="2"/>
+                        <polygon points="16 30 32 30 29 20 19 20" fill="#000" stroke="#000" stroke-width="2"/>
+                        <polygon points="19 20 29 20 26 10 22 10" fill="#FAF8F5" stroke="#000" stroke-width="2"/>
+                        <polygon points="22 10 26 10 24 5" fill="#000" stroke="#000" stroke-width="2"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tip Box -->
+              <div class="tutorial-tip-box">
+                <div class="tip-star">
+                  <svg viewBox="0 0 24 24" width="22" height="22" fill="#FAF8F5">
+                    <path d="M10.5 2h3v6.8l4.8-4.8 2.1 2.1-4.8 4.8H22v3h-6.4l4.8 4.8-2.1 2.1-4.8-4.8V22h-3v-6.8l-4.8 4.8-2.1-2.1 4.8-4.8H2v-3h6.4L3.6 6.1l2.1-2.1 4.8 4.8V2z"/>
+                  </svg>
+                </div>
+                <div class="tip-text">
+                  VLC SUPPORTS MOST FORMATS AND CODECS,<br>DELIVERING THE BEST PLAYBACK EXPERIENCE.
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Get Apps -->
+            <div class="tutorial-apps-sidebar">
+              <div class="sidebar-title">
+                <span>GET APPS</span>
+                <div class="sidebar-title-line"></div>
+              </div>
+              
+              <!-- Flud Card -->
+              <div class="sidebar-app-card">
+                <div class="app-card-icon">
+                  <svg viewBox="0 0 44 44" width="42" height="42">
+                    <circle cx="22" cy="22" r="21" fill="#000"/>
+                    <path d="M22 11C22 11 15 20 15 25.5C15 29.6 18.1 33 22 33C25.9 33 29 29.6 29 25.5C29 20 22 11 22 11Z" fill="#FAF8F5"/>
+                  </svg>
+                </div>
+                <div class="app-card-info">
+                  <h4>FLUD</h4>
+                  <p>LIGHTWEIGHT.<br>POWERFUL.<br>NO LIMITS.</p>
+                </div>
+                <div class="app-card-actions">
+                  <a href="https://apps.apple.com" target="_blank" rel="noopener noreferrer" class="store-btn">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8 0.92-2.85-.9.04-1.99.6-2.63 1.35-.57.65-1.06 1.71-.93 2.73.99.08 2.01-.48 2.64-1.23z"/></svg>
+                    <span>APP STORE</span>
+                    <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="btn-ext-icon"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  </a>
+                  <a href="https://play.google.com/store/search?q=flud&c=apps" target="_blank" rel="noopener noreferrer" class="store-btn">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M3 20.5v-17c0-.83.94-1.3 1.6-.8l14.2 8.5c.67.4.67 1.37 0 1.77L4.6 21.3c-.66.5-1.6.03-1.6-.8z"/></svg>
+                    <span>PLAY STORE</span>
+                    <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="btn-ext-icon"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  </a>
+                </div>
+              </div>
+
+              <!-- BitTorrent Card -->
+              <div class="sidebar-app-card">
+                <div class="app-card-icon">
+                  <svg viewBox="0 0 44 44" width="42" height="42">
+                    <circle cx="22" cy="22" r="21" fill="#000"/>
+                    <path d="M34 26A12 12 0 1 1 22 10" fill="none" stroke="#FAF8F5" stroke-width="2.5" stroke-linecap="round"/>
+                    <path d="M31 26A8 8 0 1 1 22 14" fill="none" stroke="#FAF8F5" stroke-width="2.5" stroke-linecap="round"/>
+                    <path d="M28 26A4 4 0 1 1 22 18" fill="none" stroke="#FAF8F5" stroke-width="2.5" stroke-linecap="round"/>
+                  </svg>
+                </div>
+                <div class="app-card-info">
+                  <h4>BITTORRENT</h4>
+                  <p>THE ORIGINAL<br>TORRENT APP.<br>TRUSTED BY MILLIONS.</p>
+                </div>
+                <div class="app-card-actions">
+                  <a href="https://apps.apple.com/us/app/qremote-for-qbittorrent/id6756276747" target="_blank" rel="noopener noreferrer" class="store-btn">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8 0.92-2.85-.9.04-1.99.6-2.63 1.35-.57.65-1.06 1.71-.93 2.73.99.08 2.01-.48 2.64-1.23z"/></svg>
+                    <span>APP STORE</span>
+                    <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="btn-ext-icon"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  </a>
+                  <a href="https://play.google.com/store/search?q=bittorrent&c=apps" target="_blank" rel="noopener noreferrer" class="store-btn">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M3 20.5v-17c0-.83.94-1.3 1.6-.8l14.2 8.5c.67.4.67 1.37 0 1.77L4.6 21.3c-.66.5-1.6.03-1.6-.8z"/></svg>
+                    <span>PLAY STORE</span>
+                    <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="btn-ext-icon"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  </a>
+                </div>
+              </div>
+
+              <!-- VLC Card -->
+              <div class="sidebar-app-card sidebar-vlc-card">
+                <div class="app-card-icon">
+                  <svg viewBox="0 0 44 44" width="42" height="42" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="36" width="34" height="4.5" rx="1" fill="#000" stroke="#000" stroke-width="1.5"/>
+                    <polygon points="10 36 34 36 30 28 14 28" fill="#FAF8F5" stroke="#000" stroke-width="1.8"/>
+                    <polygon points="14 28 30 28 27 18 17 18" fill="#000" stroke="#000" stroke-width="1.8"/>
+                    <polygon points="17 18 27 18 24 9 20 9" fill="#FAF8F5" stroke="#000" stroke-width="1.8"/>
+                    <polygon points="20 9 24 9 22 4" fill="#000" stroke="#000" stroke-width="1.8"/>
+                  </svg>
+                </div>
+                <div class="app-card-info">
+                  <h4>USE VLC<br>MEDIA PLAYER</h4>
+                  <p>DOWNLOAD FROM<br>APP STORE OR<br>PLAY STORE.</p>
+                </div>
+                <div class="app-card-actions">
+                  <a href="https://www.videolan.org/vlc/" target="_blank" rel="noopener noreferrer" class="store-btn get-vlc-btn">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="btn-ext-icon"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    <span>GET VLC</span>
+                  </a>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          
+          <!-- Bottom Footer -->
+          <div class="tutorial-bottom-footer">
+            <span>© 2025 MOODFLIX</span>
+            <span>SHARE MOVIES. NOT HASSLES.</span>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Dedicated Mobile Bottom Navigation Bar (Visible only on mobile screens when authenticated) -->
+    <nav class="mobile-bottom-nav hidden" id="mobileBottomNav" aria-label="Mobile Navigation">
+      <button class="mobile-nav-item active" data-tab="diagnostic-view" aria-label="Explore Diagnostic">
+        <span class="material-symbols-outlined mobile-nav-icon">psychology</span>
+        <span class="mobile-nav-label scramble-text">Explore</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="movies-view" aria-label="Movies Feed">
+        <span class="material-symbols-outlined mobile-nav-icon">movie</span>
+        <span class="mobile-nav-label scramble-text">Movies</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="tv-view" aria-label="TV Series Feed">
+        <span class="material-symbols-outlined mobile-nav-icon">tv</span>
+        <span class="mobile-nav-label scramble-text">TV Shows</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="search-view" aria-label="Direct Search">
+        <span class="material-symbols-outlined mobile-nav-icon">search</span>
+        <span class="mobile-nav-label scramble-text">Search</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="download-view" aria-label="Downloads">
+        <span class="material-symbols-outlined mobile-nav-icon">download</span>
+        <span class="mobile-nav-label scramble-text">Download</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- MODALS -->
+  <!-- Trailer Modal -->
+  <div id="trailer-modal" class="modal-overlay hidden">
+    <div class="modal-card retro-box">
+      <div class="modal-header">
+        <span class="modal-title scramble-text" id="trailer-modal-title">TRAILER</span>
+        <button id="close-trailer-modal-btn" class="modal-close-btn retro-btn">✕</button>
+      </div>
+      <div class="modal-body"
+        style="position: relative; min-height: 250px; display: flex; align-items: center; justify-content: center;">
+        <div id="trailer-loader" class="hidden"
+          style="position: absolute; font-family: var(--font-mono); font-weight: bold; font-size: 1.2rem; z-index: 0;">
+          LOADING TRAILER...
+        </div>
+        <iframe id="trailer-iframe" src="" allowfullscreen
+          style="width: 100%; height: 400px; z-index: 1; position: relative;"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <!-- Download/Torrent Inspection Modal -->
+  <div id="torrentModal" class="modal-overlay hidden">
+    <div class="modal-card retro-box">
+      <div class="modal-header">
+        <span class="modal-title scramble-text" id="modalMovieTitle">TORRENTS</span>
+        <button id="btnCloseModal" class="modal-close-btn retro-btn">✕</button>
+      </div>
+      <div id="modalBodyContent" class="modal-body">
+        <div id="modalTorrentHeader" class="torrent-list-header">
+          <span>Release</span>
+          <span>Quality</span>
+          <span>Seeds/Peers</span>
+          <span>Size</span>
+          <span>Action</span>
+        </div>
+        <div id="modalTorrentList" class="torrent-list-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cycle/Terminal Modal -->
+  <div id="cycleModal" class="modal-overlay hidden">
+    <div class="modal-card retro-box">
+      <div class="modal-header">
+        <span class="modal-title scramble-text">AUTO-CINE TERMINAL</span>
+        <button id="btnCloseCycleModal" class="modal-close-btn retro-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="cycleTerminalLog" class="terminal-log"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Share URL copied toast -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- In-Browser Stream Player Modal -->
+  <div id="streamPlayerModal" class="modal-overlay hidden">
+    <div class="modal-card retro-box stream-modal-card">
+      <div class="modal-header">
+        <div class="stream-modal-header-info">
+          <span class="modal-title scramble-text" id="streamModalTitle">LIVE STREAM PLAYER</span>
+          <span class="stream-badge" id="streamModalBadge">WEBRTC P2P STREAM</span>
+        </div>
+        <button id="btnCloseStreamModal" class="modal-close-btn retro-btn">✕</button>
+      </div>
+      <div class="modal-body stream-modal-body">
+        <div class="stream-video-wrapper">
+          <video id="streamVideoPlayer" controls playsinline autoplay></video>
+          <div id="streamAudioContainer" class="stream-audio-box hidden">
+            <audio id="streamAudioPlayer" controls autoplay></audio>
+          </div>
+        </div>
+        <div class="stream-file-selector" id="streamFileSelector">
+          <label class="stream-label">SELECT STREAM FILE:</label>
+          <select id="streamFileSelect" class="retro-select"></select>
+        </div>
+        <div class="stream-stats-bar">
+          <span id="streamStatPeers">PEERS: 0</span>
+          <span id="streamStatSpeed">SPEED: 0 KB/s</span>
+          <span id="streamStatProgress">PROGRESS: 0%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/webtorrent@1.9.7/webtorrent.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"
+    integrity="sha384-l8ah+VgaWtk1mvOe9VC+OirC6qHFF4yH7l7mKRidV9MSti3E9F463bMp6ZVN4kuC"
+    crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/webgl-fluid-custom@0.1.1"
+    integrity="sha384-jsKzsMPte6pJ/6HHe8JYohI/kfD8XSTgb14lncEEy/5PAdEw7KvGL7GUqluHpjA0"
+    crossorigin="anonymous"></script>
+  <script defer src="app.js"></script>
+</body>
+
+</html>

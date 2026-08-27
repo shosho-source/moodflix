@@ -1,0 +1,18 @@
+{
+  "name": "MoodFlix x The Cine Bay",
+  "short_name": "MoodFlix",
+  "description": "Cinematic Diagnostic Engine and In-Browser Torrent Lite Client",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F7F5F0",
+  "theme_color": "#181818",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "images/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
