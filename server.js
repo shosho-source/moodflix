@@ -44,6 +44,14 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// 0. Public Client Config (Supabase credentials from environment variables)
+app.get('/api/config', (req, res) => {
+  res.json({
+    supabaseUrl: process.env.SUPABASE_URL || '',
+    supabaseAnonKey: process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || ''
+  });
+});
+
 // 1. Get TMDB movies
 app.get('/api/movies', async (req, res) => {
   try {

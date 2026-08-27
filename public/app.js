@@ -72,25 +72,34 @@ const elements = {
 };
 
 let supabaseClient = null;
-const SUPABASE_URL = "https://qtrbwgglmqydfpnwupkm.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF0cmJ3Z2dsbXF5ZGZwbnd1cGttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2OTU4MzEsImV4cCI6MjEwMDI3MTgzMX0.JNgPsNja_-oFZeXZjX1fndk_ZUF5FGplkgjRp4Zkzc0";
 
 document.addEventListener('DOMContentLoaded', async () => {
-  if (window.supabase) supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   initFluid();
   initScrambler();
   setupEventListeners();
   initTorrentEngine();
   
-  if (supabaseClient) {
-    supabaseClient.auth.onAuthStateChange((event, session) => {
-      if (session && session.user) showDashboardView(session.user);
-      else if (event === 'SIGNED_OUT') showAuthView();
-    });
-  }
-  
-  await checkSession();
+  await initSupabaseClient();
 });
+
+async function initSupabaseClient() {
+  try {
+    const res = await fetch('/api/config');
+    const config = await res.json();
+    if (config.supabaseUrl && config.supabaseAnonKey && window.supabase) {
+      supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+      supabaseClient.auth.onAuthStateChange((event, session) => {
+        if (session && session.user) showDashboardView(session.user);
+        else if (event === 'SIGNED_OUT') showAuthView();
+      });
+      await checkSession();
+      return;
+    }
+  } catch (err) {
+    console.warn('Failed to load backend config:', err);
+  }
+  showAuthView();
+}
 
 async function checkSession() {
   if (supabaseClient) {

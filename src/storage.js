@@ -14,8 +14,8 @@ export class Storage {
     settings: {
       minRating: 7.0,
       minSeeds: 5,
-      tmdbApiKey: '2e22dca68c093bae309efd704aa6d020',
-      tmdbReadToken: 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIyZTIyZGNhNjhjMDkzYmFlMzA5ZWZkNzA0YWE2ZDAyMCIsIm5iZiI6MTc4MzE3Mjc3NC43ODcwMDAyLCJzdWIiOiI2YTQ5MGVhNjNhYzJkYzk4YTY3NDViNGUiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.hyizZKI38hhc3pRm_Ga1QslIsW5cJ-SkuiF1HH8p_Rc',
+      tmdbApiKey: process.env.TMDB_API_KEY || '',
+      tmdbReadToken: process.env.TMDB_READ_TOKEN || '',
       autoOpenMagnets: false
     },
     downloads: [],
