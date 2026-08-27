@@ -4307,3 +4307,48 @@ iframe {
   color: var(--retro-border, #666666);
   opacity: 0.6;
 }
+
+/* Public App Feature Cards on Auth Page */
+.auth-features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 20px;
+  width: 100%;
+}
+
+.auth-feature-card {
+  background: var(--retro-surface);
+  border: 1.5px solid var(--retro-border);
+  padding: 10px 8px;
+  text-align: left;
+  box-shadow: 2px 2px 0px var(--retro-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.auth-feature-icon {
+  font-size: 1.2rem;
+}
+
+.auth-feature-title {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--retro-fg);
+}
+
+.auth-feature-desc {
+  font-size: 0.68rem;
+  line-height: 1.3;
+  color: #444444;
+}
+
+@media (max-width: 600px) {
+  .auth-features-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
