@@ -10,8 +10,9 @@ export const DEFAULT_TMDB_API_KEY = '2e22dca68c093bae309efd704aa6d020';
 export const DEFAULT_TMDB_READ_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIyZTIyZGNhNjhjMDkzYmFlMzA5ZWZkNzA0YWE2ZDAyMCIsIm5iZiI6MTc4MzE3Mjc3NC43ODcwMDAyLCJzdWIiOiI2YTQ5MGVhNjNhYzJkYzk4YTY3NDViNGUiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.hyizZKI38hhc3pRm_Ga1QslIsW5cJ-SkuiF1HH8p_Rc';
 
 export class Storage {
-  static DATA_DIR = path.resolve(process.cwd(), '.rotten-cine');
+  static DATA_DIR = process.env.VERCEL ? path.join('/tmp', '.rotten-cine') : path.resolve(process.cwd(), '.rotten-cine');
   static DATA_FILE = path.join(Storage.DATA_DIR, 'data.json');
+  static _memoryState = null;
 
   static DEFAULT_STATE = {
     settings: {
@@ -26,37 +27,53 @@ export class Storage {
   };
 
   static ensureDataFile() {
-    if (!fs.existsSync(Storage.DATA_DIR)) {
-      fs.mkdirSync(Storage.DATA_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(Storage.DATA_FILE)) {
-      fs.writeFileSync(Storage.DATA_FILE, JSON.stringify(Storage.DEFAULT_STATE, null, 2), 'utf-8');
+    try {
+      if (!fs.existsSync(Storage.DATA_DIR)) {
+        fs.mkdirSync(Storage.DATA_DIR, { recursive: true });
+      }
+      if (!fs.existsSync(Storage.DATA_FILE)) {
+        fs.writeFileSync(Storage.DATA_FILE, JSON.stringify(Storage.DEFAULT_STATE, null, 2), 'utf-8');
+      }
+    } catch (e) {
+      // In read-only serverless filesystems, fail gracefully
     }
   }
 
   static read() {
-    Storage.ensureDataFile();
     try {
-      const content = fs.readFileSync(Storage.DATA_FILE, 'utf-8');
-      const parsed = JSON.parse(content);
-      // Ensure default credentials are included if missing
-      parsed.settings = { ...Storage.DEFAULT_STATE.settings, ...parsed.settings };
-      return parsed;
+      Storage.ensureDataFile();
+      if (fs.existsSync(Storage.DATA_FILE)) {
+        const content = fs.readFileSync(Storage.DATA_FILE, 'utf-8');
+        const parsed = JSON.parse(content);
+        return {
+          ...Storage.DEFAULT_STATE,
+          ...parsed,
+          settings: { ...Storage.DEFAULT_STATE.settings, ...(parsed.settings || {}) }
+        };
+      }
     } catch (err) {
-      return { ...Storage.DEFAULT_STATE };
+      // Fallback to memory
     }
+    if (Storage._memoryState) {
+      return Storage._memoryState;
+    }
+    return { ...Storage.DEFAULT_STATE };
   }
 
   static write(data) {
-    Storage.ensureDataFile();
-    const tmpFile = `${Storage.DATA_FILE}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+    Storage._memoryState = data;
     try {
-      fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf-8');
-      fs.renameSync(tmpFile, Storage.DATA_FILE);
+      Storage.ensureDataFile();
+      const tmpFile = `${Storage.DATA_FILE}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+      try {
+        fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf-8');
+        fs.renameSync(tmpFile, Storage.DATA_FILE);
+      } catch (e) {
+        try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch (_) {}
+        fs.writeFileSync(Storage.DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+      }
     } catch (e) {
-      try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch (_) {}
-      // Fallback direct write
-      fs.writeFileSync(Storage.DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+      // Fallback in read-only environment
     }
   }
 
