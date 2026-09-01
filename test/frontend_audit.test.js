@@ -18,7 +18,7 @@ describe('Frontend Codebase Audit & Integrity', () => {
     assert.ok(indexHtml.includes('id="toastContainer"'), 'toast container exists');
     assert.ok(indexHtml.includes('id="directSearchForm"'), 'direct search form exists');
     assert.ok(indexHtml.includes('id="directSearchResults"'), 'direct search results container exists');
-    assert.ok(indexHtml.includes('id="guest-explore-btn"'), 'guest explore button exists');
+
     assert.ok(indexHtml.includes('id="tutorial-back-feed-btn"'), 'tutorial back button exists');
   });
 
@@ -26,15 +26,13 @@ describe('Frontend Codebase Audit & Integrity', () => {
     assert.ok(appJs.includes('function hideInitialLoader'), 'hideInitialLoader function is defined');
     assert.ok(appJs.includes('function showToast'), 'showToast function is defined');
     assert.ok(appJs.includes('function performDirectSearch'), 'performDirectSearch function is defined');
-    assert.ok(appJs.includes('function handleGuestLogin'), 'handleGuestLogin function is defined');
+
     assert.ok(appJs.includes('tutorial-back-feed-btn'), 'tutorial back button is wired in JS');
-    assert.ok(appJs.includes('guest-explore-btn'), 'guest explore button is wired in JS');
   });
 
-  it('CSS defines full styles for loader fade-out, toast notifications, and guest buttons', () => {
+  it('CSS defines full styles for loader fade-out and toast notifications', () => {
     assert.ok(styleCss.includes('.loader-overlay.fade-out'), 'fade-out class exists for loader');
     assert.ok(styleCss.includes('.toast-item'), 'toast-item styles exist');
     assert.ok(styleCss.includes('.toast-item.show'), 'toast show animation class exists');
-    assert.ok(styleCss.includes('.guest-login-btn'), 'guest login button styles exist');
   });
 });

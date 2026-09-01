@@ -227,8 +227,8 @@ async function handleGoogleLogin() {
   
   try {
     if (!supabaseClient) {
-      showToast('Supabase Auth is not configured. Entering Guest Mode...', 'info');
-      showDashboardView({ email: 'guest@moodflix.app' });
+      showToast('Supabase Auth is not configured. Entering Local Mode...', 'info');
+      showDashboardView({ email: 'local@moodflix.app' });
       return;
     }
     const { error } = await supabaseClient.auth.signInWithOAuth({
@@ -247,14 +247,7 @@ async function handleGoogleLogin() {
   }
 }
 
-function handleGuestLogin() {
-  state.isSharedPage = false;
-  try {
-    window.history.replaceState({}, document.title, window.location.pathname);
-  } catch (e) {}
-  showDashboardView({ email: 'guest@moodflix.app' });
-  showToast('Welcome to Moodflix! 🍿', 'info');
-}
+
 
 async function handleSignOut() {
   if (supabaseClient) await supabaseClient.auth.signOut();
@@ -800,7 +793,7 @@ function setupEventListeners() {
   });
 
   // Guest explore button
-  document.getElementById('guest-explore-btn')?.addEventListener('click', handleGuestLogin);
+
 
   // Brand Logos & Tutorial View Nav
   document.getElementById('logo-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.lastFeedTab || 'movies-view')));
