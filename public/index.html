@@ -92,9 +92,6 @@
           <span class="material-symbols-outlined">search</span> <span class="scramble-text">Piratebay Direct
             search</span>
         </button>
-        <button class="nav-tab" data-tab="download-view">
-          <span class="material-symbols-outlined">download</span> <span class="scramble-text">Download</span>
-        </button>
         <button class="nav-tab" data-tab="tutorial-view">
           <span class="material-symbols-outlined">school</span> <span class="scramble-text">Tutorial</span>
         </button>
@@ -141,8 +138,8 @@
             </p>
           </section>
 
-          <!-- Google Sign In Button -->
-          <section class="cta-section">
+          <!-- Google Sign In Button & Guest Option -->
+          <section class="cta-section" style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
             <button id="google-login-btn" class="google-login-btn">
               <div class="google-icon-box">
                 <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20">
@@ -160,6 +157,10 @@
               <div class="cta-text-box">
                 <span id="login-btn-text" class="cta-title scramble-text">CONTINUE WITH GOOGLE</span>
               </div>
+            </button>
+            <button id="guest-explore-btn" class="retro-btn guest-login-btn" type="button" title="Explore Moodflix without signing in">
+              <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 18px; margin-right: 6px;">explore</span>
+              <span class="scramble-text">EXPLORE AS GUEST</span>
             </button>
           </section>
 
@@ -320,68 +321,7 @@
         <div id="directSearchResults" class="search-results-container"></div>
       </section>
 
-      <!-- VIEW: Torrent Lite Download View -->
-      <section id="download-view" class="view-panel hidden">
-        <div class="torrent-container">
 
-          <!-- Add Magnet & Torrent Input / Dropzone Area -->
-          <div class="retro-box torrent-add-box">
-            <div class="magnet-input-row">
-              <input type="text" id="torrentMagnetInput" class="retro-input magnet-input"
-                placeholder="Paste magnet URI (magnet:?xt=urn:btih:...) or .torrent URL..." autocomplete="off">
-              <button id="btnPasteMagnet" class="retro-btn" title="Paste from clipboard">
-                <span class="material-symbols-outlined" style="vertical-align: middle;">content_paste</span> PASTE
-              </button>
-              <button id="btnAddTorrent" class="retro-btn btn-primary-accent">
-                <span class="material-symbols-outlined" style="vertical-align: middle;">add_circle</span> <span
-                  class="scramble-text">ADD TORRENT</span>
-              </button>
-            </div>
-
-            <!-- Drag and Drop Torrent File Zone -->
-            <div class="torrent-dropzone" id="torrentDropzone">
-              <input type="file" id="torrentFileInput" accept=".torrent" style="display: none;">
-              <span class="material-symbols-outlined dropzone-icon">file_upload</span>
-              <div class="dropzone-text">
-                <strong>DROP .TORRENT FILE HERE</strong> or <button type="button" class="link-btn"
-                  id="btnBrowseTorrentFile">Browse File</button>
-              </div>
-              <span class="dropzone-sub">Streams multi-gigabyte chunks directly to private browser storage (OPFS)
-                without RAM overload.</span>
-            </div>
-          </div>
-
-          <!-- Controls & Filter Toolbar -->
-          <div class="torrent-toolbar">
-            <div class="toolbar-filter-tabs" id="torrentFilterTabs">
-              <button class="filter-tab active" data-filter="all">ALL (<span id="filterCountAll">0</span>)</button>
-              <button class="filter-tab" data-filter="downloading">DOWNLOADING (<span
-                  id="filterCountDownloading">0</span>)</button>
-              <button class="filter-tab" data-filter="completed">COMPLETED (<span
-                  id="filterCountCompleted">0</span>)</button>
-              <button class="filter-tab" data-filter="paused">PAUSED (<span id="filterCountPaused">0</span>)</button>
-            </div>
-            <div class="toolbar-stats-ribbon">
-              <span class="speed-stat"><span class="material-symbols-outlined"
-                  style="font-size: 14px; vertical-align: middle;">arrow_downward</span> <strong
-                  id="globalDownSpeed">0.0 KB/s</strong></span>
-              <span class="speed-stat"><span class="material-symbols-outlined"
-                  style="font-size: 14px; vertical-align: middle;">arrow_upward</span> <strong id="globalUpSpeed">0.0
-                  KB/s</strong></span>
-              <span class="speed-stat"><span class="material-symbols-outlined"
-                  style="font-size: 14px; vertical-align: middle;">hub</span> <strong id="globalPeerCount">0
-                  Peers</strong></span>
-              <span class="speed-stat storage-stat" id="storageQuotaStat" title="OPFS Storage Estimate"><span
-                  class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">hard_drive</span>
-                <strong id="globalStorageEst">OPFS: 0 MB Used</strong></span>
-            </div>
-          </div>
-
-          <!-- Active Transfers Container -->
-          <div class="torrent-transfers-list" id="torrentTransfersList"></div>
-
-        </div>
-      </section>
 
       <!-- VIEW: Share Landing View (Custom Shared Torrent Page) -->
       <section id="share-view" class="view-panel hidden">
@@ -454,7 +394,8 @@
                   id="diagMatchIndex">1</span>/<span id="diagMatchTotal">10</span></span>
               <div style="display: flex; gap: 10px;">
                 <button id="btnDiagExit" class="retro-btn">EXIT</button>
-                <button id="btnDiagNext" class="retro-btn">NEXT MATCH >></button>
+                <button id="btnDiagPrev" class="retro-btn" disabled>&lt;&lt; PREV MATCH</button>
+                <button id="btnDiagNext" class="retro-btn">NEXT MATCH &gt;&gt;</button>
               </div>
             </div>
 
@@ -843,10 +784,6 @@
         <span class="material-symbols-outlined mobile-nav-icon">search</span>
         <span class="mobile-nav-label scramble-text">Search</span>
       </button>
-      <button class="mobile-nav-item" data-tab="download-view" aria-label="Downloads">
-        <span class="material-symbols-outlined mobile-nav-icon">download</span>
-        <span class="mobile-nav-label scramble-text">Download</span>
-      </button>
     </nav>
   </div>
 
@@ -906,37 +843,6 @@
   <!-- Share URL copied toast -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <!-- In-Browser Stream Player Modal -->
-  <div id="streamPlayerModal" class="modal-overlay hidden">
-    <div class="modal-card retro-box stream-modal-card">
-      <div class="modal-header">
-        <div class="stream-modal-header-info">
-          <span class="modal-title scramble-text" id="streamModalTitle">LIVE STREAM PLAYER</span>
-          <span class="stream-badge" id="streamModalBadge">WEBRTC P2P STREAM</span>
-        </div>
-        <button id="btnCloseStreamModal" class="modal-close-btn retro-btn">✕</button>
-      </div>
-      <div class="modal-body stream-modal-body">
-        <div class="stream-video-wrapper">
-          <video id="streamVideoPlayer" controls playsinline autoplay></video>
-          <div id="streamAudioContainer" class="stream-audio-box hidden">
-            <audio id="streamAudioPlayer" controls autoplay></audio>
-          </div>
-        </div>
-        <div class="stream-file-selector" id="streamFileSelector">
-          <label class="stream-label">SELECT STREAM FILE:</label>
-          <select id="streamFileSelect" class="retro-select"></select>
-        </div>
-        <div class="stream-stats-bar">
-          <span id="streamStatPeers">PEERS: 0</span>
-          <span id="streamStatSpeed">SPEED: 0 KB/s</span>
-          <span id="streamStatProgress">PROGRESS: 0%</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/webtorrent@1.9.7/webtorrent.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"
     integrity="sha384-l8ah+VgaWtk1mvOe9VC+OirC6qHFF4yH7l7mKRidV9MSti3E9F463bMp6ZVN4kuC"
     crossorigin="anonymous"></script>

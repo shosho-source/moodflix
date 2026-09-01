@@ -108,6 +108,7 @@ export class Ranker {
     if (!Array.isArray(torrents)) return [];
 
     return torrents
+      .filter(t => !/\.(exe|scr|bat|cmd|msi|vbs|pif|com)$/i.test((t.name || '').trim()))
       .map(torrent => {
         const qualityMetrics = Ranker.calculateQualityScore(torrent);
         let relevanceScore = 100;

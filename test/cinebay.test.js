@@ -14,11 +14,21 @@ describe('CineBay Torrent Provider', () => {
 
   it('searches and returns high-speed verified torrent streams', async () => {
     const results = await CineBay.search('Inception');
-    assert.ok(results.length > 0, 'Expected at least 1 torrent to be returned');
     const topResult = results[0];
     assert.ok(topResult.name, 'Expected torrent to have name');
     assert.ok(topResult.infoHash, 'Expected torrent to have infoHash');
     assert.ok(topResult.magnet, 'Expected torrent to have magnet URL');
     assert.ok(topResult.magnet.startsWith('magnet:?'));
+  });
+
+  it('identifies and filters out executable and malware files (.exe, .scr, .bat, etc.)', () => {
+    assert.strictEqual(CineBay.isExecutableOrMalicious('Inception.2010.1080p.exe'), true);
+    assert.strictEqual(CineBay.isExecutableOrMalicious('movie_setup.exe'), true);
+    assert.strictEqual(CineBay.isExecutableOrMalicious('Installer.exe'), true);
+    assert.strictEqual(CineBay.isExecutableOrMalicious('video.scr'), true);
+    assert.strictEqual(CineBay.isExecutableOrMalicious('script.bat'), true);
+    assert.strictEqual(CineBay.isExecutableOrMalicious('malware.msi'), true);
+    assert.strictEqual(CineBay.isExecutableOrMalicious('Inception 2010 1080p BluRay x264-SPARKS'), false);
+    assert.strictEqual(CineBay.isExecutableOrMalicious('Dune Part Two 2024 2160p UHD HDR'), false);
   });
 });

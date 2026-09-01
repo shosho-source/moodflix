@@ -5,6 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 export const DEFAULT_TMDB_API_KEY = process.env.TMDB_API_KEY || '';
 export const DEFAULT_TMDB_READ_TOKEN = process.env.TMDB_READ_TOKEN || '';
@@ -64,7 +65,7 @@ export class Storage {
     Storage._memoryState = data;
     try {
       Storage.ensureDataFile();
-      const tmpFile = `${Storage.DATA_FILE}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+      const tmpFile = `${Storage.DATA_FILE}.${crypto.randomBytes(16).toString('hex')}.tmp`;
       try {
         fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf-8');
         fs.renameSync(tmpFile, Storage.DATA_FILE);

@@ -87,6 +87,9 @@ export class CineBay {
       } catch (err) {}
     }
 
+    // Filter out executable and fake malware torrents (.exe, .scr, .bat, etc.)
+    torrents = torrents.filter(t => !CineBay.isExecutableOrMalicious(t.name));
+
     // Filter by minimum seeds, but retain items if filter is too strict
     let filtered = torrents;
     if (minSeeds > 0) {
@@ -98,6 +101,16 @@ export class CineBay {
 
     // Rank and sort with relevance to the user's search query on top!
     return Ranker.rankTorrents(filtered, rawQuery);
+  }
+
+  /**
+   * Checks whether a torrent release name is an executable or malware file
+   */
+  static isExecutableOrMalicious(name) {
+    if (!name || typeof name !== 'string') return true;
+    const lower = name.toLowerCase().trim();
+    return /\.(exe|scr|bat|cmd|msi|vbs|pif|com|jar|lnk|cpl)$/i.test(lower) ||
+           /\b(setup\.exe|install\.exe|installer\.exe|codec\.exe|crack\.exe|patch\.exe|keygens?\.exe)\b/i.test(lower);
   }
 
   /**

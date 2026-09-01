@@ -74,14 +74,76 @@ const elements = {
 
 let supabaseClient = null;
 
+// Initial Loader Screen Dismissal Helper
+function hideInitialLoader() {
+  const loader = document.getElementById('loader');
+  if (loader && !loader.classList.contains('fade-out')) {
+    loader.classList.add('fade-out');
+    setTimeout(() => {
+      loader.style.display = 'none';
+    }, 450);
+  }
+}
+
+// Retro-Brutalist Toast System
+function showToast(message, type = 'info', duration = 3500) {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `toast-item toast-${type}`;
+  
+  let iconName = 'info';
+  if (type === 'success') iconName = 'check_circle';
+  else if (type === 'error') iconName = 'error';
+
+  toast.innerHTML = `
+    <span class="material-symbols-outlined" style="font-size: 18px; vertical-align: middle;">${iconName}</span>
+    <span>${escapeHtml(message)}</span>
+  `;
+
+  container.appendChild(toast);
+
+  // Trigger animation
+  requestAnimationFrame(() => {
+    toast.classList.add('show');
+  });
+
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 300);
+  }, duration);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   initFluid();
   initScrambler();
   setupEventListeners();
-  initTorrentEngine();
   
-  await initSupabaseClient();
+  try {
+    await initSupabaseClient();
+  } catch (err) {
+    console.warn('Initialization notice:', err);
+    if (!checkShareUrl()) {
+      showAuthView();
+    }
+  } finally {
+    hideInitialLoader();
+  }
 });
+
+// Fallback safety timers to guarantee loading screen never stays indefinitely
+window.addEventListener('load', () => {
+  hideInitialLoader();
+});
+setTimeout(hideInitialLoader, 1000);
 
 async function initSupabaseClient() {
   const isShared = checkShareUrl();
@@ -125,6 +187,7 @@ async function checkSession() {
 }
 
 function showAuthView() {
+  hideInitialLoader();
   if (state.isSharedPage) {
     switchTab('share-view');
     return;
@@ -140,6 +203,7 @@ function showAuthView() {
 }
 
 function showDashboardView(user) {
+  hideInitialLoader();
   document.getElementById('auth-view').classList.add('hidden');
   document.getElementById('user-profile').classList.remove('hidden');
   const userDisplay = (user?.email ? user.email.split('@')[0] : (user?.id ? user.id.slice(0, 8) : 'USER')).toUpperCase();
@@ -148,11 +212,10 @@ function showDashboardView(user) {
   document.getElementById('mobileBottomNav')?.classList.remove('hidden');
   document.querySelector('.site-header')?.classList.remove('hidden');
   
-  const isShared = checkShareUrl();
   if (state.movies.length === 0) loadMovies();
   if (state.tvShows.length === 0) loadTVShows();
-  if (!isShared) {
-    if (state.activeTab === 'auth-view' || state.activeTab === 'movies-view' || document.getElementById('diagnostic-view').classList.contains('hidden')) {
+  if (!state.isSharedPage) {
+    if (state.activeTab === 'auth-view' || state.activeTab === 'share-view' || state.activeTab === 'movies-view' || document.getElementById('diagnostic-view').classList.contains('hidden')) {
       switchTab('diagnostic-view');
     }
   }
@@ -161,14 +224,36 @@ function showDashboardView(user) {
 async function handleGoogleLogin() {
   const btnText = document.getElementById('login-btn-text');
   if (btnText) btnText.textContent = 'LOGGING IN...';
-  if (!supabaseClient) return;
-  const { error } = await supabaseClient.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: window.location.href }
-  });
-  if (error && btnText) {
-    btnText.textContent = 'CONTINUE WITH GOOGLE';
+  
+  try {
+    if (!supabaseClient) {
+      showToast('Supabase Auth is not configured. Entering Guest Mode...', 'info');
+      showDashboardView({ email: 'guest@moodflix.app' });
+      return;
+    }
+    const { error } = await supabaseClient.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.href }
+    });
+    if (error) {
+      showToast('Login error: ' + error.message, 'error');
+    }
+  } catch (err) {
+    showToast('Login encountered an issue', 'error');
+  } finally {
+    if (btnText) {
+      btnText.textContent = 'CONTINUE WITH GOOGLE';
+    }
   }
+}
+
+function handleGuestLogin() {
+  state.isSharedPage = false;
+  try {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } catch (e) {}
+  showDashboardView({ email: 'guest@moodflix.app' });
+  showToast('Welcome to Moodflix! 🍿', 'info');
 }
 
 async function handleSignOut() {
@@ -258,6 +343,9 @@ function renderSharedMovieView(data = {}) {
   if (exploreBtn) {
     exploreBtn.onclick = () => {
       state.isSharedPage = false;
+      try {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (e) {}
       showAuthView();
     };
   }
@@ -432,7 +520,9 @@ function renderQuizStep() {
 
   const canAdvance = step.multi ? true : quizAnswers[step.key] !== null;
   document.getElementById('btnQuizNext').disabled = !canAdvance;
-  document.getElementById('btnQuizBack').disabled = currentQuizStep === 0;
+  const backBtn = document.getElementById('btnQuizBack');
+  backBtn.disabled = currentQuizStep === 0;
+  backBtn.style.visibility = currentQuizStep === 0 ? 'hidden' : 'visible';
 }
 
 document.getElementById('btnQuizNext')?.addEventListener('click', () => {
@@ -480,7 +570,10 @@ async function submitQuiz() {
         diagnosticNav.style.display = 'flex';
         document.getElementById('diagMatchIndex').innerText = 1;
         document.getElementById('diagMatchTotal').innerText = data.results.length;
-        document.getElementById('btnDiagNext').disabled = data.results.length <= 1;
+        const btnPrev = document.getElementById('btnDiagPrev');
+        const btnNext = document.getElementById('btnDiagNext');
+        if (btnPrev) btnPrev.disabled = true;
+        if (btnNext) btnNext.disabled = data.results.length <= 1;
       }
       
       const firstMatch = data.results[0];
@@ -528,8 +621,8 @@ function initScrambler() {
         el.innerText = targetText;
         el.dataset.isScrambling = 'false';
       }
-      iteration += 1 / 3;
-    }, 30);
+      iteration += 1 / 2;
+    }, 20);
   });
 }
 
@@ -588,6 +681,19 @@ function initFluid(retryCount = 0) {
       }
     };
 
+    const forwardMouse = (e) => {
+      if (e.target !== canvas) {
+        canvas.dispatchEvent(new MouseEvent(e.type, {
+          clientX: e.clientX,
+          clientY: e.clientY,
+          bubbles: true,
+          cancelable: true
+        }));
+      }
+    };
+    window.addEventListener('mousemove', forwardMouse, { passive: true });
+    window.addEventListener('mousedown', forwardMouse, { passive: true });
+    window.addEventListener('mouseup', forwardMouse, { passive: true });
     window.addEventListener('touchstart', forwardTouch, { passive: true });
     window.addEventListener('touchmove', forwardTouch, { passive: true });
 
@@ -693,14 +799,14 @@ function setupEventListeners() {
     switchTab(state.previousTab || state.lastFeedTab || 'movies-view');
   });
 
+  // Guest explore button
+  document.getElementById('guest-explore-btn')?.addEventListener('click', handleGuestLogin);
+
   // Brand Logos & Tutorial View Nav
   document.getElementById('logo-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.lastFeedTab || 'movies-view')));
   document.getElementById('shareTutorialBtn')?.addEventListener('click', () => switchTab('tutorial-view'));
   document.getElementById('tutorial-logo-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.lastFeedTab || 'movies-view')));
   document.getElementById('tutorial-back-feed-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.lastFeedTab || 'movies-view')));
-  document.getElementById('back-to-download-btn')?.addEventListener('click', () => {
-    switchTab(state.isSharedPage ? 'share-view' : (state.lastFeedTab || 'movies-view'));
-  });
   document.getElementById('back-to-share-btn')?.addEventListener('click', () => switchTab('share-view'));
 
   // Movies
@@ -721,23 +827,48 @@ function setupEventListeners() {
   elements.btnExecuteTvSearch?.addEventListener('click', () => loadTVShows());
   elements.tvCategorySelect.addEventListener('change', () => loadTVShows());
 
-  // Search
+  // Direct Torrent Search
   elements.directSearchForm.addEventListener('submit', async e => {
     e.preventDefault();
     performDirectSearch(elements.directSearchInput.value, elements.directMinSeeds.value, elements.directCategory.value);
   });
 
-  // Modals
+  // Modals & Backdrop click-to-close
   elements.btnCloseModal.addEventListener('click', () => { elements.torrentModal.classList.add('hidden'); });
   elements.btnCloseCycleModal.addEventListener('click', () => { elements.cycleModal.classList.add('hidden'); });
   document.getElementById('close-trailer-modal-btn')?.addEventListener('click', () => {
     document.getElementById('trailer-modal').classList.add('hidden');
     document.getElementById('trailer-iframe').src = '';
   });
+
+  // Close modals on clicking overlay backdrop
+  [elements.torrentModal, elements.cycleModal, document.getElementById('trailer-modal')].forEach(modal => {
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.classList.add('hidden');
+          const trailerIframe = document.getElementById('trailer-iframe');
+          if (modal.id === 'trailer-modal' && trailerIframe) trailerIframe.src = '';
+        }
+      });
+    }
+  });
+
+  // Global Escape key listener for closing open modals
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      elements.torrentModal?.classList.add('hidden');
+      elements.cycleModal?.classList.add('hidden');
+      const trailerModal = document.getElementById('trailer-modal');
+      if (trailerModal && !trailerModal.classList.contains('hidden')) {
+        trailerModal.classList.add('hidden');
+        const trailerIframe = document.getElementById('trailer-iframe');
+        if (trailerIframe) trailerIframe.src = '';
+      }
+    }
+  });
   
   elements.btnBackToFeed?.addEventListener('click', () => switchTab(state.lastFeedTab));
-  
-  document.getElementById('back-to-download-btn')?.addEventListener('click', () => switchTab(state.lastFeedTab || 'movies-view'));
   
   // Similar Media Scrolling
   const similarContainer = document.getElementById('similarMediaContainer');
@@ -755,6 +886,23 @@ function setupEventListeners() {
     switchTab('diagnostic-view');
   });
 
+  document.getElementById('btnDiagPrev')?.addEventListener('click', () => {
+    if (state.diagnosticResults && state.diagnosticIndex > 0) {
+      state.diagnosticIndex--;
+      const idx = state.diagnosticIndex;
+      const total = state.diagnosticResults.length;
+      
+      document.getElementById('diagMatchIndex').innerText = idx + 1;
+      const btnPrev = document.getElementById('btnDiagPrev');
+      const btnNext = document.getElementById('btnDiagNext');
+      if (btnPrev) btnPrev.disabled = idx <= 0;
+      if (btnNext) btnNext.disabled = idx >= total - 1;
+      
+      const m = state.diagnosticResults[idx];
+      openDetailView(m, m.mediaType || 'movie', true);
+    }
+  });
+
   document.getElementById('btnDiagNext')?.addEventListener('click', () => {
     if (state.diagnosticResults && state.diagnosticIndex < state.diagnosticResults.length - 1) {
       state.diagnosticIndex++;
@@ -762,12 +910,59 @@ function setupEventListeners() {
       const total = state.diagnosticResults.length;
       
       document.getElementById('diagMatchIndex').innerText = idx + 1;
-      document.getElementById('btnDiagNext').disabled = idx >= total - 1;
+      const btnPrev = document.getElementById('btnDiagPrev');
+      const btnNext = document.getElementById('btnDiagNext');
+      if (btnPrev) btnPrev.disabled = idx <= 0;
+      if (btnNext) btnNext.disabled = idx >= total - 1;
       
       const m = state.diagnosticResults[idx];
       openDetailView(m, m.mediaType || 'movie', true);
     }
   });
+}
+
+async function performDirectSearch(query, minSeeds = 0, category = '200') {
+  const cleanQuery = (query || '').trim();
+  if (!cleanQuery) {
+    showToast('Please enter a search query', 'error');
+    return;
+  }
+
+  if (elements.directSearchResults) {
+    elements.directSearchResults.innerHTML = '<div style="padding:28px;text-align:center;font-family:var(--font-mono);opacity:0.8;">Searching releases on The Cine Bay...</div>';
+  }
+
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(cleanQuery)}&minSeeds=${minSeeds || 0}&category=${category || '200'}`);
+    const data = await res.json();
+
+    if (data.success && data.torrents && data.torrents.length > 0) {
+      if (elements.directSearchResults) {
+        elements.directSearchResults.innerHTML = `
+          <div class="torrent-list-header" style="display:flex; margin-bottom:10px;">
+            <span>Release</span>
+            <span>Quality</span>
+            <span>Seeds/Peers</span>
+            <span>Size</span>
+            <span>Action</span>
+          </div>
+          <div class="direct-torrent-list"></div>
+        `;
+        const listContainer = elements.directSearchResults.querySelector('.direct-torrent-list');
+        renderTorrentRows(listContainer, data.torrents, cleanQuery, { title: cleanQuery }, false);
+      }
+    } else {
+      if (elements.directSearchResults) {
+        elements.directSearchResults.innerHTML = `<div style="padding:28px;text-align:center;font-family:var(--font-mono);">No torrents found matching "${escapeHtml(cleanQuery)}" with ${minSeeds || 0}+ seeds.</div>`;
+      }
+      showToast('No torrents found for search query', 'info');
+    }
+  } catch (err) {
+    if (elements.directSearchResults) {
+      elements.directSearchResults.innerHTML = '<div style="padding:28px;text-align:center;font-family:var(--font-mono);">Failed to execute search. Please try again.</div>';
+    }
+    showToast('Direct search failed', 'error');
+  }
 }
 
 function handleQuickMoodSelect(mood) {
@@ -776,24 +971,28 @@ function handleQuickMoodSelect(mood) {
     quizAnswers.mood = 'happy';
     quizAnswers.occasion = 'solo';
     quizAnswers.genres = ['Action', 'Thriller', 'Science Fiction'];
-    currentQuizStep = 2;
-    renderQuizStep();
+    quizAnswers.mediaPreference = 'movies';
+    quizAnswers.recency = 'any';
+    submitQuiz();
   } else if (mood === 'chill') {
     quizAnswers.mood = 'happy';
     quizAnswers.occasion = 'date';
-    quizAnswers.genres = ['Romance', 'Comedy', 'Drama'];
-    currentQuizStep = 2;
-    renderQuizStep();
+    quizAnswers.genres = ['Romance', 'Comedy'];
+    quizAnswers.mediaPreference = 'movies';
+    quizAnswers.recency = 'any';
+    submitQuiz();
   } else if (mood === 'mind') {
     quizAnswers.mood = 'neutral';
     quizAnswers.occasion = 'solo';
-    quizAnswers.genres = ['Mystery', 'Science Fiction', 'Crime'];
-    currentQuizStep = 2;
-    renderQuizStep();
+    quizAnswers.genres = ['Mystery', 'Science Fiction', 'Thriller'];
+    quizAnswers.mediaPreference = 'movies';
+    quizAnswers.recency = 'any';
+    submitQuiz();
   } else if (mood === 'top') {
     quizAnswers.recency = 'any';
     quizAnswers.mood = 'neutral';
-    quizAnswers.genres = ['Drama', 'History', 'Crime'];
+    quizAnswers.genres = ['Drama', 'Crime', 'History'];
+    quizAnswers.mediaPreference = 'movies';
     submitQuiz();
   }
 }
@@ -822,24 +1021,37 @@ function switchTab(tabId) {
     tutorialBtn.classList.toggle('active', tabId === 'tutorial-view');
   }
 
+  const tutorialBackBtn = document.getElementById('tutorial-back-feed-btn');
+  if (tutorialBackBtn) {
+    const span = tutorialBackBtn.querySelector('span');
+    if (state.isSharedPage) {
+      if (span) span.textContent = 'BACK TO SHARED';
+      tutorialBackBtn.title = 'Return to Shared Movie';
+    } else {
+      if (span) span.textContent = 'BACK TO MOVIE FEED';
+      tutorialBackBtn.title = 'Return to Movie Feed';
+    }
+  }
+
   const siteHeader = document.querySelector('.site-header');
   const mobileNav = document.getElementById('mobileBottomNav');
+  const isShared = state.isSharedPage || tabId === 'share-view';
+  document.body.classList.toggle('shared-mode', isShared);
   if (siteHeader) {
-    if (tabId === 'tutorial-view' || tabId === 'auth-view') {
+    if (tabId === 'tutorial-view' || tabId === 'auth-view' || isShared) {
       siteHeader.classList.add('hidden');
       if (mobileNav) mobileNav.classList.add('hidden');
+      if (elements.mainNav) elements.mainNav.style.display = 'none';
     } else {
       siteHeader.classList.remove('hidden');
       if (mobileNav) mobileNav.classList.remove('hidden');
+      if (elements.mainNav) elements.mainNav.style.display = 'flex';
     }
   }
 
   if (tabId === 'movies-view' && state.movies.length === 0) loadMovies();
   else if (tabId === 'tv-view' && state.tvShows.length === 0) loadTVShows();
   else if (tabId === 'settings-view') loadSettingsIntoUI();
-  else if (tabId === 'download-view') {
-    if (window.torrentEngine) window.torrentEngine.render();
-  }
 
   if (fluidInstance && typeof fluidInstance.pause === 'function') {
     const canvas = document.getElementById('fluid-canvas');
@@ -1375,53 +1587,193 @@ async function executeTorrentShare(torrent, mediaObj = {}, searchTitle = '') {
   switchTab('share-view');
 }
 
-function triggerDownloadDirect(title, torrent) {
-  if (!torrent) return;
-  const safeName = (torrent.name || title || 'download').replace(/[^a-zA-Z0-9_.-]/g, '_');
-  const hash = torrent.infoHash || (torrent.magnet && torrent.magnet.match(/xt=urn:btih:([a-zA-Z0-9]+)/i)?.[1]);
+function openMagnetInTorrentClient(magnetUrl) {
+  if (!magnetUrl) return;
+  try {
+    const tempLink = document.createElement('a');
+    tempLink.href = magnetUrl;
+    tempLink.style.display = 'none';
+    document.body.appendChild(tempLink);
+    tempLink.click();
+    setTimeout(() => {
+      if (tempLink.parentNode) tempLink.parentNode.removeChild(tempLink);
+    }, 100);
+  } catch (e) {
+    window.location.href = magnetUrl;
+  }
+}
 
-  showToast('Downloading .torrent file...', 'info');
+function generateClientTorrentBlob(torrent = {}, title = '') {
+  const rawName = torrent.name || title || 'download';
+  const trackers = [
+    'udp://tracker.opentrackr.org:1337/announce',
+    'udp://open.demonii.com:1337/announce',
+    'udp://tracker.openbittorrent.com:6969/announce',
+    'udp://open.stealth.si:80/announce'
+  ];
 
-  if (torrent.magnet) {
-    copyMagnetLink(torrent.magnet);
+  function bencodeStr(s) {
+    const enc = new TextEncoder().encode(s);
+    return new Uint8Array([...new TextEncoder().encode(`${enc.length}:`), ...enc]);
+  }
+  function bencodeInt(n) {
+    return new TextEncoder().encode(`i${Math.floor(n)}e`);
+  }
+  function concatBuffers(bufs) {
+    const totalLen = bufs.reduce((acc, b) => acc + b.length, 0);
+    const out = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const b of bufs) {
+      out.set(b, offset);
+      offset += b.length;
+    }
+    return out;
   }
 
+  let hashHex = torrent.infoHash || '';
+  if (!hashHex && torrent.magnet) {
+    const m = torrent.magnet.match(/xt=urn:btih:([a-zA-Z0-9]{32,40})/i);
+    if (m) hashHex = m[1];
+  }
+
+  const pieceLen = 262144;
+  const totalLen = torrent.size ? parseInt(torrent.size, 10) : 1073741824;
+
+  const pieceBytes = new Uint8Array(20);
+  if (hashHex && hashHex.length === 40) {
+    for (let i = 0; i < 20; i++) {
+      pieceBytes[i] = parseInt(hashHex.substr(i * 2, 2), 16) || 0;
+    }
+  }
+
+  const dStart = new TextEncoder().encode('d');
+  const dEnd = new TextEncoder().encode('e');
+  const lStart = new TextEncoder().encode('l');
+  const lEnd = new TextEncoder().encode('e');
+
+  const announceKey = bencodeStr('announce');
+  const announceVal = bencodeStr(trackers[0]);
+
+  const announceListKey = bencodeStr('announce-list');
+  const announceListBufs = [lStart];
+  for (const tr of trackers) {
+    announceListBufs.push(lStart, bencodeStr(tr), lEnd);
+  }
+  announceListBufs.push(lEnd);
+  const announceListVal = concatBuffers(announceListBufs);
+
+  const commentKey = bencodeStr('comment');
+  const commentVal = bencodeStr(`MoodFlix Release - ${rawName}`);
+
+  const createdByKey = bencodeStr('created by');
+  const createdByVal = bencodeStr('MoodFlix/2.0');
+
+  const creationDateKey = bencodeStr('creation date');
+  const creationDateVal = bencodeInt(Math.floor(Date.now() / 1000));
+
+  const infoKey = bencodeStr('info');
+  const infoLenKey = bencodeStr('length');
+  const infoLenVal = bencodeInt(totalLen);
+  const infoNameKey = bencodeStr('name');
+  const infoNameVal = bencodeStr(rawName);
+  const infoPieceLenKey = bencodeStr('piece length');
+  const infoPieceLenVal = bencodeInt(pieceLen);
+  const infoPiecesKey = bencodeStr('pieces');
+  const infoPiecesLen = new TextEncoder().encode(`${pieceBytes.length}:`);
+  const infoPiecesVal = concatBuffers([infoPiecesLen, pieceBytes]);
+
+  const infoBuf = concatBuffers([
+    dStart,
+    infoLenKey, infoLenVal,
+    infoNameKey, infoNameVal,
+    infoPieceLenKey, infoPieceLenVal,
+    infoPiecesKey, infoPiecesVal,
+    dEnd
+  ]);
+
+  const allBuf = concatBuffers([
+    dStart,
+    announceKey, announceVal,
+    announceListKey, announceListVal,
+    commentKey, commentVal,
+    createdByKey, createdByVal,
+    creationDateKey, creationDateVal,
+    infoKey, infoBuf,
+    dEnd
+  ]);
+
+  return new Blob([allBuf], { type: 'application/x-bittorrent' });
+}
+
+async function triggerDownloadDirect(title, torrent) {
+  if (!torrent) return;
+  
+  const rawName = torrent.name || title || 'download';
+  const cleanName = rawName.replace(/[/\\?%*:|"<>]/g, '_').trim() || 'download';
+  
+  if (torrent.magnet || torrent.infoHash) {
+    const params = new URLSearchParams({
+      magnet: torrent.magnet || '',
+      hash: torrent.infoHash || '',
+      name: torrent.name || '',
+      title: title || ''
+    });
+
+    try {
+      const res = await fetch(`/api/torrent/download?${params.toString()}`);
+      
+      let blob;
+      if (res.ok && res.status === 200) {
+        blob = await res.blob();
+      } else {
+        blob = generateClientTorrentBlob(torrent, title);
+      }
+
+      const blobUrl = window.URL.createObjectURL(blob);
+      const downloadLink = document.createElement('a');
+      downloadLink.style.display = 'none';
+      downloadLink.href = blobUrl;
+      downloadLink.download = `${cleanName}.torrent`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      setTimeout(() => {
+        document.body.removeChild(downloadLink);
+        window.URL.revokeObjectURL(blobUrl);
+      }, 2000);
+
+      showToast(`Downloaded ${cleanName}.torrent 📥`, 'success');
+    } catch (err) {
+      try {
+        const blob = generateClientTorrentBlob(torrent, title);
+        const blobUrl = window.URL.createObjectURL(blob);
+        const downloadLink = document.createElement('a');
+        downloadLink.style.display = 'none';
+        downloadLink.href = blobUrl;
+        downloadLink.download = `${cleanName}.torrent`;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        setTimeout(() => {
+          document.body.removeChild(downloadLink);
+          window.URL.revokeObjectURL(blobUrl);
+        }, 2000);
+        showToast(`Downloaded ${cleanName}.torrent 📥`, 'success');
+      } catch (clientErr) {
+        showToast('Failed to download .torrent file', 'error');
+      }
+    }
+  } else {
+    showToast('No download link available for this release', 'error');
+  }
+
+  // Record download in storage history
   fetch('/api/download', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ movieTitle: title, torrent, openMagnet: false })
   }).catch(() => {});
-
-  if (hash) {
-    fetch(`/api/torrent-file?hash=${hash}&name=${encodeURIComponent(safeName)}`)
-      .then(res => {
-        if (res.ok) return res.blob();
-        throw new Error('Torrent file not cached');
-      })
-      .then(blob => {
-        if (blob && blob.size > 0) {
-          const downloadUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = downloadUrl;
-          a.download = `${safeName}.torrent`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
-          showToast('Downloaded .torrent file! 💾', 'success');
-        }
-      })
-      .catch(() => {
-        if (torrent.magnet) {
-          window.location.href = torrent.magnet;
-        }
-      });
-  } else if (torrent.magnet) {
-    window.location.href = torrent.magnet;
-  }
 }
 
-window.copyMagnetLink = async function(magnetDec) {
+window.copyMagnetLink = async function(magnetDec, showSuccessToast = true) {
   const magnet = decodeURIComponent(magnetDec);
   if (!magnet) {
     showToast('No magnet link available', 'error');
@@ -1439,9 +1791,13 @@ window.copyMagnetLink = async function(magnetDec) {
       document.execCommand('copy');
       document.body.removeChild(textArea);
     }
-    showToast('Magnet link copied to clipboard! 🧲', 'success');
+    if (showSuccessToast) {
+      showToast('Magnet link copied to clipboard! 🧲', 'success');
+    }
   } catch (err) {
-    showToast('Failed to copy magnet link', 'error');
+    if (showSuccessToast) {
+      showToast('Failed to copy magnet link', 'error');
+    }
   }
 };
 
@@ -1458,1187 +1814,19 @@ window.shareSelectedTorrent = function(titleDec, torrentStr, mediaStr) {
   executeTorrentShare(torrent, media, title);
 };
 
-window.triggerDownload = async function(titleDec, torrentStr) {
+window.triggerDownload = function(titleDec, torrentStr) {
   const title = decodeURIComponent(titleDec);
-  const torrent = JSON.parse(decodeURIComponent(torrentStr));
-  const safeName = (torrent.name || title || 'download').replace(/[^a-zA-Z0-9_.-]/g, '_');
-  const hash = torrent.infoHash || (torrent.magnet && torrent.magnet.match(/xt=urn:btih:([a-zA-Z0-9]+)/i)?.[1]);
-
-  showToast('Downloading .torrent file...', 'info');
-
-  // 1. Copy magnet to clipboard as a helpful fallback
+  let torrent = {};
   try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(torrent.magnet);
-    } else {
-      const textArea = document.createElement("textarea");
-      textArea.value = torrent.magnet;
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-    }
-  } catch (err) {}
-
-  // 2. Notify backend to record download in history
-  fetch('/api/download', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ movieTitle: title, torrent, openMagnet: false })
-  }).catch(() => {});
-
-  // 3. Download the actual .torrent file to user's device
-  let downloaded = false;
-  if (hash) {
-    try {
-      const res = await fetch(`/api/torrent-file?hash=${hash}&name=${encodeURIComponent(safeName)}`);
-      if (res.ok) {
-        const blob = await res.blob();
-        if (blob && blob.size > 0) {
-          const downloadUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = downloadUrl;
-          a.download = `${safeName}.torrent`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
-          showToast(`Downloaded ${safeName}.torrent ✓`, 'success');
-          downloaded = true;
-        }
-      }
-    } catch (e) {}
-  }
-
-  // 4. Fallback if caching proxy is unreachable: save .magnet file
-  if (!downloaded && torrent.magnet) {
-    const blob = new Blob([torrent.magnet], { type: 'text/plain;charset=utf-8' });
-    const downloadUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `${safeName}.magnet`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
-    showToast(`Saved magnet file & link copied ✓`, 'success');
-  }
+    torrent = JSON.parse(decodeURIComponent(torrentStr));
+  } catch (e) {}
+  triggerDownloadDirect(title, torrent);
 };
 
-async function performDirectSearch(query, minSeeds, category) {
-  if (!elements.directSearchResults) return;
-  elements.directSearchResults.innerHTML = '<div class="retro-box" style="padding: 24px; text-align: center; font-family: var(--font-mono);">Searching torrent databases...</div>';
-  try {
-    const minS = minSeeds || 0;
-    const cat = category || '200';
-    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&minSeeds=${minS}&category=${cat}`);
-    const data = await res.json();
-    if (data.success && data.torrents && data.torrents.length > 0) {
-      elements.directSearchResults.innerHTML = `
-        <div class="retro-box" style="padding: 14px;">
-          <div class="torrent-list-header">
-            <span>Release</span><span>Quality</span><span>Seeds/Peers</span><span>Size</span><span>Action</span>
-          </div>
-          <div id="directSearchItemsContainer"></div>
-        </div>
-      `;
-      const container = document.getElementById('directSearchItemsContainer');
-      renderTorrentRows(container, data.torrents, query, { title: query }, false);
-    } else {
-      elements.directSearchResults.innerHTML = '<div class="retro-box" style="padding: 24px; text-align: center; font-family: var(--font-mono);">No torrents found matching your query.</div>';
-    }
-  } catch (err) {
-    elements.directSearchResults.innerHTML = '<div class="retro-box" style="padding: 24px; text-align: center; font-family: var(--font-mono); color: #b30000;">Search failed. Please check network connection.</div>';
-  }
-}
-
-function showToast(msg) {
-  const toast = document.createElement('div');
-  toast.className = 'retro-box';
-  toast.style = 'margin-top: 10px; padding: 10px; background: var(--retro-fg); color: var(--retro-bg); font-family: var(--font-mono); font-weight: bold;';
-  toast.innerText = msg;
-  elements.toastContainer.appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
-}
-
-// Loader logic
-window.addEventListener('load', () => {
-  const loader = document.getElementById('loader');
-  if (loader && !loader.classList.contains('fade-out')) {
-    setTimeout(() => {
-      loader.classList.add('fade-out');
-    }, 1500); // Force it to show for 1.5s
-  }
-});
-
-/* ==========================================================================
-   Torrent Lite Engine [WebTorrent + OPFS Storage Pipeline + WakeLock + Stream]
-   ========================================================================== */
-
-const DEFAULT_WSS_TRACKERS = [
-  'wss://tracker.openwebtorrent.com',
-  'wss://tracker.webtorrent.dev'
-];
-
-class TorrentEngineManager {
-  constructor() {
-    this.client = null;
-    this.torrents = new Map(); // infoHash -> { torrentObj, meta, status, opfsSaved, phase, logs }
-    this.savedLibrary = []; // Array of saved torrent metadata
-    this.activeFilter = 'all';
-    this.wakeLockSentinel = null;
-    this.opfsSupported = !!(navigator.storage && navigator.storage.getDirectory);
-    this.updateInterval = null;
-    this.logs = [];
-    this.autoScroll = true;
-    this.logsCollapsed = false;
-    this.expandedCardLogs = new Set();
-  }
-
-  addLog(message, level = 'info', tag = 'ENGINE', infoHash = null) {
-    const time = new Date().toLocaleTimeString();
-    const logObj = { time, level, tag, message, infoHash };
-
-    // Push to global logs (keep latest 300)
-    this.logs.push(logObj);
-    if (this.logs.length > 300) this.logs.shift();
-
-    // Push to per-torrent logs
-    if (infoHash && this.torrents.has(infoHash)) {
-      const entry = this.torrents.get(infoHash);
-      if (!entry.logs) entry.logs = [];
-      entry.logs.push(logObj);
-      if (entry.logs.length > 50) entry.logs.shift();
-      if (tag === 'TRACKER' || tag === 'SWARM' || tag === 'METADATA' || tag === 'PEER' || tag === 'STORAGE' || tag === 'DONE' || tag === 'ERROR') {
-        entry.phase = `[${tag}] ${message.slice(0, 40)}`;
-      }
-    }
-
-    // Console output
-    const prefix = `[Torrent Lite][${tag}]`;
-    if (level === 'error') {
-      console.error(prefix, message);
-    } else if (level === 'warn') {
-      console.warn(prefix, message);
-    } else {
-      console.log(prefix, message);
-    }
-
-    // Render to terminal UI
-    this.renderConsoleLog(logObj);
-  }
-
-  renderConsoleLog(log) {
-    const consoleEl = document.getElementById('torrentLogsConsole');
-    if (!consoleEl) return;
-
-    const div = document.createElement('div');
-    div.className = `log-entry log-${log.level || 'info'}`;
-    div.innerHTML = `
-      <span class="log-time">[${log.time}]</span>
-      <span class="log-tag">[${log.tag || 'INFO'}]</span>
-      <span class="log-msg">${this.escapeHtml(log.message)}</span>
-    `;
-    consoleEl.appendChild(div);
-
-    while (consoleEl.children.length > 250) {
-      consoleEl.removeChild(consoleEl.firstChild);
-    }
-
-    if (!this.logsCollapsed && this.autoScroll) {
-      consoleEl.scrollTop = consoleEl.scrollHeight;
-    }
-  }
-
-  clearLogs() {
-    this.logs = [];
-    const consoleEl = document.getElementById('torrentLogsConsole');
-    if (consoleEl) consoleEl.innerHTML = '';
-    this.addLog('Activity logs cleared by user', 'info', 'SYSTEM');
-  }
-
-  copyLogs() {
-    if (this.logs.length === 0) {
-      showToast('No logs to copy', 'info');
-      return;
-    }
-    const text = this.logs.map(l => `[${l.time}] [${l.tag}] ${l.message}`).join('\n');
-    try {
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(text);
-        showToast('All engine logs copied to clipboard!', 'success');
-      }
-    } catch (e) {
-      showToast('Failed to copy logs', 'error');
-    }
-  }
-
-  toggleLogsTerminal() {
-    this.logsCollapsed = !this.logsCollapsed;
-    const consoleEl = document.getElementById('torrentLogsConsole');
-    const btn = document.getElementById('btnToggleLogs');
-    if (consoleEl) {
-      if (this.logsCollapsed) {
-        consoleEl.classList.add('collapsed');
-        if (btn) btn.innerText = 'EXPAND';
-      } else {
-        consoleEl.classList.remove('collapsed');
-        if (btn) btn.innerText = 'COLLAPSE';
-        consoleEl.scrollTop = consoleEl.scrollHeight;
-      }
-    }
-  }
-
-  toggleCardLogs(id) {
-    if (this.expandedCardLogs.has(id)) {
-      this.expandedCardLogs.delete(id);
-    } else {
-      this.expandedCardLogs.add(id);
-    }
-    this.render();
-  }
-
-  init() {
-    // 1. Register PWA Service Worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    }
-
-    this.addLog('Torrent Lite Engine initializing...', 'info', 'SYSTEM');
-    if (this.opfsSupported) {
-      this.addLog('Origin Private File System (OPFS) detected: High-throughput direct-to-disk streaming active ✓', 'storage', 'STORAGE');
-    }
-
-    // 2. Initialize WebTorrent Client (with retry if CDN hasn't loaded yet)
-    this.initWebTorrent();
-
-    // 3. Setup Visibility and WakeLock Listener
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && this.hasActiveDownloads()) {
-        this.acquireWakeLock();
-      }
-    });
-
-    // 4. Load Saved Library
-    this.loadSavedLibrary();
-
-    // 5. Bind UI Elements
-    this.bindEvents();
-
-    // 6. Start live ticker
-    this.startTicker();
-    this.updateStorageQuota();
-    this.render();
-
-    this.addLog('Torrent Lite Engine ready. WebRTC P2P swarm listener active ✓', 'success', 'SYSTEM');
-  }
-
-  initWebTorrent(retries = 0) {
-    try {
-      if (window.WebTorrent) {
-        try {
-          this.client = new window.WebTorrent({
-            tracker: {
-              rtcConfig: {
-                iceServers: [
-                  { urls: 'stun:stun.l.google.com:19302' },
-                  { urls: 'stun:global.stun.twilio.com:3478' }
-                ]
-              }
-            }
-          });
-        } catch (optsErr) {
-          console.warn('[Torrent Lite] Initializing WebTorrent with default options due to:', optsErr);
-          this.client = new window.WebTorrent();
-        }
-        this.client.on('error', err => {
-          this.addLog(`Client Error: ${err?.message || err}`, 'error', 'ERROR');
-        });
-        this.addLog('WebTorrent client bundle initialized with STUN ICE servers', 'info', 'SYSTEM');
-      } else if (retries < 15) {
-        // CDN script may not have loaded yet — retry after delay
-        setTimeout(() => this.initWebTorrent(retries + 1), 400);
-      } else {
-        // Dynamic backup script injection if CDN was blocked or delayed
-        this.addLog('WebTorrent script delayed. Injecting backup CDN...', 'warn', 'SYSTEM');
-        const backupScript = document.createElement('script');
-        backupScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/webtorrent/1.9.7/webtorrent.min.js';
-        backupScript.onload = () => {
-          if (window.WebTorrent && !this.client) {
-            this.client = new window.WebTorrent();
-            this.addLog('WebTorrent backup client loaded successfully ✓', 'success', 'SYSTEM');
-            showToast('WebTorrent engine loaded successfully!', 'success');
-          }
-        };
-        backupScript.onerror = () => {
-          this.addLog('WebTorrent engine failed to load from CDNs. Check network / adblockers.', 'error', 'ERROR');
-          showToast('WebTorrent engine failed to load. Check your network or adblocker.', 'error');
-        };
-        document.head.appendChild(backupScript);
-      }
-    } catch (err) {
-      this.addLog(`Initialization error: ${err?.message || err}`, 'error', 'ERROR');
-    }
-  }
-
-  bindEvents() {
-    const input = document.getElementById('torrentMagnetInput');
-    const btnAdd = document.getElementById('btnAddTorrent');
-    const btnPaste = document.getElementById('btnPasteMagnet');
-    const dropzone = document.getElementById('torrentDropzone');
-    const fileInput = document.getElementById('torrentFileInput');
-    const btnBrowse = document.getElementById('btnBrowseTorrentFile');
-    const filterTabs = document.getElementById('torrentFilterTabs');
-    const btnCloseStream = document.getElementById('btnCloseStreamModal');
-
-    // Terminal log buttons
-    document.getElementById('btnClearLogs')?.addEventListener('click', () => this.clearLogs());
-    document.getElementById('btnCopyLogs')?.addEventListener('click', () => this.copyLogs());
-    document.getElementById('btnToggleLogs')?.addEventListener('click', () => this.toggleLogsTerminal());
-
-    btnAdd?.addEventListener('click', () => {
-      const val = input.value.trim();
-      if (val) {
-        this.add(val);
-        input.value = '';
-      }
-    });
-
-    input?.addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        const val = input.value.trim();
-        if (val) {
-          this.add(val);
-          input.value = '';
-        }
-      }
-    });
-
-    btnPaste?.addEventListener('click', async () => {
-      try {
-        if (navigator.clipboard) {
-          const text = await navigator.clipboard.readText();
-          if (text) {
-            input.value = text;
-            showToast('Magnet pasted from clipboard!', 'success');
-          }
-        }
-      } catch (err) {
-        showToast('Clipboard access denied', 'error');
-      }
-    });
-
-    btnBrowse?.addEventListener('click', () => fileInput?.click());
-    fileInput?.addEventListener('change', e => {
-      const file = e.target.files?.[0];
-      if (file) {
-        this.handleFileTorrent(file);
-        fileInput.value = '';
-      }
-    });
-
-    // Drag and drop handlers
-    dropzone?.addEventListener('dragover', e => {
-      e.preventDefault();
-      dropzone.classList.add('drag-over');
-    });
-
-    dropzone?.addEventListener('dragleave', () => {
-      dropzone.classList.remove('drag-over');
-    });
-
-    dropzone?.addEventListener('drop', e => {
-      e.preventDefault();
-      dropzone.classList.remove('drag-over');
-      const file = e.dataTransfer?.files?.[0];
-      if (file) {
-        this.handleFileTorrent(file);
-      } else {
-        const text = e.dataTransfer?.getData('text');
-        if (text) this.add(text);
-      }
-    });
-
-    // Filter tabs
-    filterTabs?.addEventListener('click', e => {
-      const btn = e.target.closest('.filter-tab');
-      if (!btn) return;
-      document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
-      btn.classList.add('active');
-      this.activeFilter = btn.dataset.filter;
-      this.render();
-    });
-
-    // Stream modal close
-    btnCloseStream?.addEventListener('click', () => this.closeStreamModal());
-  }
-
-  handleFileTorrent(file) {
-    if (!file) return;
-    const name = file.name;
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const dataUrl = e.target.result;
-      if (typeof dataUrl === 'string') {
-        const base64 = dataUrl.split(',')[1];
-        if (base64) {
-          await this.add({ buffer: base64, name });
-        }
-      }
-    };
-    reader.readAsDataURL(file);
-  }
-
-  augmentMagnet(uri) {
-    if (typeof uri !== 'string') return uri;
-    const trimmed = uri.trim();
-    if (!trimmed.startsWith('magnet:?')) {
-      if (/^[0-9a-fA-F]{40}$/.test(trimmed) || /^[2-7a-zA-Z]{32}$/.test(trimmed)) {
-        uri = `magnet:?xt=urn:btih:${trimmed}`;
-      } else {
-        return uri;
-      }
-    } else {
-      uri = trimmed;
-    }
-
-    // Extract xt parameter (e.g. urn:btih:HASH)
-    const xtMatch = uri.match(/[?&]xt=(urn:[a-z0-9]+:[a-zA-Z0-9]+)/i);
-    if (!xtMatch) return uri;
-    const xt = xtMatch[1];
-
-    // Extract dn parameter if present
-    const dnMatch = uri.match(/[?&]dn=([^&]+)/i);
-    const dn = dnMatch ? `&dn=${dnMatch[1]}` : '';
-
-    let clean = `magnet:?xt=${xt}${dn}`;
-
-    DEFAULT_WSS_TRACKERS.forEach(tr => {
-      clean += `&tr=${encodeURIComponent(tr)}`;
-    });
-    return clean;
-  }
-
-  async add(torrentInput, customMeta = {}) {
-    let name = customMeta.name;
-    let payload = {};
-
-    if (torrentInput instanceof File) {
-      return this.handleFileTorrent(torrentInput);
-    } else if (typeof torrentInput === 'object' && torrentInput.buffer) {
-      name = name || torrentInput.name || 'Uploaded .torrent';
-      payload = { buffer: torrentInput.buffer, name };
-    } else if (typeof torrentInput === 'string') {
-      const trimmed = torrentInput.trim();
-      name = name || trimmed.slice(0, 35);
-      payload = { magnet: trimmed, name };
-    } else {
-      showToast('Unsupported torrent input format', 'error');
-      return;
-    }
-
-    this.addLog(`Adding transfer: "${name}"`, 'info', 'ADD');
-    this.addLog(`Connecting to Backend High-Speed TCP/UDP Swarm Engine...`, 'info', 'SWARM');
-    showToast('Connecting to Backend TCP/UDP Seeders...', 'info');
-
-    try {
-      const res = await fetch('/api/backend-torrent/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error(`Server route unavailable (${res.status}). Please restart your Node server ('npm start').`);
-      }
-      const data = await res.json();
-      if (data.success && data.infoHash) {
-        const id = data.infoHash;
-        const entry = {
-          meta: {
-            id,
-            name: data.name || name,
-            magnet: payload.magnet || null,
-            addedAt: Date.now(),
-            size: data.length || 0
-          },
-          status: 'downloading',
-          progress: 0,
-          downloadSpeed: 0,
-          uploadSpeed: 0,
-          numPeers: 0,
-          opfsSaved: false,
-          phase: 'BACKEND TCP/UDP ENGINE CONNECTED',
-          logs: []
-        };
-        this.torrents.set(id, entry);
-        this.addLog(`Transfer registered on Backend TCP/UDP Engine (Hash: ${id.slice(0, 12)}...)`, 'success', 'QUEUE', id);
-        this.persistLibrary();
-        this.render();
-      } else {
-        const errMsg = data.error || 'Failed to add torrent to backend engine';
-        this.addLog(`Backend add notice: ${errMsg}`, 'warn', 'ENGINE');
-        showToast(errMsg, 'error');
-      }
-    } catch (backendErr) {
-      this.addLog(`Backend engine error: ${backendErr.message}`, 'warn', 'ENGINE');
-      showToast(backendErr.message, 'error');
-    }
-  }
-
-  async streamFileToOPFS(file) {
-    if (!this.opfsSupported) return null;
-    try {
-      const root = await navigator.storage.getDirectory();
-      const fileName = file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
-      const fileHandle = await root.getFileHandle(fileName, { create: true });
-      const writable = await fileHandle.createWritable();
-      
-      // WebTorrent v3: file.stream() returns a standard Web ReadableStream
-      // WebTorrent v2: file.createReadStream() returns a Node.js-style stream
-      if (typeof file.stream === 'function') {
-        const readableStream = file.stream();
-        const reader = readableStream.getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          await writable.write(value);
-        }
-      } else if (typeof file.createReadStream === 'function') {
-        // v2 fallback: Node-style stream
-        const nodeStream = file.createReadStream();
-        await new Promise((resolve, reject) => {
-          nodeStream.on('data', async (chunk) => {
-            try {
-              nodeStream.pause();
-              await writable.write(chunk);
-              nodeStream.resume();
-            } catch (writeErr) {
-              nodeStream.destroy();
-              reject(writeErr);
-            }
-          });
-          nodeStream.on('end', resolve);
-          nodeStream.on('error', reject);
-        });
-      } else {
-        // Last resort: get blob and write it
-        const blob = await this.getFileBlob(file);
-        await writable.write(blob);
-      }
-      
-      await writable.close();
-      return fileHandle;
-    } catch (err) {
-      console.warn('[Torrent Lite] OPFS write failed:', err);
-    }
-    return null;
-  }
-
-  async getOPFSFile(fileName) {
-    if (!this.opfsSupported) return null;
-    try {
-      const root = await navigator.storage.getDirectory();
-      const safeName = fileName.replace(/[^a-zA-Z0-9_.-]/g, '_');
-      const fileHandle = await root.getFileHandle(safeName);
-      return await fileHandle.getFile();
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // Helper: get a Blob from a WebTorrent file (works for both v2 and v3)
-  async getFileBlob(file) {
-    // 1. Try OPFS first
-    const opfsFile = await this.getOPFSFile(file.name);
-    if (opfsFile) return opfsFile;
-
-    // 2. v3: file.blob() returns a promise
-    if (typeof file.blob === 'function') {
-      try {
-        return await file.blob();
-      } catch (e) {}
-    }
-    // 3. v3: file.stream() → collect into blob
-    if (typeof file.stream === 'function') {
-      try {
-        const reader = file.stream().getReader();
-        const chunks = [];
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-        return new Blob(chunks);
-      } catch (e) {}
-    }
-    // 4. v2: callback-based getBlob
-    if (typeof file.getBlob === 'function') {
-      return new Promise((resolve) => {
-        file.getBlob((err, blob) => {
-          if (err || !blob) return resolve(null);
-          resolve(blob);
-        });
-      });
-    }
-    // 5. v1: getBlobURL
-    if (typeof file.getBlobURL === 'function') {
-      return new Promise((resolve) => {
-        file.getBlobURL((err, url) => {
-          if (!err && url) {
-            fetch(url).then(r => r.blob()).then(resolve).catch(() => resolve(null));
-          } else {
-            resolve(null);
-          }
-        });
-      });
-    }
-    return null;
-  }
-
-  async pause(infoHash) {
-    await fetch('/api/backend-torrent/pause', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: infoHash })
-    }).catch(() => {});
-    const entry = this.torrents.get(infoHash);
-    if (entry) entry.status = 'paused';
-    this.render();
-  }
-
-  async resume(infoHash) {
-    await fetch('/api/backend-torrent/resume', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: infoHash })
-    }).catch(() => {});
-    const entry = this.torrents.get(infoHash);
-    if (entry) entry.status = 'downloading';
-    this.render();
-  }
-
-  async remove(infoHash) {
-    await fetch('/api/backend-torrent/remove', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: infoHash })
-    }).catch(() => {});
-    this.torrents.delete(infoHash);
-    this.savedLibrary = this.savedLibrary.filter(t => t.id !== infoHash);
-    this.persistLibrary();
-    this.render();
-    showToast('Torrent removed', 'info');
-  }
-
-  stream(infoHash) {
-    const entry = this.torrents.get(infoHash);
-    if (!entry) {
-      showToast('Torrent not found', 'error');
-      return;
-    }
-
-    const modal = document.getElementById('streamPlayerModal');
-    const title = document.getElementById('streamModalTitle');
-    const video = document.getElementById('streamVideoPlayer');
-    const audio = document.getElementById('streamAudioPlayer');
-    const audioBox = document.getElementById('streamAudioContainer');
-    const fileSelect = document.getElementById('streamFileSelect');
-
-    const magnetOrId = entry.meta.magnet || entry.meta.id;
-    if (title) title.innerText = (entry.meta.name || 'LIVE MEDIA STREAM').toUpperCase();
-
-    // High-Speed Backend TCP/UDP Streaming Proxy for 100% video playback
-    if (video) {
-      video.style.display = 'block';
-      if (audioBox) audioBox.classList.add('hidden');
-      const streamUrl = `/api/stream?torrent=${encodeURIComponent(magnetOrId)}`;
-      video.src = streamUrl;
-      video.play().catch(() => {});
-      this.addLog(`Connected to Backend High-Speed TCP/UDP Streaming Proxy`, 'success', 'STREAM', infoHash);
-      showToast('Connecting to Backend TCP/UDP Streaming Proxy...', 'info');
-    }
-
-    if (modal) modal.classList.remove('hidden');
-  }
-
-  async renderFileToPlayer(file, video, audio, audioBox) {
-    // Legacy fallback handled by backend stream
-  }
-
-  async fallbackStream(file, target) {
-    // Legacy fallback handled by backend stream
-  }
-
-  closeStreamModal() {
-    const modal = document.getElementById('streamPlayerModal');
-    const video = document.getElementById('streamVideoPlayer');
-    const audio = document.getElementById('streamAudioPlayer');
-    if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
-    if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
-    if (modal) modal.classList.add('hidden');
-  }
-
-  async exportFile(infoHash) {
-    const entry = this.torrents.get(infoHash);
-    if (!entry) {
-      showToast('Torrent transfer not found', 'error');
-      return;
-    }
-
-    const magnetOrId = entry.meta.magnet || entry.meta.id;
-    const safeName = (entry.meta.name || 'download').replace(/[^a-zA-Z0-9_.-]/g, '_');
-
-    showToast('Starting HTTP Video Download from backend TCP/UDP swarm...', 'info');
-    this.addLog(`Triggering Backend HTTP File Download for "${safeName}"`, 'info', 'EXPORT', infoHash);
-
-    // Direct HTTP download from backend TCP/UDP swarm straight to browser download bar!
-    window.location.href = `/api/download-file?torrent=${encodeURIComponent(magnetOrId)}`;
-  }
-
-  async exportTorrentOrMagnetFile(entry) {
-    const safeName = (entry.meta.name || 'download').replace(/[^a-zA-Z0-9_.-]/g, '_');
-    const hash = (entry.meta.id && entry.meta.id.length === 40 && !entry.meta.id.startsWith('pending_')) ? entry.meta.id : 
-                 (entry.meta.magnet && entry.meta.magnet.match(/xt=urn:btih:([a-zA-Z0-9]+)/i)?.[1]);
-    
-    if (hash) {
-      try {
-        const res = await fetch(`/api/torrent-file?hash=${hash}&name=${encodeURIComponent(safeName)}`);
-        if (res.ok) {
-          const blob = await res.blob();
-          if (blob && blob.size > 0) {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${safeName}.torrent`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(url), 5000);
-            showToast(`Exported ${safeName}.torrent ✓`, 'success');
-            return;
-          }
-        }
-      } catch (e) {}
-    }
-
-    if (entry.meta.magnet) {
-      const blob = new Blob([entry.meta.magnet], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${safeName}.magnet`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-      showToast(`Exported ${safeName}.magnet & copied link ✓`, 'success');
-    }
-  }
-
-  async triggerFileDownloadOrShare(fileObj, fileName) {
-    try {
-      if (navigator.canShare && navigator.canShare({ files: [fileObj] })) {
-        try {
-          await navigator.share({
-            files: [fileObj],
-            title: fileName
-          });
-          showToast('File shared successfully!', 'success');
-          return;
-        } catch (shareErr) {
-          if (shareErr.name === 'AbortError') return;
-        }
-      }
-    } catch (e) {}
-
-    const url = URL.createObjectURL(fileObj);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-    showToast(`Exported ${fileName} ✓`, 'success');
-  }
-
-  copyMagnet(magnet) {
-    if (!magnet) return;
-    try {
-      const decoded = decodeURIComponent(magnet);
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(decoded);
-        showToast('Magnet copied to clipboard!', 'success');
-      }
-    } catch (e) {
-      showToast('Failed to copy magnet', 'error');
-    }
-  }
-
-  // --- Screen Wake Lock API ---
-  async acquireWakeLock() {
-    if ('wakeLock' in navigator && !this.wakeLockSentinel) {
-      try {
-        this.wakeLockSentinel = await navigator.wakeLock.request('screen');
-        this.wakeLockSentinel.addEventListener('release', () => {
-          this.wakeLockSentinel = null;
-        });
-      } catch (err) {}
-    }
-  }
-
-  releaseWakeLock() {
-    if (this.wakeLockSentinel) {
-      this.wakeLockSentinel.release().catch(() => {});
-      this.wakeLockSentinel = null;
-    }
-  }
-
-  checkWakeLock() {
-    if (this.hasActiveDownloads()) {
-      this.acquireWakeLock();
-    } else {
-      this.releaseWakeLock();
-    }
-  }
-
-  hasActiveDownloads() {
-    return Array.from(this.torrents.values()).some(t => t.status === 'downloading');
-  }
-
-  // --- Storage Quota ---
-  async updateStorageQuota() {
-    if (navigator.storage && navigator.storage.estimate) {
-      try {
-        const est = await navigator.storage.estimate();
-        const usedMB = ((est.usage || 0) / (1024 * 1024)).toFixed(1);
-        const quotaGB = ((est.quota || 0) / (1024 * 1024 * 1024)).toFixed(1);
-        const el = document.getElementById('globalStorageEst');
-        if (el) el.innerText = `OPFS: ${usedMB} MB / ${quotaGB} GB`;
-      } catch (e) {}
-    }
-  }
-
-  // --- Persistence & Supabase Sync ---
-  persistLibrary() {
-    const list = Array.from(this.torrents.values()).map(t => ({
-      id: t.meta.id,
-      name: t.meta.name,
-      magnet: t.meta.magnet,
-      size: t.meta.size,
-      status: t.status,
-      addedAt: t.meta.addedAt,
-      opfsSaved: t.opfsSaved
-    }));
-
-    this.savedLibrary = list;
-    try {
-      localStorage.setItem('moodflix_torrent_library', JSON.stringify(list));
-    } catch (e) {}
-
-    // Sync to Supabase if authenticated
-    this.syncToSupabase(list);
-  }
-
-  async syncToSupabase(list) {
-    if (!supabaseClient) return;
-    try {
-      const { data } = await supabaseClient.auth.getSession();
-      if (data && data.session && data.session.user) {
-        await supabaseClient.from('user_torrents').upsert({
-          user_id: data.session.user.id,
-          library: list,
-          updated_at: new Date().toISOString()
-        }).catch(() => {});
-      }
-    } catch (err) {}
-  }
-
-  loadSavedLibrary() {
-    try {
-      const raw = localStorage.getItem('moodflix_torrent_library');
-      if (raw) {
-        const items = JSON.parse(raw);
-        if (Array.isArray(items)) {
-          this.savedLibrary = items;
-        }
-      }
-    } catch (e) {}
-  }
-
-  // --- Ticker for Live UI Updates ---
-  startTicker() {
-    if (this.updateInterval) clearInterval(this.updateInterval);
-    this.updateInterval = setInterval(async () => {
-      // Poll Backend TCP/UDP Engine for real transfer stats
-      try {
-        const res = await fetch('/api/backend-torrent/list');
-        const data = await res.json();
-        if (data.success && Array.isArray(data.torrents)) {
-          let totalDown = 0;
-          let totalUp = 0;
-          let totalPeers = 0;
-
-          data.torrents.forEach(t => {
-            const id = t.infoHash;
-            let entry = this.torrents.get(id);
-            if (!entry) {
-              entry = {
-                meta: {
-                  id,
-                  name: t.name,
-                  magnet: t.magnet,
-                  addedAt: t.addedAt || Date.now(),
-                  size: t.length
-                },
-                status: t.status,
-                opfsSaved: false,
-                phase: 'TCP/UDP SWARM ACTIVE',
-                logs: []
-              };
-              this.torrents.set(id, entry);
-            }
-
-            entry.backendStat = t;
-            entry.status = t.done ? 'completed' : t.status;
-            entry.meta.name = t.name || entry.meta.name;
-            entry.meta.size = t.length || entry.meta.size;
-
-            totalDown += t.downloadSpeed || 0;
-            totalUp += t.uploadSpeed || 0;
-            totalPeers += t.numPeers || 0;
-          });
-
-          const downEl = document.getElementById('globalDownSpeed');
-          const upEl = document.getElementById('globalUpSpeed');
-          const peerEl = document.getElementById('globalPeerCount');
-
-          if (downEl) downEl.innerText = this.formatSpeed(totalDown);
-          if (upEl) upEl.innerText = this.formatSpeed(totalUp);
-          if (peerEl) peerEl.innerText = `${totalPeers} TCP/UDP Seeders`;
-        }
-      } catch (err) {}
-
-      // Update active cards dynamically
-      this.updateCardDOMs();
-    }, 1500);
-  }
-
-  updateCardDOMs() {
-    this.torrents.forEach((entry, id) => {
-      const card = document.getElementById(`torrent_card_${id}`);
-      if (!card) return;
-
-      const stat = entry.backendStat || (entry.torrent ? {
-        progress: entry.torrent.progress,
-        downloadSpeed: entry.torrent.downloadSpeed,
-        uploadSpeed: entry.torrent.uploadSpeed,
-        numPeers: entry.torrent.numPeers,
-        done: entry.torrent.done
-      } : null);
-
-      if (!stat) return;
-
-      const progressPct = ((stat.progress || 0) * 100).toFixed(1);
-      
-      const fill = card.querySelector('.torrent-progress-bar-fill');
-      if (fill) {
-        fill.style.width = `${progressPct}%`;
-        if (stat.done) fill.classList.add('complete');
-      }
-
-      const speedVal = card.querySelector('.stat-speed-val');
-      if (speedVal) speedVal.innerText = `▼ ${this.formatSpeed(stat.downloadSpeed)} | ▲ ${this.formatSpeed(stat.uploadSpeed)}`;
-
-      const peerVal = card.querySelector('.stat-peers-val');
-      if (peerVal) peerVal.innerText = `${stat.numPeers} TCP/UDP Seeders`;
-
-      const statusPill = card.querySelector('.torrent-status-pill');
-      if (statusPill) {
-        if (entry.status === 'paused') {
-          statusPill.className = 'torrent-status-pill status-paused';
-          statusPill.innerText = 'PAUSED';
-        } else if (stat.done) {
-          statusPill.className = 'torrent-status-pill status-completed';
-          statusPill.innerText = 'COMPLETED';
-        } else {
-          statusPill.className = 'torrent-status-pill status-downloading';
-          statusPill.innerText = `DOWNLOADING ${progressPct}%`;
-        }
-      }
-    });
-  }
-
-  render() {
-    const container = document.getElementById('torrentTransfersList');
-    if (!container) return;
-
-    const allItems = Array.from(this.torrents.values());
-    
-    // Update filter counts
-    const countAll = document.getElementById('filterCountAll');
-    const countDown = document.getElementById('filterCountDownloading');
-    const countComp = document.getElementById('filterCountCompleted');
-    const countPau = document.getElementById('filterCountPaused');
-
-    const downloadingCount = allItems.filter(t => t.status === 'downloading' && !t.torrent?.done).length;
-    const completedCount = allItems.filter(t => t.status === 'completed' || t.torrent?.done).length;
-    const pausedCount = allItems.filter(t => t.status === 'paused').length;
-
-    if (countAll) countAll.innerText = allItems.length;
-    if (countDown) countDown.innerText = downloadingCount;
-    if (countComp) countComp.innerText = completedCount;
-    if (countPau) countPau.innerText = pausedCount;
-
-    // Filter items
-    let filtered = allItems;
-    if (this.activeFilter === 'downloading') {
-      filtered = allItems.filter(t => t.status === 'downloading' && !t.torrent?.done);
-    } else if (this.activeFilter === 'completed') {
-      filtered = allItems.filter(t => t.status === 'completed' || t.torrent?.done);
-    } else if (this.activeFilter === 'paused') {
-      filtered = allItems.filter(t => t.status === 'paused');
-    }
-
-    if (filtered.length === 0) {
-      container.innerHTML = `
-        <div class="empty-torrent-state">
-          <span class="material-symbols-outlined empty-torrent-icon">cloud_download</span>
-          <h3 class="empty-torrent-title">NO TRANSFERS IN QUEUE</h3>
-          <p class="empty-torrent-desc">
-            Paste a magnet URI above, drop a .torrent file, or browse movies from the Movies Feed to start downloading with high-speed WebRTC P2P streams.
-          </p>
-        </div>
-      `;
-      return;
-    }
-
-    container.innerHTML = filtered.map(entry => {
-      const t = entry.torrent;
-      const id = entry.meta.id;
-      const name = entry.meta.name;
-      const sizeStr = this.formatBytes(t ? t.length : entry.meta.size);
-      const progress = t ? (t.progress * 100).toFixed(1) : (entry.status === 'completed' ? 100 : 0);
-      const isDone = entry.status === 'completed' || (t && t.done);
-      const isPaused = entry.status === 'paused';
-
-      let statusClass = 'status-downloading';
-      let statusText = `DOWNLOADING ${progress}%`;
-      if (isPaused) {
-        statusClass = 'status-paused';
-        statusText = 'PAUSED';
-      } else if (isDone) {
-        statusClass = 'status-completed';
-        statusText = 'COMPLETED';
-      }
-
-      const isLogsOpen = this.expandedCardLogs.has(id);
-
-      return `
-        <div class="torrent-card" id="torrent_card_${id}">
-          <div class="torrent-card-top">
-            <div class="torrent-card-title-box">
-              <div class="torrent-title-text">${this.escapeHtml(name)}</div>
-              <div class="torrent-meta-line">
-                <span>SIZE: <strong>${sizeStr}</strong></span>
-                <span>ADDED: ${new Date(entry.meta.addedAt).toLocaleTimeString()}</span>
-                ${entry.opfsSaved ? '<span style="color: #137333; font-weight: bold;">[OPFS STORED]</span>' : ''}
-              </div>
-            </div>
-            <div class="torrent-status-pill ${statusClass}">${statusText}</div>
-          </div>
-
-          <div class="torrent-progress-box">
-            <div class="torrent-progress-bar-container">
-              <div class="torrent-progress-bar-fill ${isDone ? 'complete' : ''}" style="width: ${progress}%;"></div>
-            </div>
-          </div>
-
-          <div class="torrent-stats-grid">
-            <div class="torrent-stat-item">SPEED: <span class="stat-speed-val">▼ ${this.formatSpeed(t ? t.downloadSpeed : 0)} | ▲ ${this.formatSpeed(t ? t.uploadSpeed : 0)}</span></div>
-            <div class="torrent-stat-item">PEERS: <span class="stat-peers-val">${t ? t.numPeers : 0} Peers</span></div>
-            <div class="torrent-stat-item">ETA: <span class="stat-eta-val">${isDone ? 'COMPLETED' : (t ? this.formatETA(t.timeRemaining) : '--')}</span></div>
-          </div>
-
-          <!-- Step Progress & Card Logs -->
-          <div class="torrent-card-steps-box">
-            <div class="torrent-card-steps-top">
-              <span class="torrent-phase-tag">${entry.phase || 'CONNECTING TO TRACKERS'}</span>
-              <button class="torrent-card-logs-toggle" onclick="window.torrentEngine.toggleCardLogs('${id}')">${isLogsOpen ? 'HIDE LOGS ▲' : 'STEP LOGS ▼'}</button>
-            </div>
-            ${isLogsOpen ? `
-              <div class="torrent-card-log-list">
-                ${(entry.logs && entry.logs.length > 0) ? entry.logs.slice(-10).map(l => `
-                  <div class="torrent-card-log-item">
-                    <span style="color:#777;">[${l.time}]</span>
-                    <strong style="color:${l.level === 'error' ? '#ff5252' : (l.level === 'warn' ? '#ffd54f' : (l.level === 'success' ? '#81c784' : '#64b5f6'))};">[${l.tag}]</strong>
-                    <span>${this.escapeHtml(l.message)}</span>
-                  </div>
-                `).join('') : '<div style="color:#777; font-style:italic;">No events recorded for this item yet.</div>'}
-              </div>
-            ` : ''}
-          </div>
-
-          <div class="torrent-actions-row">
-            <div class="torrent-actions-left">
-              ${isPaused ? 
-                `<button class="torrent-action-btn" onclick="window.torrentEngine.resume('${id}')"><span class="material-symbols-outlined" style="font-size: 14px;">play_arrow</span> RESUME</button>` :
-                (!isDone ? `<button class="torrent-action-btn" onclick="window.torrentEngine.pause('${id}')"><span class="material-symbols-outlined" style="font-size: 14px;">pause</span> PAUSE</button>` : '')
-              }
-              <button class="torrent-action-btn btn-stream-action" onclick="window.torrentEngine.stream('${id}')" title="Stream Video in Browser">
-                <span class="material-symbols-outlined" style="font-size: 14px;">play_circle</span> STREAM / WATCH
-              </button>
-              <button class="torrent-action-btn btn-export-action" onclick="window.torrentEngine.exportFile('${id}')" title="Save / Export File to Device (Web Share / Files app)">
-                <span class="material-symbols-outlined" style="font-size: 14px;">ios_share</span> SAVE / EXPORT
-              </button>
-            </div>
-            <div class="torrent-actions-right">
-              ${entry.meta.magnet ? `<button class="torrent-action-btn" onclick="window.torrentEngine.copyMagnet('${encodeURIComponent(entry.meta.magnet)}')" title="Copy Magnet"><span class="material-symbols-outlined" style="font-size: 14px;">link</span></button>` : ''}
-              <button class="torrent-action-btn btn-delete-action" onclick="window.torrentEngine.remove('${id}')" title="Remove Torrent"><span class="material-symbols-outlined" style="font-size: 14px;">delete</span></button>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-  }
-
-  formatBytes(bytes) {
-    if (!bytes || bytes === 0) return '0 B';
-    const k = 1024;
-    const dm = 2;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-  }
-
-  formatSpeed(bytesPerSec) {
-    if (!bytesPerSec || bytesPerSec === 0) return '0.0 KB/s';
-    if (bytesPerSec < 1024 * 1024) {
-      return (bytesPerSec / 1024).toFixed(1) + ' KB/s';
-    }
-    return (bytesPerSec / (1024 * 1024)).toFixed(2) + ' MB/s';
-  }
-
-  formatETA(ms) {
-    if (!ms || ms === Infinity || isNaN(ms)) return '--';
-    const seconds = Math.floor(ms / 1000);
-    if (seconds < 60) return `${seconds}s`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
-    const hours = Math.floor(minutes / 60);
-    return `${hours}h ${minutes % 60}m`;
-  }
-
-  escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-}
-
-function initTorrentEngine() {
-  window.torrentEngine = new TorrentEngineManager();
-  window.torrentEngine.init();
+// Register Service Worker for PWA Support
+if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
 }
 

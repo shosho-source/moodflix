@@ -269,54 +269,131 @@ export class TMDB {
   /**
    * Translates Quiz Answers into TMDB Discover API parameters
    */
-  static async getQuizRecommendations(answers, options = {}) {
+  /**
+   * Translates Quiz Answers into tailored TMDB Discover API recommendations
+   */
+  static async getQuizRecommendations(answers = {}, options = {}) {
     const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
     if (!hasAuth) return [];
 
-    // 1. Map Occasion/Mood to implicit Genres
-    const targetGenres = new Set(answers.genres || []);
-    
-    // Mood
-    if (answers.mood === 'happy') {
-      targetGenres.add('Comedy');
-      targetGenres.add('Family');
-      targetGenres.add('Animation');
-    } else if (answers.mood === 'sad') {
-      targetGenres.add('Drama');
-      targetGenres.add('Romance');
-    } else if (answers.mood === 'neutral') {
-      targetGenres.add('Adventure');
-      targetGenres.add('Mystery');
-      targetGenres.add('Science Fiction');
-    }
+    const REVERSE_GENRE_MAP = {
+      "action": "28", "adventure": "12", "animation": "16", "comedy": "35", "crime": "80",
+      "documentary": "99", "drama": "18", "family": "10751", "fantasy": "14", "history": "36",
+      "horror": "27", "music": "10402", "mystery": "9648", "romance": "10749",
+      "sci-fi": "878", "sci fi": "878", "science fiction": "878",
+      "thriller": "53", "war": "10752", "western": "37", "tv movie": "10770"
+    };
 
-    // Occasion
-    if (answers.occasion === 'date') {
-      targetGenres.add('Romance');
-      targetGenres.add('Comedy');
-    } else if (answers.occasion === 'family') {
-      targetGenres.add('Family');
-      targetGenres.add('Animation');
-    } else if (answers.occasion === 'solo') {
-      targetGenres.add('Thriller');
-      targetGenres.add('Mystery');
-      targetGenres.add('Science Fiction');
-    } else if (answers.occasion === 'friends') {
-      targetGenres.add('Comedy');
-      targetGenres.add('Action');
-      targetGenres.add('Horror');
-    } else if (answers.occasion === 'partner') {
-      targetGenres.add('Romance');
-      targetGenres.add('Drama');
-    }
+    const TV_REVERSE_GENRE_MAP = {
+      "action": "10759", "adventure": "10759", "action & adventure": "10759", "action and adventure": "10759",
+      "animation": "16", "comedy": "35", "crime": "80", "documentary": "99", "drama": "18",
+      "family": "10751", "kids": "10762", "fantasy": "10765", "history": "99", "mystery": "9648", "news": "10763",
+      "reality": "10764", "romance": "18", "sci-fi": "10765", "sci fi": "10765", "science fiction": "10765",
+      "sci-fi & fantasy": "10765", "sci-fi and fantasy": "10765", "soap": "10766", "talk": "10767",
+      "thriller": "9648", "horror": "9648", "war": "10768", "war & politics": "10768",
+      "western": "37"
+    };
 
-    const fetchPage = async (page, dType) => {
+    // Track whether genres were explicitly picked
+    const hasExplicitGenres = Array.isArray(answers.genres) && answers.genres.length > 0;
+    const isHorrorExplicit = hasExplicitGenres && answers.genres.some(g => String(g).toLowerCase() === 'horror');
+
+    // Determine targeted genre IDs
+    const getGenreIdsForType = (dType) => {
+      const mapToUse = dType === 'tv' ? TV_REVERSE_GENRE_MAP : REVERSE_GENRE_MAP;
+      
+      // 1. User explicitly picked genres
+      if (hasExplicitGenres) {
+        const explicit = answers.genres.map(g => mapToUse[String(g).toLowerCase()]).filter(Boolean);
+        // Deduplicate (e.g. Action & Adventure both map to 10759 for TV)
+        if (explicit.length > 0) return [...new Set(explicit)];
+      }
+
+      // 2. Derive focused genres from mood & occasion if user left genres empty
+      const derived = new Set();
+      if (answers.mood === 'happy') {
+        derived.add(mapToUse['comedy']);
+        derived.add(mapToUse['animation']);
+        derived.add(mapToUse['family']);
+      } else if (answers.mood === 'sad') {
+        derived.add(mapToUse['drama']);
+        derived.add(mapToUse['romance']);
+      } else if (answers.mood === 'neutral') {
+        derived.add(mapToUse['science fiction']);
+        derived.add(mapToUse['adventure']);
+        derived.add(mapToUse['mystery']);
+      }
+
+      if (answers.occasion === 'date') {
+        derived.add(mapToUse['romance']);
+        derived.add(mapToUse['comedy']);
+      } else if (answers.occasion === 'family') {
+        derived.add(mapToUse['family']);
+        derived.add(mapToUse['animation']);
+      } else if (answers.occasion === 'friends') {
+        derived.add(mapToUse['action']);
+        derived.add(mapToUse['comedy']);
+        derived.add(mapToUse['adventure']);
+      } else if (answers.occasion === 'solo') {
+        derived.add(mapToUse['thriller']);
+        derived.add(mapToUse['mystery']);
+        derived.add(mapToUse['crime']);
+      } else if (answers.occasion === 'partner') {
+        derived.add(mapToUse['romance']);
+        derived.add(mapToUse['drama']);
+      }
+
+      return Array.from(derived).filter(Boolean);
+    };
+
+    // Pick a random page (1-3) to add variety across repeated quiz runs
+    const randomPage = () => Math.floor(Math.random() * 3) + 1;
+
+    // Shuffle array in-place (Fisher-Yates) — keeps results fresh each run
+    const shuffle = (arr) => {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+
+    const fetchDiscover = async (dType, sortBy = 'popularity.desc', minVotes = 120, minRating = 6.4, page = 1) => {
       const endpoint = dType === 'tv' ? '/discover/tv' : '/discover/movie';
       const params = new URLSearchParams(queryParams);
-      params.set('sort_by', 'vote_average.desc');
-      params.set('vote_count.gte', '50');
+      params.set('sort_by', sortBy);
+      params.set('vote_count.gte', String(minVotes));
+      params.set('vote_average.gte', String(minRating));
       
-      // Recency
+      const genreIds = getGenreIdsForType(dType);
+      if (genreIds.length > 0) {
+        if (isHorrorExplicit && dType === 'movie') {
+          // If Horror is chosen for movies, MUST include Horror (27)
+          const otherGenreIds = genreIds.filter(id => id !== '27');
+          if (otherGenreIds.length > 0) {
+            // Horror + other genres: require Horror (27) AND one of the others
+            params.set('with_genres', `27,${otherGenreIds.join('|')}`);
+          } else {
+            params.set('with_genres', '27');
+          }
+          // Exclude kids/family and music shorts when horror is requested (unless explicitly chosen)
+          const exclude = [];
+          if (!answers.genres?.some(g => /family/i.test(g))) exclude.push('10751');
+          if (!answers.genres?.some(g => /music/i.test(g))) exclude.push('10402');
+          if (exclude.length > 0) params.set('without_genres', exclude.join(','));
+        } else if (isHorrorExplicit && dType === 'tv') {
+          // For TV: filter to Mystery / Sci-Fi & Fantasy and exclude lighthearted categories
+          params.set('with_genres', '9648|10765');
+          params.set('without_genres', '10751,10762,10763,10764,10766,10767');
+        } else {
+          // User-selected genres: use | (OR) so picking more genres broadens results
+          // Derived genres: use , (AND) so mood+occasion combo narrows to specific overlap
+          const joinOp = hasExplicitGenres ? '|' : ',';
+          params.set('with_genres', genreIds.join(joinOp));
+        }
+      }
+
+      // Recency filter
       if (answers.recency && answers.recency !== 'any') {
         const cutoff = new Date().getFullYear() - parseInt(answers.recency, 10);
         if (dType === 'tv') {
@@ -326,60 +403,169 @@ export class TMDB {
         }
       }
 
-      // Genre Mapping with comprehensive aliases
-      const REVERSE_GENRE_MAP = {
-        "action": "28", "adventure": "12", "animation": "16", "comedy": "35", "crime": "80",
-        "documentary": "99", "drama": "18", "family": "10751", "fantasy": "14", "history": "36",
-        "horror": "27", "music": "10402", "mystery": "9648", "romance": "10749",
-        "sci-fi": "878", "sci fi": "878", "science fiction": "878",
-        "thriller": "53", "war": "10752", "western": "37", "tv movie": "10770"
-      };
-      const TV_REVERSE_GENRE_MAP = {
-        "action": "10759", "adventure": "10759", "action & adventure": "10759", "action and adventure": "10759",
-        "animation": "16", "comedy": "35", "crime": "80", "documentary": "99", "drama": "18",
-        "family": "10751", "kids": "10762", "fantasy": "10765", "history": "99", "mystery": "9648", "news": "10763",
-        "reality": "10764", "romance": "18", "sci-fi": "10765", "sci fi": "10765", "science fiction": "10765",
-        "sci-fi & fantasy": "10765", "sci-fi and fantasy": "10765", "soap": "10766", "talk": "10767",
-        "thriller": "9648|80", "horror": "9648", "war": "10768", "war & politics": "10768", "war and politics": "10768",
-        "western": "37"
-      };
-
-      const mapToUse = dType === 'tv' ? TV_REVERSE_GENRE_MAP : REVERSE_GENRE_MAP;
-      const tmdbGenreIds = Array.from(targetGenres).map(g => mapToUse[g.toLowerCase()]).filter(Boolean);
-      
-      if (tmdbGenreIds.length > 0) {
-        params.set('with_genres', tmdbGenreIds.join('|')); // OR mapping for broader discovery
-      }
-
-      params.set('page', page.toString());
+      params.set('page', String(page));
       const url = `${TMDB.BASE_URL}${endpoint}?${params.toString()}`;
-      const res = await TMDB.fetchWithRetry(url, { headers });
-      if (!res || !res.ok) return [];
-      const data = await res.json();
-      return (data.results || []).map(r => ({
-        ...(dType === 'tv' ? TMDB.mapTMDBTVResult(r) : TMDB.mapTMDBMovieResult(r)),
-        category: 'quiz'
-      }));
+      
+      try {
+        const res = await TMDB.fetchWithRetry(url, { headers });
+        if (!res || !res.ok) return [];
+        const data = await res.json();
+        let mapped = (data.results || []).map(r => ({
+          ...(dType === 'tv' ? TMDB.mapTMDBTVResult(r) : TMDB.mapTMDBMovieResult(r)),
+          category: 'quiz'
+        }));
+
+        // Strict post-filter for horror
+        if (isHorrorExplicit) {
+          if (dType === 'movie') {
+            // Strictly require Horror in the genres list
+            mapped = mapped.filter(m => m.genres && m.genres.some(g => String(g).toLowerCase() === 'horror'));
+          } else {
+            // Exclude kids/family/reality/soaps for TV
+            mapped = mapped.filter(s => s.genres && !s.genres.some(g => /kids|family|reality|soap|news|talk/i.test(g)));
+          }
+        }
+
+        return mapped;
+      } catch (e) {
+        return [];
+      }
     };
 
-    let results = [];
-    if (answers.mediaPreference === 'both') {
-      const [moviesPage1, tvPage1] = await Promise.all([
-        fetchPage(1, 'movie'),
-        fetchPage(1, 'tv')
+    const fetchCategorySet = async (dType) => {
+      // Fetch from random pages and multiple sort strategies for variety
+      const popPage = randomPage();
+      const topPage = randomPage();
+      
+      const [popularList, topRatedList] = await Promise.all([
+        fetchDiscover(dType, 'popularity.desc', 80, 6.0, popPage),
+        fetchDiscover(dType, 'vote_average.desc', 200, 6.5, topPage)
       ]);
-      const maxLength = Math.max(moviesPage1.length, tvPage1.length);
-      for (let i = 0; i < maxLength; i++) {
-        if (i < moviesPage1.length) results.push(moviesPage1[i]);
-        if (i < tvPage1.length) results.push(tvPage1[i]);
+
+      // If a random page returned 0 results, retry with page 1
+      const safePop = popularList.length > 0 ? popularList :
+        await fetchDiscover(dType, 'popularity.desc', 60, 5.8, 1);
+      const safeTop = topRatedList.length > 0 ? topRatedList :
+        await fetchDiscover(dType, 'vote_average.desc', 150, 6.2, 1);
+
+      const seen = new Set();
+      const merged = [];
+
+      // Interleave popular and top-rated
+      const maxLen = Math.max(safePop.length, safeTop.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (safePop[i] && !seen.has(safePop[i].id)) {
+          seen.add(safePop[i].id);
+          merged.push(safePop[i]);
+        }
+        if (safeTop[i] && !seen.has(safeTop[i].id)) {
+          seen.add(safeTop[i].id);
+          merged.push(safeTop[i]);
+        }
       }
+
+      // If multiple genres were requested with Horror, rank hybrid matches first
+      if (isHorrorExplicit && hasExplicitGenres && answers.genres.length > 1) {
+        const otherGenresLower = answers.genres
+          .map(g => String(g).toLowerCase())
+          .filter(g => g !== 'horror');
+        
+        merged.sort((a, b) => {
+          const aHasOther = a.genres.some(g => otherGenresLower.includes(String(g).toLowerCase()));
+          const bHasOther = b.genres.some(g => otherGenresLower.includes(String(g).toLowerCase()));
+          if (aHasOther && !bHasOther) return -1;
+          if (!aHasOther && bHasOther) return 1;
+          return 0;
+        });
+        return merged;
+      }
+
+      // Shuffle the merged results so the order isn't always the same
+      return shuffle(merged);
+    };
+
+    let finalResults = [];
+    if (answers.mediaPreference === 'both') {
+      const [movieSet, tvSet] = await Promise.all([
+        fetchCategorySet('movie'),
+        fetchCategorySet('tv')
+      ]);
+      const maxLen = Math.max(movieSet.length, tvSet.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (i < movieSet.length) finalResults.push(movieSet[i]);
+        if (i < tvSet.length) finalResults.push(tvSet[i]);
+      }
+    } else if (answers.mediaPreference === 'tv') {
+      finalResults = await fetchCategorySet('tv');
     } else {
-      const dType = answers.mediaPreference === 'tv' ? 'tv' : 'movie';
-      const [page1, page2] = await Promise.all([fetchPage(1, dType), fetchPage(2, dType)]);
-      results = [...page1, ...page2];
+      finalResults = await fetchCategorySet('movie');
     }
 
-    return results.slice(0, 24);
+    // Fallback: if AND-joined derived genres were too strict, retry with OR
+    if (finalResults.length === 0 && !hasExplicitGenres) {
+      const dType = answers.mediaPreference === 'tv' ? 'tv' : 'movie';
+      // Re-derive genre IDs from mood/occasion but join with OR this time
+      const genreIds = getGenreIdsForType(dType);
+
+      // Manual OR-joined discover call
+      const endpoint = dType === 'tv' ? '/discover/tv' : '/discover/movie';
+      const params = new URLSearchParams(queryParams);
+      params.set('sort_by', 'popularity.desc');
+      params.set('vote_count.gte', '50');
+      params.set('vote_average.gte', '5.5');
+      if (genreIds.length > 0) {
+        params.set('with_genres', genreIds.join('|'));
+      }
+      if (answers.recency && answers.recency !== 'any') {
+        const cutoff = new Date().getFullYear() - parseInt(answers.recency, 10);
+        const dateKey = dType === 'tv' ? 'first_air_date.gte' : 'primary_release_date.gte';
+        params.set(dateKey, `${cutoff}-01-01`);
+      }
+      params.set('page', '1');
+
+      try {
+        const url = `${TMDB.BASE_URL}${endpoint}?${params.toString()}`;
+        const res = await TMDB.fetchWithRetry(url, { headers });
+        if (res && res.ok) {
+          const data = await res.json();
+          finalResults = (data.results || []).map(r => ({
+            ...(dType === 'tv' ? TMDB.mapTMDBTVResult(r) : TMDB.mapTMDBMovieResult(r)),
+            category: 'quiz'
+          }));
+        }
+      } catch (e) {}
+    }
+
+    // Final fallback if everything was too strict (maintaining horror constraint if requested)
+    if (finalResults.length === 0) {
+      const dType = answers.mediaPreference === 'tv' ? 'tv' : 'movie';
+      const endpoint = dType === 'tv' ? '/discover/tv' : '/discover/movie';
+      const params = new URLSearchParams(queryParams);
+      params.set('sort_by', 'popularity.desc');
+      params.set('vote_count.gte', '20');
+      params.set('vote_average.gte', '4.5');
+      if (isHorrorExplicit && dType === 'movie') {
+        params.set('with_genres', '27');
+      }
+      params.set('page', '1');
+      try {
+        const url = `${TMDB.BASE_URL}${endpoint}?${params.toString()}`;
+        const res = await TMDB.fetchWithRetry(url, { headers });
+        if (res && res.ok) {
+          const data = await res.json();
+          let items = (data.results || []).map(r => ({
+            ...(dType === 'tv' ? TMDB.mapTMDBTVResult(r) : TMDB.mapTMDBMovieResult(r)),
+            category: 'quiz'
+          }));
+          if (isHorrorExplicit && dType === 'movie') {
+            items = items.filter(m => m.genres && m.genres.some(g => String(g).toLowerCase() === 'horror'));
+          }
+          finalResults = shuffle(items);
+        }
+      } catch (e) {}
+    }
+
+    return finalResults.slice(0, 24);
   }
 
   /**

@@ -12,7 +12,6 @@ import { CineBay } from './src/cineBay.js';
 import { Downloader } from './src/downloader.js';
 import { Storage } from './src/storage.js';
 import { TheRottenCine } from './src/rottenCine.js';
-import { backendEngine } from './src/backendEngine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -169,12 +168,12 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
-// 5. Download a specific torrent
+// 5. Download a specific torrent / record history
 app.post('/api/download', async (req, res) => {
   try {
     const { movieTitle, torrent, openMagnet } = req.body;
-    if (!torrent || !torrent.magnet) {
-      return res.status(400).json({ success: false, error: 'Valid torrent object with magnet is required' });
+    if (!torrent || (!torrent.magnet && !torrent.infoHash)) {
+      return res.status(400).json({ success: false, error: 'Valid torrent object with magnet or infoHash is required' });
     }
 
     const result = await Downloader.startDownload(movieTitle, torrent, { openMagnet });
@@ -184,124 +183,46 @@ app.post('/api/download', async (req, res) => {
   }
 });
 
-// 5b. Download raw .torrent file via caching proxy
-app.get('/api/torrent-file', async (req, res) => {
+// 5a. Direct .torrent file download
+app.all(['/api/torrent/download', '/api/torrent/file'], async (req, res) => {
   try {
-    const { hash, name } = req.query;
-    if (!hash || typeof hash !== 'string') return res.status(400).send('Hash required');
-    
-    const cleanHash = hash.trim();
-    // Validate that hash is a valid 40-char hex or 32-char base32 infoHash
-    if (!/^[0-9a-fA-F]{40}$/.test(cleanHash) && !/^[2-7a-zA-Z]{32}$/.test(cleanHash)) {
-      return res.status(400).send('Invalid infoHash format');
+    const magnet = req.query.magnet || req.body?.magnet || '';
+    const hash = req.query.hash || req.body?.hash || '';
+    const name = req.query.name || req.body?.name || '';
+    const title = req.query.title || req.body?.title || '';
+
+    if (!magnet && !hash) {
+      return res.status(400).json({ success: false, error: 'Magnet link or infoHash is required to download .torrent' });
     }
-    
-    const torrentRes = await fetch(`https://itorrents.org/torrent/${cleanHash}.torrent`, {
-      headers: { 'User-Agent': 'Mozilla/5.0' }
+
+    const torrentObj = {
+      name: name || title || 'release',
+      magnet: magnet || (hash ? `magnet:?xt=urn:btih:${hash}` : ''),
+      infoHash: hash
+    };
+
+    const { buffer, filename } = await Downloader.fetchOrGenerateTorrentBuffer(torrentObj, title || name);
+
+    // Record download in history
+    Storage.recordDownload({
+      movieTitle: title || name || 'Direct .torrent Download',
+      name: torrentObj.name,
+      magnet: torrentObj.magnet,
+      quality: 'HD',
+      rankScore: 100,
+      sizeFormatted: `${(buffer.length / 1024).toFixed(1)} KB`,
+      seeders: 10
     });
-    
-    if (!torrentRes.ok) {
-      // Try fallback to btcache.me
-      const fallbackRes = await fetch(`https://btcache.me/torrent/${cleanHash}`, {
-         headers: { 'User-Agent': 'Mozilla/5.0' }
-      });
-      if (!fallbackRes.ok) {
-        return res.status(404).send('Torrent not found on caching servers');
-      }
-      const buffer = await fallbackRes.arrayBuffer();
-      res.setHeader('Content-Type', 'application/x-bittorrent');
-      res.setHeader('Content-Disposition', `attachment; filename="${(name || 'download').replace(/[^a-zA-Z0-9_.-]/g, '_')}.torrent"`);
-      return res.send(Buffer.from(buffer));
-    }
-    
-    const buffer = await torrentRes.arrayBuffer();
+
+    const safeFilename = filename.replace(/[^\w.-]/g, '_');
     res.setHeader('Content-Type', 'application/x-bittorrent');
-    res.setHeader('Content-Disposition', `attachment; filename="${(name || 'download').replace(/[^a-zA-Z0-9_.-]/g, '_')}.torrent"`);
-    res.send(Buffer.from(buffer));
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
-
-// 5c. Backend High-Speed TCP/UDP Torrent Streaming Proxy (HTTP Range support for video tag)
-app.get('/api/stream', async (req, res) => {
-  const torrentId = req.query.torrent || req.query.magnet || req.query.hash;
-  if (!torrentId) return res.status(400).send('Torrent magnet/hash parameter required');
-  await backendEngine.streamFile(req, res, torrentId);
-});
-
-// 5d. Backend Direct HTTP File Download (download complete media file over HTTP)
-app.get('/api/download-file', async (req, res) => {
-  const torrentId = req.query.torrent || req.query.magnet || req.query.hash;
-  if (!torrentId) return res.status(400).send('Torrent magnet/hash parameter required');
-  await backendEngine.downloadFile(req, res, torrentId);
-});
-
-// 5e. Backend Torrent Swarm Management API
-const handleAddBackendTorrent = async (req, res) => {
-  try {
-    const input = req.body?.buffer ? { buffer: req.body.buffer, name: req.body.name } : (req.body?.magnet || req.query?.magnet || req.query?.torrent || req.query?.hash);
-    const name = req.body?.name || req.query?.name;
-    if (!input) return res.status(400).json({ success: false, error: 'Magnet link, hash, or torrent file required' });
-    const torrent = await backendEngine.add(input, { name });
-    res.json({
-      success: true,
-      infoHash: torrent?.infoHash || ('pending_' + Date.now()),
-      name: torrent?.name || name || 'Torrent Transfer',
-      length: torrent?.length || 0
-    });
-  } catch (err) {
-    console.warn('[Server] Add torrent warning:', err?.message || err);
-    res.status(400).json({ success: false, error: 'Invalid torrent format: ' + (err?.message || 'Could not parse torrent link') });
-  }
-};
-
-app.post('/api/backend-torrent/add', handleAddBackendTorrent);
-app.get('/api/backend-torrent/add', handleAddBackendTorrent);
-
-app.get('/api/backend-torrent/list', (req, res) => {
-  try {
-    const torrents = backendEngine.getAll();
-    res.json({ success: true, count: torrents.length, torrents });
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(buffer);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
-});
-
-app.post('/api/backend-torrent/remove', (req, res) => {
-  const { id } = req.body;
-  const removed = backendEngine.remove(id);
-  res.json({ success: true, removed });
-});
-
-app.post('/api/backend-torrent/pause', (req, res) => {
-  const { id } = req.body;
-  const paused = backendEngine.pause(id);
-  res.json({ success: true, paused });
-});
-
-app.post('/api/backend-torrent/resume', (req, res) => {
-  const { id } = req.body;
-  const resumed = backendEngine.resume(id);
-  res.json({ success: true, resumed });
-});
-
-app.get('/api/backend-torrent/status', (req, res) => {
-  const torrentId = req.query.torrent || req.query.magnet || req.query.hash;
-  if (!torrentId) return res.status(400).json({ success: false, error: 'Torrent ID required' });
-  const t = backendEngine.get(torrentId);
-  if (!t) return res.json({ success: true, active: false });
-  res.json({
-    success: true,
-    active: true,
-    name: t.name,
-    infoHash: t.infoHash,
-    progress: t.progress,
-    downloadSpeed: t.downloadSpeed,
-    uploadSpeed: t.uploadSpeed,
-    numPeers: t.numPeers,
-    files: t.files ? t.files.map((f, i) => ({ index: i, name: f.name, length: f.length })) : []
-  });
 });
 
 // 6. Get download history
