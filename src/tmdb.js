@@ -243,7 +243,22 @@ export class TMDB {
       await fetchSearchPage(cleanTitle, null, 1);
     }
 
-    // 3. Fallback: If 0 results found (e.g. typo), search against popular/trending pool
+    // 3. Typo tolerance: If few or 0 results found, resolve spelling mistake and search again
+    let corrected = null;
+    if (items.length < 3) {
+      corrected = await FuzzyMatcher.suggestCorrection(cleanTitle || raw);
+      if (corrected && corrected.toLowerCase() !== raw.toLowerCase()) {
+        const preCount = items.length;
+        await fetchSearchPage(corrected, extractedYear, 1);
+        if (items.length > preCount) {
+          items.forEach(it => {
+            if (!it.correctedQuery) it.correctedQuery = corrected;
+          });
+        }
+      }
+    }
+
+    // 4. Fallback: If 0 results found (e.g. severe typo), search against popular/trending pool
     if (items.length === 0) {
       try {
         const popular = await TMDB.fetchCategoryLive(type, 'popular', headers, baseParams);
@@ -253,9 +268,10 @@ export class TMDB {
 
         for (const item of pool) {
           if (!seenIds.has(item.id)) {
-            const rel = FuzzyMatcher.calculateRelevanceScore(raw, item.title, item.year);
+            const rel = FuzzyMatcher.calculateRelevanceScore(corrected || raw, item.title, item.year);
             if (rel >= 45) {
               seenIds.add(item.id);
+              if (corrected) item.correctedQuery = corrected;
               items.push(item);
             }
           }
@@ -740,4 +756,201 @@ export class TMDB {
       category: 'similar'
     }));
   }
+
+  /**
+   * Search actors and performers on TMDB.
+   */
+  static async searchActors(query, options = {}) {
+    if (!query || !query.trim()) return [];
+    const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
+    if (!hasAuth) return [];
+
+    const rawQuery = query.trim();
+    queryParams.set('query', rawQuery);
+    queryParams.set('include_adult', 'false');
+    const url = `${TMDB.BASE_URL}/search/person?${queryParams.toString()}`;
+
+    try {
+      const res = await TMDB.fetchWithRetry(url, { headers });
+      let results = [];
+      if (res && res.ok) {
+        const data = await res.json();
+        results = data.results || [];
+      }
+
+      // Typo tolerance: If TMDB returns 0 matches for actor query, try spell suggestion!
+      let correctedQuery = null;
+      if (results.length === 0) {
+        const corrected = await FuzzyMatcher.suggestCorrection(rawQuery);
+        if (corrected && corrected.toLowerCase() !== rawQuery.toLowerCase()) {
+          correctedQuery = corrected;
+          queryParams.set('query', corrected);
+          const retryRes = await TMDB.fetchWithRetry(`${TMDB.BASE_URL}/search/person?${queryParams.toString()}`, { headers });
+          if (retryRes && retryRes.ok) {
+            const retryData = await retryRes.json();
+            results = retryData.results || [];
+          }
+        }
+      }
+
+      const filtered = results
+        .filter(p => p.name && (p.known_for_department === 'Acting' || p.popularity > 2 || (p.known_for && p.known_for.length > 0)))
+        .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+        .slice(0, 10);
+
+      // Rank by fuzzy relevance
+      const searchTarget = correctedQuery || rawQuery;
+      const ranked = FuzzyMatcher.rankByRelevance(filtered, searchTarget, 'name');
+
+      return ranked.map(p => ({
+        id: p.id,
+        name: p.name,
+        profile: p.profile_path ? `${TMDB.IMAGE_BASE_URL}${p.profile_path}` : null,
+        knownForDepartment: p.known_for_department || 'Acting',
+        popularity: p.popularity || 0,
+        knownFor: (p.known_for || []).map(k => k.title || k.name).filter(Boolean).slice(0, 4),
+        correctedQuery: correctedQuery || null
+      }));
+    } catch (err) {
+      console.warn('Actor search error:', err);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch Google Knowledge & Wikipedia summary for an actor.
+   */
+  static async getGoogleKnowledgeData(actorName) {
+    const cleanName = (actorName || '').trim();
+    if (!cleanName) return null;
+
+    const baseResult = {
+      searchUrl: `https://www.google.com/search?q=${encodeURIComponent(cleanName + ' actor')}`,
+      newsUrl: `https://www.google.com/search?q=${encodeURIComponent(cleanName + ' actor')}&tbm=nws`,
+      imagesUrl: `https://www.google.com/search?q=${encodeURIComponent(cleanName + ' actor')}&tbm=isch`,
+      description: 'Film & Television Actor',
+      extract: '',
+      wikiUrl: '',
+      source: 'Google Knowledge & Wikipedia'
+    };
+
+    try {
+      const wikiSlug = encodeURIComponent(cleanName.replace(/\s+/g, '_'));
+      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${wikiSlug}`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'MoodFlix/2.0 (contact@moodflix.dev)' }
+      });
+
+      if (res && res.ok) {
+        const data = await res.json();
+        if (data && data.type !== 'disambiguation') {
+          baseResult.description = data.description || baseResult.description;
+          baseResult.extract = data.extract || '';
+          baseResult.wikiUrl = data.content_urls?.desktop?.page || '';
+          if (data.thumbnail && data.thumbnail.source) {
+            baseResult.thumbnail = data.thumbnail.source;
+          }
+        }
+      }
+    } catch (e) {
+      // Non-blocking fallback to Google search URLs
+    }
+
+    return baseResult;
+  }
+
+  /**
+   * Fetch full actor profile, credits/filmography, and Google Knowledge enrichment.
+   */
+  static async getActorDetails(personId, options = {}) {
+    const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
+    if (!hasAuth) return null;
+
+    queryParams.set('append_to_response', 'combined_credits,external_ids');
+    const url = `${TMDB.BASE_URL}/person/${personId}?${queryParams.toString()}`;
+
+    try {
+      const res = await TMDB.fetchWithRetry(url, { headers });
+      if (!res || !res.ok) return null;
+
+      const data = await res.json();
+      const googleData = await TMDB.getGoogleKnowledgeData(data.name);
+
+      // Process credits
+      const rawCredits = data.combined_credits?.cast || [];
+      const seen = new Set();
+      const credits = [];
+
+      for (const c of rawCredits) {
+        const mediaType = c.media_type === 'tv' ? 'tv' : 'movie';
+        const key = `${mediaType}_${c.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const title = c.title || c.name || c.original_title || c.original_name;
+        if (!title) continue;
+
+        const dateStr = c.release_date || c.first_air_date || '';
+        const year = dateStr ? parseInt(dateStr.slice(0, 4), 10) : null;
+
+        credits.push({
+          id: c.id,
+          mediaType,
+          title,
+          character: c.character ? c.character.trim() : 'Self / Featured',
+          year: year || null,
+          releaseDate: dateStr,
+          rating: c.vote_average ? Math.round(c.vote_average * 10) / 10 : 0,
+          ratingPercent: Math.round((c.vote_average || 0) * 10),
+          voteCount: c.vote_count || 0,
+          popularity: c.popularity || 0,
+          poster: c.poster_path ? `${TMDB.IMAGE_BASE_URL}${c.poster_path}` : 'https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?w=500',
+          backdrop: c.backdrop_path ? `https://image.tmdb.org/t/p/w1280${c.backdrop_path}` : null,
+          synopsis: c.overview || 'No synopsis available.'
+        });
+      }
+
+      // Sort by popularity and vote count
+      credits.sort((a, b) => {
+        if ((b.voteCount || 0) > 50 && (a.voteCount || 0) > 50) {
+          return (b.popularity || 0) - (a.popularity || 0);
+        }
+        return (b.voteCount || 0) - (a.voteCount || 0);
+      });
+
+      // Calculate age if born
+      let age = null;
+      if (data.birthday) {
+        const birthDate = new Date(data.birthday);
+        const endDate = data.deathday ? new Date(data.deathday) : new Date();
+        age = Math.floor((endDate - birthDate) / (365.25 * 24 * 60 * 60 * 1000));
+      }
+
+      return {
+        id: data.id,
+        name: data.name,
+        profile: data.profile_path ? `${TMDB.IMAGE_BASE_URL}${data.profile_path}` : (googleData?.thumbnail || null),
+        biography: data.biography || googleData?.extract || 'No biography available.',
+        birthday: data.birthday || null,
+        deathday: data.deathday || null,
+        age,
+        placeOfBirth: data.place_of_birth || null,
+        popularity: data.popularity || 0,
+        knownForDepartment: data.known_for_department || 'Acting',
+        google: googleData,
+        external: {
+          imdbId: data.external_ids?.imdb_id || null,
+          imdbUrl: data.external_ids?.imdb_id ? `https://www.imdb.com/name/${data.external_ids.imdb_id}/` : null,
+          wikidataId: data.external_ids?.wikidata_id || null,
+          tmdbUrl: `https://www.themoviedb.org/person/${data.id}`
+        },
+        creditsCount: credits.length,
+        credits
+      };
+    } catch (err) {
+      console.warn('Actor details error:', err);
+      return null;
+    }
+  }
 }
+

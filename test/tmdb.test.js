@@ -42,4 +42,34 @@ describe('TMDB Movie & TV Provider', () => {
     assert.strictEqual(auth.hasAuth, true);
     assert.ok(auth.headers['Authorization'] || auth.queryParams.has('api_key'));
   });
+
+  it('searches actors on TMDB and returns valid performer matches', async () => {
+    const actors = await TMDB.searchActors('Keanu Reeves');
+    assert.ok(actors.length > 0);
+    assert.strictEqual(actors[0].name, 'Keanu Reeves');
+    assert.ok(typeof actors[0].id === 'number');
+  });
+
+  it('fetches full actor details with filmography and Google Knowledge data', async () => {
+    const actor = await TMDB.getActorDetails(6384); // Keanu Reeves TMDB ID
+    assert.ok(actor);
+    assert.strictEqual(actor.name, 'Keanu Reeves');
+    assert.ok(actor.creditsCount > 0);
+    assert.ok(Array.isArray(actor.credits));
+    assert.ok(actor.credits.some(c => c.title && c.title.toLowerCase().includes('matrix')));
+    assert.ok(actor.google);
+    assert.ok(actor.google.searchUrl.includes('google.com'));
+  });
+
+  it('tolerates typos in movie searches (e.g. Inceptoin -> Inception)', async () => {
+    const results = await TMDB.getMovies({ search: 'Inceptoin' });
+    assert.ok(results.length > 0);
+    assert.ok(results.some(m => m.title.toLowerCase().includes('inception')));
+  });
+
+  it('tolerates typos in actor searches (e.g. Keanu Reves -> Keanu Reeves)', async () => {
+    const actors = await TMDB.searchActors('Keanu Reves');
+    assert.ok(actors.length > 0);
+    assert.strictEqual(actors[0].name, 'Keanu Reeves');
+  });
 });

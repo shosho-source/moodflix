@@ -58,6 +58,11 @@ describe('FuzzyMatcher', () => {
     const s3 = FuzzyMatcher.calculateRelevanceScore('2012', '2012 (2009) 1080p');
     assert.strictEqual(s3, 100, `Expected 100 for 2012 match, got ${s3}`);
   });
+
+  it('suggests accurate spelling corrections for misspelled search queries', async () => {
+    const fixed = await FuzzyMatcher.suggestCorrection('Inceptoin');
+    assert.strictEqual(fixed?.toLowerCase(), 'inception');
+  });
 });
 
 describe('Ranker Relevance Integration', () => {

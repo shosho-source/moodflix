@@ -72,7 +72,8 @@ app.get('/api/movies', async (req, res) => {
       isDownloaded: Storage.hasDownloaded(m.title)
     }));
 
-    res.json({ success: true, count: annotated.length, movies: annotated });
+    const correctedQuery = movies.find(m => m.correctedQuery)?.correctedQuery || null;
+    res.json({ success: true, count: annotated.length, movies: annotated, correctedQuery });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -90,7 +91,8 @@ app.get('/api/tv', async (req, res) => {
       isDownloaded: Storage.hasDownloaded(s.title)
     }));
 
-    res.json({ success: true, count: annotated.length, shows: annotated });
+    const correctedQuery = shows.find(s => s.correctedQuery)?.correctedQuery || null;
+    res.json({ success: true, count: annotated.length, shows: annotated, correctedQuery });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -109,7 +111,8 @@ app.get('/api/media', async (req, res) => {
       isDownloaded: Storage.hasDownloaded(item.title)
     }));
 
-    res.json({ success: true, count: annotated.length, items: annotated });
+    const correctedQuery = items.find(i => i.correctedQuery)?.correctedQuery || null;
+    res.json({ success: true, count: annotated.length, items: annotated, correctedQuery });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -141,6 +144,84 @@ app.post('/api/quiz', async (req, res) => {
       isDownloaded: Storage.hasDownloaded(m.title)
     }));
     res.json({ success: true, count: annotated.length, results: annotated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 4.5 Search Actor & Full Filmography with Google & TMDB Enrichment
+app.get('/api/actor', async (req, res) => {
+  try {
+    const query = (req.query.q || '').trim();
+    const id = req.query.id;
+
+    if (!query && !id) {
+      return res.status(400).json({ success: false, error: 'Actor name (q) or id is required' });
+    }
+
+    let actorId = id;
+    let matches = [];
+
+    if (!actorId) {
+      matches = await TMDB.searchActors(query);
+      if (matches.length === 0) {
+        return res.json({ success: true, actor: null, matches: [] });
+      }
+      actorId = matches[0].id;
+    }
+
+    const actor = await TMDB.getActorDetails(actorId);
+    if (!actor) {
+      return res.status(404).json({ success: false, error: 'Actor details not found' });
+    }
+
+    // Annotate credits with isDownloaded flag
+    if (actor.credits && Array.isArray(actor.credits)) {
+      actor.credits = actor.credits.map(c => ({
+        ...c,
+        isDownloaded: Storage.hasDownloaded(c.title)
+      }));
+    }
+
+    const correctedQuery = matches[0]?.correctedQuery || null;
+    res.json({
+      success: true,
+      actor,
+      matches,
+      correctedQuery
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/actor/search', async (req, res) => {
+  try {
+    const query = (req.query.q || '').trim();
+    if (!query) {
+      return res.status(400).json({ success: false, error: 'Query is required' });
+    }
+    const matches = await TMDB.searchActors(query);
+    res.json({ success: true, count: matches.length, matches });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/actor/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const actor = await TMDB.getActorDetails(id);
+    if (!actor) {
+      return res.status(404).json({ success: false, error: 'Actor not found' });
+    }
+    if (actor.credits && Array.isArray(actor.credits)) {
+      actor.credits = actor.credits.map(c => ({
+        ...c,
+        isDownloaded: Storage.hasDownloaded(c.title)
+      }));
+    }
+    res.json({ success: true, actor });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

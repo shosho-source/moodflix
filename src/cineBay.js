@@ -6,6 +6,7 @@
 import { Ranker } from './ranker.js';
 import { NameCleaner } from './nameCleaner.js';
 import { TMDB } from './tmdb.js';
+import { FuzzyMatcher } from './fuzzyMatcher.js';
 
 export class CineBay {
   static API_URL = 'https://apibay.org/q.php';
@@ -85,6 +86,24 @@ export class CineBay {
           }
         }
       } catch (err) {}
+    }
+
+    // 4. Typo tolerance: If still 0 results, suggest spelling correction and search again
+    if (torrents.length === 0) {
+      try {
+        const corrected = await FuzzyMatcher.suggestCorrection(rawQuery);
+        if (corrected && corrected.toLowerCase() !== rawQuery.toLowerCase()) {
+          const typoApibay = await CineBay.queryApibay(corrected, category);
+          const typoYts = await CineBay.searchYtsFallback(corrected);
+          for (const t of [...typoApibay, ...typoYts]) {
+            const hash = (t.infoHash || '').toLowerCase();
+            if (hash && !seenHashes.has(hash)) {
+              seenHashes.add(hash);
+              torrents.push(t);
+            }
+          }
+        }
+      } catch (e) {}
     }
 
     // Filter out executable and fake malware torrents (.exe, .scr, .bat, etc.)
@@ -230,6 +249,19 @@ export class CineBay {
         searchData = searchRes.ok ? await searchRes.json() : null;
         media = searchData?.results?.[0];
         if (media) type = altType;
+      }
+
+      // Typo tolerance: try spell suggestion if still not found
+      if (!media || !media.id) {
+        const corrected = await FuzzyMatcher.suggestCorrection(cleanTitle || query);
+        if (corrected && corrected.toLowerCase() !== (cleanTitle || query).toLowerCase()) {
+          const pCorr = new URLSearchParams(queryParams);
+          pCorr.set('query', corrected);
+          searchUrl = `${TMDB.BASE_URL}/search/${type}?${pCorr.toString()}`;
+          searchRes = await fetch(searchUrl, { headers });
+          searchData = searchRes.ok ? await searchRes.json() : null;
+          media = searchData?.results?.[0];
+        }
       }
 
       if (!media || !media.id) return null;

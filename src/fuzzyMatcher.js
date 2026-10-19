@@ -216,4 +216,51 @@ export class FuzzyMatcher {
         return (b.voteCount || 0) - (a.voteCount || 0);
       });
   }
+
+  /**
+   * Suggest typo correction for a search query using Google Suggest + algorithmic distance.
+   */
+  static async suggestCorrection(rawQuery) {
+    if (!rawQuery || typeof rawQuery !== 'string' || rawQuery.trim().length < 3) {
+      return null;
+    }
+    const cleanRaw = rawQuery.trim();
+
+    try {
+      const url = `https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(cleanRaw)}`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+
+      if (res && res.ok) {
+        const data = await res.json();
+        const suggestions = (data && Array.isArray(data[1])) ? data[1] : [];
+        if (suggestions.length === 0) return null;
+
+        const suffixRegex = /\s+(age|movie|movies|cast|series|tv show|tv series|ending|meaning|full movie|download|net worth|wife|husband|actor|actress|wallpaper|interview|imdb|trailer|release date)$/i;
+
+        const candidates = suggestions.map(s => {
+          let clean = s.replace(suffixRegex, '').trim();
+          clean = clean.replace(suffixRegex, '').trim();
+          const score = FuzzyMatcher.calculateRelevanceScore(cleanRaw, clean);
+          return { raw: s, clean, score };
+        });
+
+        // Pick closest candidate with score >= 50 and not identical
+        const valid = candidates
+          .filter(c => c.clean.toLowerCase() !== cleanRaw.toLowerCase() && c.score >= 50)
+          .sort((a, b) => b.score - a.score);
+
+        if (valid.length > 0) {
+          return valid[0].clean;
+        }
+      }
+    } catch (e) {
+      // Non-blocking fallback
+    }
+
+    return null;
+  }
 }
+

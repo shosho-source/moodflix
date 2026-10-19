@@ -89,8 +89,7 @@
           <span class="material-symbols-outlined">tv</span> <span class="scramble-text">TV Series Feed</span>
         </button>
         <button class="nav-tab" data-tab="search-view">
-          <span class="material-symbols-outlined">search</span> <span class="scramble-text">Piratebay Direct
-            search</span>
+          <span class="material-symbols-outlined">person_search</span> <span class="scramble-text">Search by Actor</span>
         </button>
         <button class="nav-tab" data-tab="tutorial-view">
           <span class="material-symbols-outlined">school</span> <span class="scramble-text">Tutorial</span>
@@ -138,8 +137,8 @@
             </p>
           </section>
 
-          <!-- Google Sign In Button & Guest Option -->
-          <section class="cta-section" style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+          <!-- Google Sign In Button -->
+          <section class="cta-section">
             <button id="google-login-btn" class="google-login-btn">
               <div class="google-icon-box">
                 <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20">
@@ -158,7 +157,6 @@
                 <span id="login-btn-text" class="cta-title scramble-text">CONTINUE WITH GOOGLE</span>
               </div>
             </button>
-
           </section>
 
           <!-- Auth Footer: Terms of Service & Privacy Policy -->
@@ -275,6 +273,7 @@
             </select>
           </div>
         </div>
+        <div id="movieTypoBanner" class="typo-notice-banner retro-box hidden"></div>
         <div class="movie-grid" id="movieGrid"></div>
       </section>
 
@@ -296,26 +295,54 @@
             </select>
           </div>
         </div>
+        <div id="tvTypoBanner" class="typo-notice-banner retro-box hidden"></div>
         <div class="movie-grid" id="tvGrid"></div>
       </section>
 
-      <!-- VIEW: TPB Search -->
+      <!-- VIEW: Search by Actor (Google & TMDB Enriched) -->
       <section id="search-view" class="view-panel hidden">
-        <div class="retro-box search-hero">
-          <h2 class="scramble-text">Piratebay Direct search</h2>
-          <form id="directSearchForm" class="direct-search-form">
-            <input type="text" id="directSearchInput" placeholder="Search query..." required autocomplete="off">
-            <select id="directCategory" class="styled-select">
-              <option value="200">All Video</option>
-              <option value="205">TV Shows</option>
-              <option value="201">Movies</option>
-            </select>
-            <input type="number" id="directMinSeeds" value="5" min="0" placeholder="Min Seeds"
-              title="Minimum Seeds Filter">
-            <button type="submit" class="retro-btn scramble-text">Execute Search</button>
+        <div class="retro-box search-hero actor-search-hero">
+          <div class="actor-search-header">
+            <div class="actor-brand-pill">
+              <span class="status-dot"></span>
+              <span class="scramble-text">GOOGLE & TMDB ENRICHED TALENT DISCOVERY</span>
+            </div>
+            <h2 class="scramble-text">SEARCH MOVIES & TV BY ACTOR</h2>
+            <p class="actor-search-subtitle">
+              Explore any actor or performer's complete filmography, character roles, Google Knowledge summary, and available torrent downloads.
+            </p>
+          </div>
+
+          <form id="directSearchForm" class="direct-search-form actor-search-form" autocomplete="off">
+            <div class="actor-input-group">
+              <span class="material-symbols-outlined actor-search-icon">person_search</span>
+              <input type="text" id="directSearchInput" placeholder="Enter actor name (e.g. Cillian Murphy, Keanu Reeves, Zendaya)..." required autocomplete="off">
+              <button type="button" id="btnClearActorSearch" class="actor-clear-btn hidden" title="Clear input">✕</button>
+            </div>
+            <button type="submit" id="btnExecuteActorSearch" class="retro-btn scramble-text actor-submit-btn">
+              <span class="material-symbols-outlined">search</span>
+              <span>FIND FILMOGRAPHY</span>
+            </button>
           </form>
+
+          <!-- Quick Trend Actor Starter Chips -->
+          <div class="actor-quick-strip">
+            <span class="quick-chip-label">POPULAR:</span>
+            <div class="actor-chips-row">
+              <button type="button" class="actor-chip" data-actor="Cillian Murphy">Cillian Murphy</button>
+              <button type="button" class="actor-chip" data-actor="Keanu Reeves">Keanu Reeves</button>
+              <button type="button" class="actor-chip" data-actor="Zendaya">Zendaya</button>
+              <button type="button" class="actor-chip" data-actor="Pedro Pascal">Pedro Pascal</button>
+              <button type="button" class="actor-chip" data-actor="Margot Robbie">Margot Robbie</button>
+              <button type="button" class="actor-chip" data-actor="Leonardo DiCaprio">Leonardo DiCaprio</button>
+              <button type="button" class="actor-chip" data-actor="Florence Pugh">Florence Pugh</button>
+              <button type="button" class="actor-chip" data-actor="Tom Cruise">Tom Cruise</button>
+            </div>
+          </div>
         </div>
-        <div id="directSearchResults" class="search-results-container"></div>
+
+        <!-- Results Container (Keeps id="directSearchResults" for audit compliance) -->
+        <div id="directSearchResults" class="search-results-container actor-results-container"></div>
       </section>
 
 
@@ -777,9 +804,9 @@
         <span class="material-symbols-outlined mobile-nav-icon">tv</span>
         <span class="mobile-nav-label scramble-text">TV Shows</span>
       </button>
-      <button class="mobile-nav-item" data-tab="search-view" aria-label="Direct Search">
-        <span class="material-symbols-outlined mobile-nav-icon">search</span>
-        <span class="mobile-nav-label scramble-text">Search</span>
+      <button class="mobile-nav-item" data-tab="search-view" aria-label="Search by Actor">
+        <span class="material-symbols-outlined mobile-nav-icon">person_search</span>
+        <span class="mobile-nav-label scramble-text">Actors</span>
       </button>
     </nav>
   </div>

@@ -172,6 +172,12 @@ async function initSupabaseClient() {
 }
 
 async function checkSession() {
+  try {
+    if (localStorage.getItem('moodflix_bypass_auth') === 'true') {
+      showDashboardView({ email: 'guest@moodflix.dev', id: 'guest' });
+      return;
+    }
+  } catch (e) {}
   if (supabaseClient) {
     const { data } = await supabaseClient.auth.getSession();
     if (data && data.session && data.session.user) {
@@ -221,6 +227,14 @@ function showDashboardView(user) {
   }
 }
 
+function handleBypassLogin() {
+  try {
+    localStorage.setItem('moodflix_bypass_auth', 'true');
+  } catch (e) {}
+  showToast('Temporary bypass active — Welcome to MoodFlix! 🔓', 'success');
+  showDashboardView({ email: 'guest@moodflix.dev', id: 'guest' });
+}
+
 async function handleGoogleLogin() {
   const btnText = document.getElementById('login-btn-text');
   if (btnText) btnText.textContent = 'LOGGING IN...';
@@ -247,9 +261,10 @@ async function handleGoogleLogin() {
   }
 }
 
-
-
 async function handleSignOut() {
+  try {
+    localStorage.removeItem('moodflix_bypass_auth');
+  } catch (e) {}
   if (supabaseClient) await supabaseClient.auth.signOut();
   showAuthView();
 }
@@ -805,6 +820,8 @@ function setupEventListeners() {
   // Movies
   elements.btnClearMovieSearch.addEventListener('click', () => {
     elements.movieSearchInput.value = '';
+    const b = document.getElementById('movieTypoBanner');
+    if (b) { b.innerHTML = ''; b.classList.add('hidden'); }
     loadMovies();
   });
   elements.movieSearchInput.addEventListener('change', () => loadMovies());
@@ -814,16 +831,55 @@ function setupEventListeners() {
   // TV
   elements.btnClearTvSearch.addEventListener('click', () => {
     elements.tvSearchInput.value = '';
+    const b = document.getElementById('tvTypoBanner');
+    if (b) { b.innerHTML = ''; b.classList.add('hidden'); }
     loadTVShows();
   });
   elements.tvSearchInput.addEventListener('change', () => loadTVShows());
   elements.btnExecuteTvSearch?.addEventListener('click', () => loadTVShows());
   elements.tvCategorySelect.addEventListener('change', () => loadTVShows());
 
-  // Direct Torrent Search
-  elements.directSearchForm.addEventListener('submit', async e => {
+  // Actor Search Form
+  elements.directSearchForm?.addEventListener('submit', async e => {
     e.preventDefault();
-    performDirectSearch(elements.directSearchInput.value, elements.directMinSeeds.value, elements.directCategory.value);
+    const query = elements.directSearchInput?.value || '';
+    performDirectSearch(query);
+  });
+
+  // Actor search clear button
+  const clearActorBtn = document.getElementById('btnClearActorSearch');
+  if (clearActorBtn) {
+    clearActorBtn.addEventListener('click', () => {
+      if (elements.directSearchInput) {
+        elements.directSearchInput.value = '';
+        clearActorBtn.classList.add('hidden');
+        elements.directSearchInput.focus();
+      }
+    });
+  }
+
+  if (elements.directSearchInput) {
+    elements.directSearchInput.addEventListener('input', () => {
+      if (clearActorBtn) {
+        if (elements.directSearchInput.value.trim().length > 0) {
+          clearActorBtn.classList.remove('hidden');
+        } else {
+          clearActorBtn.classList.add('hidden');
+        }
+      }
+    });
+  }
+
+  // Quick Actor starter chips
+  document.querySelectorAll('.actor-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const actorName = chip.dataset.actor;
+      if (actorName && elements.directSearchInput) {
+        elements.directSearchInput.value = actorName;
+        if (clearActorBtn) clearActorBtn.classList.remove('hidden');
+        performDirectSearch(actorName);
+      }
+    });
   });
 
   // Modals & Backdrop click-to-close
@@ -914,49 +970,431 @@ function setupEventListeners() {
   });
 }
 
+// Actor Search & Filmography Engine (Google & TMDB enriched)
+window.actorCreditsCache = [];
+
+window.handleActorCardAction = function(index, action, event) {
+  if (event && event.stopPropagation) {
+    event.stopPropagation();
+  }
+  const item = window.actorCreditsCache[index];
+  if (!item) return;
+  if (action === 'torrent') {
+    openTorrentModal(item, item.mediaType || 'movie');
+  } else if (action === 'trailer') {
+    playTrailer(item.id, item.mediaType || 'movie');
+  } else if (action === 'detail') {
+    openDetailView(item, item.mediaType || 'movie');
+  }
+};
+
+window.fetchActorDetailsById = async function(actorId) {
+  if (!elements.directSearchResults) return;
+  elements.directSearchResults.innerHTML = `
+    <div class="actor-search-loading retro-box">
+      <div class="actor-loading-spinner"></div>
+      <div class="actor-loading-text scramble-text">LOADING ACTOR FILMOGRAPHY & GOOGLE KNOWLEDGE...</div>
+    </div>
+  `;
+
+  try {
+    const res = await fetch(`/api/actor/${actorId}`);
+    const data = await res.json();
+    if (data.success && data.actor) {
+      renderActorFilmography(data.actor, state.actorMatches || []);
+      elements.directSearchResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      showToast('Could not load actor details', 'error');
+    }
+  } catch (err) {
+    showToast('Failed to fetch actor profile', 'error');
+  }
+};
+
+function renderFilmographyCards(credits, filter = 'all', sort = 'popularity') {
+  const container = document.getElementById('actorFilmographyGrid');
+  if (!container) return;
+
+  let filtered = [...credits];
+  if (filter === 'movie') {
+    filtered = filtered.filter(c => c.mediaType === 'movie');
+  } else if (filter === 'tv') {
+    filtered = filtered.filter(c => c.mediaType === 'tv');
+  }
+
+  // Sort
+  if (sort === 'popularity') {
+    filtered.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+  } else if (sort === 'rating') {
+    filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  } else if (sort === 'newest') {
+    filtered.sort((a, b) => (b.year || 0) - (a.year || 0));
+  } else if (sort === 'oldest') {
+    filtered.sort((a, b) => (a.year || 9999) - (b.year || 9999));
+  }
+
+  window.actorCreditsCache = filtered;
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div style="grid-column: 1 / -1; padding: 40px; text-align: center; font-family: var(--font-mono); opacity: 0.8;">No credits found in this category.</div>';
+    return;
+  }
+
+  container.innerHTML = filtered.map((item, index) => {
+    const isTv = item.mediaType === 'tv';
+    const typeLabel = isTv ? 'TV' : 'MOVIE';
+    const yearDisplay = item.year || 'N/A';
+    const ratingDisplay = item.rating > 0 ? `★ ${item.rating.toFixed(1)}` : 'NR';
+    const characterDisplay = item.character && item.character !== 'Self / Featured' ? `as ${escapeHtml(item.character)}` : '';
+
+    return `
+      <div class="movie-card retro-box actor-filmo-card" data-index="${index}" data-media-id="${item.id}" data-media-type="${item.mediaType}" tabindex="0" role="button" aria-label="${escapeHtml(item.title)} details" onclick="handleActorCardAction(${index}, 'detail', event)">
+        <div class="movie-poster-wrap">
+          <img src="${item.poster || 'https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?w=500'}" 
+               alt="${escapeHtml(item.title)}" 
+               class="movie-poster" 
+               loading="lazy" 
+               onerror="this.src='https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?w=500'" />
+          <div class="media-type-badge ${isTv ? 'badge-tv' : 'badge-movie'}">${typeLabel}</div>
+          <div class="media-rating-pill">${ratingDisplay}</div>
+          ${item.isDownloaded ? '<div class="downloaded-badge"><span class="material-symbols-outlined" style="font-size:12px;">check</span> SAVED</div>' : ''}
+        </div>
+        <div class="movie-card-info">
+          <div class="movie-card-header">
+            <h3 class="movie-card-title scramble-text" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</h3>
+            <span class="movie-card-year">${yearDisplay}</span>
+          </div>
+          ${characterDisplay ? `<div class="actor-card-role" title="${characterDisplay}">${characterDisplay}</div>` : ''}
+          <div class="actor-card-actions">
+            <button type="button" class="retro-btn actor-card-btn filmo-torrent-btn" onclick="event.stopPropagation(); handleActorCardAction(${index}, 'torrent', event)">
+              <span class="material-symbols-outlined" style="font-size:14px;">download</span>
+              <span>TORRENTS</span>
+            </button>
+            <button type="button" class="retro-btn actor-card-btn filmo-trailer-btn" onclick="event.stopPropagation(); handleActorCardAction(${index}, 'trailer', event)" title="Play Trailer">
+              <span class="material-symbols-outlined" style="font-size:14px;">play_arrow</span>
+              <span>TRAILER</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Wire card click directly to open detail view (while preventing clicks inside buttons)
+  container.querySelectorAll('.actor-filmo-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      const index = parseInt(card.dataset.index, 10);
+      handleActorCardAction(index, 'detail', e);
+    });
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        if (e.target.closest('button')) return;
+        e.preventDefault();
+        const index = parseInt(card.dataset.index, 10);
+        handleActorCardAction(index, 'detail', e);
+      }
+    });
+  });
+}
+
+function renderActorFilmography(actor, matches = [], originalQuery = '') {
+  if (!elements.directSearchResults) return;
+
+  const totalCredits = actor.credits?.length || 0;
+  const movieCredits = (actor.credits || []).filter(c => c.mediaType === 'movie');
+  const tvCredits = (actor.credits || []).filter(c => c.mediaType === 'tv');
+
+  const cleanOriginal = (originalQuery || '').trim();
+  const hasTypo = cleanOriginal && actor.name.toLowerCase() !== cleanOriginal.toLowerCase();
+  const typoHtml = hasTypo ? `
+    <div class="actor-typo-notice">
+      <span class="material-symbols-outlined" style="font-size: 16px; color: #000;">auto_fix_high</span>
+      <span>Spelling mistake tolerated: showing <strong>${escapeHtml(actor.name)}</strong> for "<em>${escapeHtml(cleanOriginal)}</em>"</span>
+    </div>
+  ` : '';
+
+  // Alternative matches strip
+  let matchesHtml = '';
+  if (matches && matches.length > 1) {
+    matchesHtml = `
+      <div class="actor-alt-matches">
+        <span class="alt-matches-label">ALL MATCHES:</span>
+        <div class="alt-matches-scroll">
+          ${matches.map(m => `
+            <button type="button" class="alt-match-btn ${m.id === actor.id ? 'active' : ''}" onclick="fetchActorDetailsById(${m.id})">
+              ${escapeHtml(m.name)}
+              ${m.knownFor && m.knownFor.length ? `<span class="alt-match-sub">(${escapeHtml(m.knownFor[0])})</span>` : ''}
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // Google Knowledge data
+  const googleData = actor.google || {};
+  const googleDesc = googleData.description || 'Film & Television Actor';
+  const googleExtract = googleData.extract || actor.biography || '';
+  const truncatedExtract = googleExtract.length > 320 ? googleExtract.slice(0, 320) + '...' : googleExtract;
+
+  const googleSearchUrl = googleData.searchUrl || `https://www.google.com/search?q=${encodeURIComponent(actor.name + ' actor')}`;
+  const googleNewsUrl = googleData.newsUrl || `https://www.google.com/search?q=${encodeURIComponent(actor.name + ' actor')}&tbm=nws`;
+  const imdbUrl = actor.external?.imdbUrl;
+  const tmdbUrl = actor.external?.tmdbUrl;
+
+  const html = `
+    <div class="actor-profile-card retro-box">
+      ${typoHtml}
+      ${matchesHtml}
+      <div class="actor-profile-layout">
+        <div class="actor-avatar-col">
+          <div class="actor-avatar-frame">
+            <img src="${actor.profile || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500'}" 
+                 alt="${escapeHtml(actor.name)}" class="actor-avatar-img" loading="eager" />
+          </div>
+          <div class="actor-stat-pill">
+            <span class="material-symbols-outlined" style="font-size: 15px;">movie</span>
+            <span>${totalCredits} CREDITS</span>
+          </div>
+        </div>
+
+        <div class="actor-info-col">
+          <div class="actor-header-line">
+            <div class="actor-identity">
+              <h1 class="actor-name scramble-text">${escapeHtml(actor.name)}</h1>
+              <div class="actor-subtitle-row">
+                <span class="actor-badge google-badge">
+                  <svg width="12" height="12" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 4px;">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"/>
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                  </svg>
+                  GOOGLE KNOWLEDGE
+                </span>
+                <span class="actor-badge tmdb-badge">TMDB VERIFIED</span>
+                <span class="actor-occupation">${escapeHtml(googleDesc)}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Metadata details -->
+          <div class="actor-meta-grid">
+            ${actor.age ? `
+              <div class="actor-meta-item">
+                <span class="meta-label">BORN:</span>
+                <span class="meta-value">${escapeHtml(actor.birthday || 'N/A')} (${actor.age} yrs${actor.deathday ? ' • deceased' : ''})</span>
+              </div>` : ''}
+            ${actor.placeOfBirth ? `
+              <div class="actor-meta-item">
+                <span class="meta-label">BIRTHPLACE:</span>
+                <span class="meta-value">${escapeHtml(actor.placeOfBirth)}</span>
+              </div>` : ''}
+            <div class="actor-meta-item">
+              <span class="meta-label">KNOWN FOR:</span>
+              <span class="meta-value">${escapeHtml(actor.knownForDepartment || 'Acting')}</span>
+            </div>
+          </div>
+
+          <!-- Bio / Google Knowledge Summary -->
+          <div class="actor-bio-box">
+            <p class="actor-bio-text" id="actorBioText">${escapeHtml(truncatedExtract)}</p>
+            ${googleExtract.length > 320 ? `
+              <button type="button" class="actor-bio-more-btn" id="btnToggleBio">READ MORE ▼</button>
+            ` : ''}
+          </div>
+
+          <!-- Google & External Action Links -->
+          <div class="actor-links-row">
+            <a href="${googleSearchUrl}" target="_blank" rel="noopener noreferrer" class="retro-btn actor-external-btn google-btn-link" title="Explore on Google">
+              <span class="material-symbols-outlined" style="font-size: 16px;">search</span>
+              <span>GOOGLE SEARCH</span>
+            </a>
+            <a href="${googleNewsUrl}" target="_blank" rel="noopener noreferrer" class="retro-btn actor-external-btn" title="Latest Actor News on Google">
+              <span class="material-symbols-outlined" style="font-size: 16px;">newspaper</span>
+              <span>GOOGLE NEWS</span>
+            </a>
+            ${imdbUrl ? `
+              <a href="${imdbUrl}" target="_blank" rel="noopener noreferrer" class="retro-btn actor-external-btn imdb-btn-link" title="View IMDb Profile">
+                <span>IMDb ↗</span>
+              </a>
+            ` : ''}
+            ${tmdbUrl ? `
+              <a href="${tmdbUrl}" target="_blank" rel="noopener noreferrer" class="retro-btn actor-external-btn tmdb-btn-link" title="View TMDB Page">
+                <span>TMDB ↗</span>
+              </a>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filmography Filter & Header -->
+    <div class="filmography-toolbar">
+      <div class="filmography-tabs">
+        <button type="button" class="filmo-tab active" data-filter="all">ALL WORKS (${totalCredits})</button>
+        <button type="button" class="filmo-tab" data-filter="movie">MOVIES (${movieCredits.length})</button>
+        <button type="button" class="filmo-tab" data-filter="tv">TV SHOWS (${tvCredits.length})</button>
+      </div>
+
+      <div class="filmography-sort-wrapper">
+        <label for="actorFilmoSort" class="filmo-sort-label">SORT:</label>
+        <select id="actorFilmoSort" class="styled-select filmo-sort-select">
+          <option value="popularity">Most Popular</option>
+          <option value="rating">Highest Rated</option>
+          <option value="newest">Newest Releases</option>
+          <option value="oldest">Oldest Releases</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Filmography Grid -->
+    <div id="actorFilmographyGrid" class="movie-grid actor-filmography-grid"></div>
+  `;
+
+  elements.directSearchResults.innerHTML = html;
+
+  // Bio toggle
+  const bioToggle = document.getElementById('btnToggleBio');
+  const bioText = document.getElementById('actorBioText');
+  let expanded = false;
+  if (bioToggle && bioText) {
+    bioToggle.addEventListener('click', () => {
+      expanded = !expanded;
+      if (expanded) {
+        bioText.textContent = googleExtract;
+        bioToggle.textContent = 'SHOW LESS ▲';
+      } else {
+        bioText.textContent = truncatedExtract;
+        bioToggle.textContent = 'READ MORE ▼';
+      }
+    });
+  }
+
+  // Render initial filmography cards
+  renderFilmographyCards(actor.credits || [], 'all', 'popularity');
+
+  // Filter tabs listeners
+  const tabs = elements.directSearchResults.querySelectorAll('.filmo-tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const sortVal = document.getElementById('actorFilmoSort')?.value || 'popularity';
+      renderFilmographyCards(actor.credits || [], tab.dataset.filter, sortVal);
+    });
+  });
+
+  // Sort listener
+  const sortSelect = document.getElementById('actorFilmoSort');
+  if (sortSelect) {
+    sortSelect.addEventListener('change', () => {
+      const activeFilter = elements.directSearchResults.querySelector('.filmo-tab.active')?.dataset.filter || 'all';
+      renderFilmographyCards(actor.credits || [], activeFilter, sortSelect.value);
+    });
+  }
+}
+
 async function performDirectSearch(query, minSeeds = 0, category = '200') {
   const cleanQuery = (query || '').trim();
   if (!cleanQuery) {
-    showToast('Please enter a search query', 'error');
+    showToast('Please enter an actor name', 'error');
     return;
   }
 
   if (elements.directSearchResults) {
-    elements.directSearchResults.innerHTML = '<div style="padding:28px;text-align:center;font-family:var(--font-mono);opacity:0.8;">Searching releases on The Cine Bay...</div>';
+    elements.directSearchResults.innerHTML = `
+      <div class="actor-search-loading retro-box">
+        <div class="actor-loading-spinner"></div>
+        <div class="actor-loading-text scramble-text">SEARCHING GOOGLE & TMDB FOR "${escapeHtml(cleanQuery.toUpperCase())}"...</div>
+      </div>
+    `;
   }
 
   try {
-    const res = await fetch(`/api/search?q=${encodeURIComponent(cleanQuery)}&minSeeds=${minSeeds || 0}&category=${category || '200'}`);
+    const res = await fetch(`/api/actor?q=${encodeURIComponent(cleanQuery)}`);
     const data = await res.json();
 
-    if (data.success && data.torrents && data.torrents.length > 0) {
-      if (elements.directSearchResults) {
-        elements.directSearchResults.innerHTML = `
-          <div class="torrent-list-header" style="display:flex; margin-bottom:10px;">
-            <span>Release</span>
-            <span>Quality</span>
-            <span>Seeds/Peers</span>
-            <span>Size</span>
-            <span>Action</span>
-          </div>
-          <div class="direct-torrent-list"></div>
-        `;
-        const listContainer = elements.directSearchResults.querySelector('.direct-torrent-list');
-        renderTorrentRows(listContainer, data.torrents, cleanQuery, { title: cleanQuery }, false);
+    if (data.success && data.actor) {
+      state.currentActor = data.actor;
+      state.actorMatches = data.matches || [];
+      renderActorFilmography(data.actor, data.matches || [], cleanQuery);
+      if (data.correctedQuery || (data.actor.name && data.actor.name.toLowerCase() !== cleanQuery.toLowerCase())) {
+        showToast(`Tolerated spelling mistake: showing ${data.actor.name} 🎬`, 'success');
+      } else {
+        showToast(`Found filmography for ${data.actor.name} 🎬`, 'success');
       }
     } else {
+      // Empty state with suggestions and direct torrent fallback
       if (elements.directSearchResults) {
-        elements.directSearchResults.innerHTML = `<div style="padding:28px;text-align:center;font-family:var(--font-mono);">No torrents found matching "${escapeHtml(cleanQuery)}" with ${minSeeds || 0}+ seeds.</div>`;
+        elements.directSearchResults.innerHTML = `
+          <div class="actor-empty-state retro-box">
+            <span class="material-symbols-outlined" style="font-size: 48px; margin-bottom: 12px; opacity: 0.7;">person_off</span>
+            <h3 class="scramble-text" style="font-size: 1.4rem; margin-bottom: 8px;">NO ACTOR FOUND MATCHING "${escapeHtml(cleanQuery)}"</h3>
+            <p style="font-family: var(--font-mono); font-size: 13px; max-width: 500px; margin: 0 auto 20px auto; opacity: 0.85;">
+              We couldn't find an actor matching that name. Check spelling or try one of the popular actors below.
+            </p>
+            <div class="actor-chips-row" style="justify-content: center; margin-bottom: 24px;">
+              <button type="button" class="actor-chip" onclick="performDirectSearch('Cillian Murphy')">Cillian Murphy</button>
+              <button type="button" class="actor-chip" onclick="performDirectSearch('Keanu Reeves')">Keanu Reeves</button>
+              <button type="button" class="actor-chip" onclick="performDirectSearch('Zendaya')">Zendaya</button>
+              <button type="button" class="actor-chip" onclick="performDirectSearch('Pedro Pascal')">Pedro Pascal</button>
+            </div>
+            <div style="border-top: 1.5px dashed #000; padding-top: 16px; margin-top: 10px;">
+              <span style="font-family: var(--font-mono); font-size: 12px; margin-right: 12px;">Looking for raw torrent releases instead?</span>
+              <button type="button" class="retro-btn" style="padding: 6px 14px; font-size: 12px;" onclick="searchRawTorrentsFallback('${escapeHtml(cleanQuery)}')">
+                <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">search</span>
+                <span>SEARCH RELEASES ON CINE BAY</span>
+              </button>
+            </div>
+          </div>
+        `;
       }
-      showToast('No torrents found for search query', 'info');
+      showToast('No matching actor found', 'info');
     }
   } catch (err) {
     if (elements.directSearchResults) {
-      elements.directSearchResults.innerHTML = '<div style="padding:28px;text-align:center;font-family:var(--font-mono);">Failed to execute search. Please try again.</div>';
+      elements.directSearchResults.innerHTML = `
+        <div class="actor-empty-state retro-box">
+          <span class="material-symbols-outlined" style="font-size: 40px; color: #ff3333; margin-bottom: 10px;">error</span>
+          <h3 style="margin-bottom: 8px;">Failed to execute actor search</h3>
+          <p style="font-family: var(--font-mono); font-size: 12px; opacity: 0.8;">Network error or server unavailable. Please try again.</p>
+        </div>
+      `;
     }
-    showToast('Direct search failed', 'error');
+    showToast('Search encountered an error', 'error');
   }
 }
+
+// Fallback search for raw torrent releases if user queries a direct filename
+window.searchRawTorrentsFallback = async function(query) {
+  if (!elements.directSearchResults) return;
+  elements.directSearchResults.innerHTML = '<div style="padding:28px;text-align:center;font-family:var(--font-mono);opacity:0.8;">Searching releases on The Cine Bay...</div>';
+
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&minSeeds=0&category=200`);
+    const data = await res.json();
+    if (data.success && data.torrents && data.torrents.length > 0) {
+      elements.directSearchResults.innerHTML = `
+        <div class="torrent-list-header" style="display:flex; margin-bottom:10px;">
+          <span>Release</span>
+          <span>Quality</span>
+          <span>Seeds/Peers</span>
+          <span>Size</span>
+          <span>Action</span>
+        </div>
+        <div class="direct-torrent-list"></div>
+      `;
+      const listContainer = elements.directSearchResults.querySelector('.direct-torrent-list');
+      renderTorrentRows(listContainer, data.torrents, query, { title: query }, false);
+    } else {
+      elements.directSearchResults.innerHTML = `<div style="padding:28px;text-align:center;font-family:var(--font-mono);">No torrents found for "${escapeHtml(query)}".</div>`;
+    }
+  } catch (e) {
+    elements.directSearchResults.innerHTML = '<div style="padding:28px;text-align:center;font-family:var(--font-mono);">Failed to load torrent releases.</div>';
+  }
+};
 
 function handleQuickMoodSelect(mood) {
   initQuiz();
@@ -994,7 +1432,7 @@ function switchTab(tabId) {
   if (state.activeTab !== tabId) {
     if (state.activeTab !== 'settings-view' && state.activeTab !== 'tutorial-view') {
       state.previousTab = state.activeTab;
-      if (state.activeTab === 'movies-view' || state.activeTab === 'tv-view') {
+      if (state.activeTab === 'movies-view' || state.activeTab === 'tv-view' || state.activeTab === 'directSearchSection') {
         state.lastFeedTab = state.activeTab;
       }
     }
@@ -1058,8 +1496,31 @@ function switchTab(tabId) {
   }
 }
 
+function updateTypoBanner(bannerId, rawQuery, correctedQuery) {
+  const banner = document.getElementById(bannerId);
+  if (!banner) return;
+  const raw = (rawQuery || '').trim();
+  const corr = (correctedQuery || '').trim();
+
+  if (corr && raw && corr.toLowerCase() !== raw.toLowerCase()) {
+    banner.innerHTML = `
+      <div class="typo-banner-flex">
+        <span class="material-symbols-outlined typo-banner-icon">auto_fix_high</span>
+        <div class="typo-banner-msg">
+          <span>Showing results for <strong>"${escapeHtml(corr)}"</strong></span>
+          <span class="typo-banner-orig">(spelling mistake tolerated from "<em>${escapeHtml(raw)}</em>")</span>
+        </div>
+      </div>
+    `;
+    banner.classList.remove('hidden');
+  } else {
+    banner.innerHTML = '';
+    banner.classList.add('hidden');
+  }
+}
+
 async function loadMovies() {
-  const search = elements.movieSearchInput.value;
+  const search = elements.movieSearchInput.value.trim();
   const category = elements.movieCategorySelect.value;
   try {
     const res = await fetch(`/api/movies?search=${encodeURIComponent(search)}&category=${category}`);
@@ -1067,12 +1528,13 @@ async function loadMovies() {
     if (data.success) {
       state.movies = data.movies;
       renderMediaGrid(elements.movieGrid, data.movies, 'movie');
+      updateTypoBanner('movieTypoBanner', search, data.correctedQuery);
     }
   } catch (err) {}
 }
 
 async function loadTVShows() {
-  const search = elements.tvSearchInput.value;
+  const search = elements.tvSearchInput.value.trim();
   const category = elements.tvCategorySelect.value;
   try {
     const res = await fetch(`/api/tv?search=${encodeURIComponent(search)}&category=${category}`);
@@ -1080,6 +1542,7 @@ async function loadTVShows() {
     if (data.success) {
       state.tvShows = data.shows;
       renderMediaGrid(elements.tvGrid, data.shows, 'tv');
+      updateTypoBanner('tvTypoBanner', search, data.correctedQuery);
     }
   } catch (err) {}
 }
