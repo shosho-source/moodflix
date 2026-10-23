@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Moodflix</title>
   <meta name="google-site-verification" content="jzSOmPKWS4cM55gXmqlvbYNgQ45TLRAYIl2GaCGZ62k" />
   <meta name="theme-color" content="#181818">
@@ -39,13 +39,16 @@
         </svg>
       </div>
       <div class="loader-text">
-        <span class="loader-title">MOODFLIX ARCHIVE</span>
-        <span class="loader-subtitle">loading content...</span>
+        <span class="loader-title scramble-text">MOODFLIX ARCHIVE</span>
+        <span class="loader-subtitle" id="loader-status">INITIALIZING SYSTEM...</span>
+      </div>
+      <div class="loader-progress-track">
+        <div class="loader-progress-bar" id="loader-progress-bar"></div>
       </div>
     </div>
   </div>
 
-  <!-- WebGL Fluid Canvas -->
+  <!-- WebGL Fluid Canvas (Imported from live fluid_sim repo) -->
   <canvas id="fluid-canvas" aria-hidden="true"></canvas>
 
   <div class="content-wrapper">
@@ -89,7 +92,7 @@
           <span class="material-symbols-outlined">tv</span> <span class="scramble-text">TV Series Feed</span>
         </button>
         <button class="nav-tab" data-tab="search-view">
-          <span class="material-symbols-outlined">person_search</span> <span class="scramble-text">Search by Actor</span>
+          <span class="material-symbols-outlined">person_search</span> <span class="scramble-text">Search by Artist</span>
         </button>
         <button class="nav-tab" data-tab="tutorial-view">
           <span class="material-symbols-outlined">school</span> <span class="scramble-text">Tutorial</span>
@@ -137,7 +140,7 @@
             </p>
           </section>
 
-          <!-- Google Sign In Button -->
+          <!-- Sign In Actions -->
           <section class="cta-section">
             <button id="google-login-btn" class="google-login-btn">
               <div class="google-icon-box">
@@ -157,6 +160,7 @@
                 <span id="login-btn-text" class="cta-title scramble-text">CONTINUE WITH GOOGLE</span>
               </div>
             </button>
+
           </section>
 
           <!-- Auth Footer: Terms of Service & Privacy Policy -->
@@ -299,50 +303,50 @@
         <div class="movie-grid" id="tvGrid"></div>
       </section>
 
-      <!-- VIEW: Search by Actor (Google & TMDB Enriched) -->
+      <!-- VIEW: Search by Artist (Google & TMDB Enriched) -->
       <section id="search-view" class="view-panel hidden">
-        <div class="retro-box search-hero actor-search-hero">
-          <div class="actor-search-header">
-            <div class="actor-brand-pill">
+        <div class="retro-box search-hero actor-search-hero artist-search-hero">
+          <div class="actor-search-header artist-search-header">
+            <div class="actor-brand-pill artist-brand-pill">
               <span class="status-dot"></span>
               <span class="scramble-text">GOOGLE & TMDB ENRICHED TALENT DISCOVERY</span>
             </div>
-            <h2 class="scramble-text">SEARCH MOVIES & TV BY ACTOR</h2>
-            <p class="actor-search-subtitle">
-              Explore any actor or performer's complete filmography, character roles, Google Knowledge summary, and available torrent downloads.
+            <h2 class="scramble-text">SEARCH MOVIES & TV BY ARTIST</h2>
+            <p class="actor-search-subtitle artist-search-subtitle">
+              Explore any artist or performer's complete filmography, character roles, Google Knowledge summary, and available torrent downloads.
             </p>
           </div>
 
-          <form id="directSearchForm" class="direct-search-form actor-search-form" autocomplete="off">
-            <div class="actor-input-group">
-              <span class="material-symbols-outlined actor-search-icon">person_search</span>
-              <input type="text" id="directSearchInput" placeholder="Enter actor name (e.g. Cillian Murphy, Keanu Reeves, Zendaya)..." required autocomplete="off">
-              <button type="button" id="btnClearActorSearch" class="actor-clear-btn hidden" title="Clear input">✕</button>
+          <form id="directSearchForm" class="direct-search-form actor-search-form artist-search-form" autocomplete="off">
+            <div class="actor-input-group artist-input-group">
+              <span class="material-symbols-outlined actor-search-icon artist-search-icon">person_search</span>
+              <input type="text" id="directSearchInput" placeholder="Enter artist name (e.g. Cillian Murphy, Keanu Reeves, Zendaya)..." required autocomplete="off">
+              <button type="button" id="btnClearArtistSearch" class="actor-clear-btn artist-clear-btn hidden" title="Clear input">✕</button>
             </div>
-            <button type="submit" id="btnExecuteActorSearch" class="retro-btn scramble-text actor-submit-btn">
+            <button type="submit" id="btnExecuteArtistSearch" class="retro-btn scramble-text actor-submit-btn artist-submit-btn">
               <span class="material-symbols-outlined">search</span>
               <span>FIND FILMOGRAPHY</span>
             </button>
           </form>
 
-          <!-- Quick Trend Actor Starter Chips -->
-          <div class="actor-quick-strip">
+          <!-- Quick Trend Artist Starter Chips -->
+          <div class="actor-quick-strip artist-quick-strip">
             <span class="quick-chip-label">POPULAR:</span>
-            <div class="actor-chips-row">
-              <button type="button" class="actor-chip" data-actor="Cillian Murphy">Cillian Murphy</button>
-              <button type="button" class="actor-chip" data-actor="Keanu Reeves">Keanu Reeves</button>
-              <button type="button" class="actor-chip" data-actor="Zendaya">Zendaya</button>
-              <button type="button" class="actor-chip" data-actor="Pedro Pascal">Pedro Pascal</button>
-              <button type="button" class="actor-chip" data-actor="Margot Robbie">Margot Robbie</button>
-              <button type="button" class="actor-chip" data-actor="Leonardo DiCaprio">Leonardo DiCaprio</button>
-              <button type="button" class="actor-chip" data-actor="Florence Pugh">Florence Pugh</button>
-              <button type="button" class="actor-chip" data-actor="Tom Cruise">Tom Cruise</button>
+            <div class="actor-chips-row artist-chips-row">
+              <button type="button" class="actor-chip artist-chip" data-actor="Cillian Murphy" data-artist="Cillian Murphy">Cillian Murphy</button>
+              <button type="button" class="actor-chip artist-chip" data-actor="Keanu Reeves" data-artist="Keanu Reeves">Keanu Reeves</button>
+              <button type="button" class="actor-chip artist-chip" data-actor="Zendaya" data-artist="Zendaya">Zendaya</button>
+              <button type="button" class="actor-chip artist-chip" data-actor="Pedro Pascal" data-artist="Pedro Pascal">Pedro Pascal</button>
+              <button type="button" class="actor-chip artist-chip" data-actor="Margot Robbie" data-artist="Margot Robbie">Margot Robbie</button>
+              <button type="button" class="actor-chip artist-chip" data-actor="Leonardo DiCaprio" data-artist="Leonardo DiCaprio">Leonardo DiCaprio</button>
+              <button type="button" class="actor-chip artist-chip" data-actor="Florence Pugh" data-artist="Florence Pugh">Florence Pugh</button>
+              <button type="button" class="actor-chip artist-chip" data-actor="Tom Cruise" data-artist="Tom Cruise">Tom Cruise</button>
             </div>
           </div>
         </div>
 
         <!-- Results Container (Keeps id="directSearchResults" for audit compliance) -->
-        <div id="directSearchResults" class="search-results-container actor-results-container"></div>
+        <div id="directSearchResults" class="search-results-container actor-results-container artist-results-container"></div>
       </section>
 
 
@@ -804,9 +808,9 @@
         <span class="material-symbols-outlined mobile-nav-icon">tv</span>
         <span class="mobile-nav-label scramble-text">TV Shows</span>
       </button>
-      <button class="mobile-nav-item" data-tab="search-view" aria-label="Search by Actor">
+      <button class="mobile-nav-item" data-tab="search-view" aria-label="Search by Artist">
         <span class="material-symbols-outlined mobile-nav-icon">person_search</span>
-        <span class="mobile-nav-label scramble-text">Actors</span>
+        <span class="mobile-nav-label scramble-text">Artists</span>
       </button>
     </nav>
   </div>
@@ -870,9 +874,15 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.min.js"
     integrity="sha384-l8ah+VgaWtk1mvOe9VC+OirC6qHFF4yH7l7mKRidV9MSti3E9F463bMp6ZVN4kuC"
     crossorigin="anonymous"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/webgl-fluid-custom@0.1.1"
-    integrity="sha384-jsKzsMPte6pJ/6HHe8JYohI/kfD8XSTgb14lncEEy/5PAdEw7KvGL7GUqluHpjA0"
-    crossorigin="anonymous"></script>
+  <!-- WebGL Fluid Simulation library (imported from live fluid_sim repo) -->
+  <script src="webgl-fluid-custom.js"></script>
+  <script>
+    if (typeof window.WebGLFluidCustom === 'undefined') {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/webgl-fluid-custom';
+      document.head.appendChild(s);
+    }
+  </script>
   <script defer src="app.js"></script>
 </body>
 

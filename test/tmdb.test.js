@@ -43,22 +43,32 @@ describe('TMDB Movie & TV Provider', () => {
     assert.ok(auth.headers['Authorization'] || auth.queryParams.has('api_key'));
   });
 
-  it('searches actors on TMDB and returns valid performer matches', async () => {
-    const actors = await TMDB.searchActors('Keanu Reeves');
-    assert.ok(actors.length > 0);
-    assert.strictEqual(actors[0].name, 'Keanu Reeves');
-    assert.ok(typeof actors[0].id === 'number');
+  it('searches artists on TMDB and returns valid performer matches', async () => {
+    const artists = await TMDB.searchArtists('Keanu Reeves');
+    assert.ok(artists.length > 0);
+    assert.strictEqual(artists[0].name, 'Keanu Reeves');
+    assert.ok(typeof artists[0].id === 'number');
+
+    // Also assert backward-compatible searchActors method
+    const legacyActors = await TMDB.searchActors('Keanu Reeves');
+    assert.ok(legacyActors.length > 0);
+    assert.strictEqual(legacyActors[0].name, 'Keanu Reeves');
   });
 
-  it('fetches full actor details with filmography and Google Knowledge data', async () => {
-    const actor = await TMDB.getActorDetails(6384); // Keanu Reeves TMDB ID
-    assert.ok(actor);
-    assert.strictEqual(actor.name, 'Keanu Reeves');
-    assert.ok(actor.creditsCount > 0);
-    assert.ok(Array.isArray(actor.credits));
-    assert.ok(actor.credits.some(c => c.title && c.title.toLowerCase().includes('matrix')));
-    assert.ok(actor.google);
-    assert.ok(actor.google.searchUrl.includes('google.com'));
+  it('fetches full artist details with filmography and Google Knowledge data', async () => {
+    const artist = await TMDB.getArtistDetails(6384); // Keanu Reeves TMDB ID
+    assert.ok(artist);
+    assert.strictEqual(artist.name, 'Keanu Reeves');
+    assert.ok(artist.creditsCount > 0);
+    assert.ok(Array.isArray(artist.credits));
+    assert.ok(artist.credits.some(c => c.title && c.title.toLowerCase().includes('matrix')));
+    assert.ok(artist.google);
+    assert.ok(artist.google.searchUrl.includes('google.com'));
+
+    // Also assert backward-compatible getActorDetails method
+    const legacyActor = await TMDB.getActorDetails(6384);
+    assert.ok(legacyActor);
+    assert.strictEqual(legacyActor.name, 'Keanu Reeves');
   });
 
   it('tolerates typos in movie searches (e.g. Inceptoin -> Inception)', async () => {
@@ -67,9 +77,9 @@ describe('TMDB Movie & TV Provider', () => {
     assert.ok(results.some(m => m.title.toLowerCase().includes('inception')));
   });
 
-  it('tolerates typos in actor searches (e.g. Keanu Reves -> Keanu Reeves)', async () => {
-    const actors = await TMDB.searchActors('Keanu Reves');
-    assert.ok(actors.length > 0);
-    assert.strictEqual(actors[0].name, 'Keanu Reeves');
+  it('tolerates typos in artist searches (e.g. Keanu Reves -> Keanu Reeves)', async () => {
+    const artists = await TMDB.searchArtists('Keanu Reves');
+    assert.ok(artists.length > 0);
+    assert.strictEqual(artists[0].name, 'Keanu Reeves');
   });
 });

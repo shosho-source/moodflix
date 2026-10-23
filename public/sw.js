@@ -17,12 +17,14 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Exclude API requests, streaming routes, websockets, and browser extensions
+  // Exclude API requests, streaming routes, websockets, and browser extensions across Chrome, Safari, Firefox
   if (
     event.request.method !== 'GET' ||
+    !event.request.url.startsWith('http') ||
     event.request.url.includes('/api/') ||
-    event.request.url.startsWith('ws') ||
-    event.request.url.startsWith('chrome-extension')
+    event.request.url.startsWith('chrome-extension') ||
+    event.request.url.startsWith('safari-web-extension') ||
+    event.request.url.startsWith('moz-extension')
   ) {
     return;
   }

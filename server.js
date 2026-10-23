@@ -149,35 +149,35 @@ app.post('/api/quiz', async (req, res) => {
   }
 });
 
-// 4.5 Search Actor & Full Filmography with Google & TMDB Enrichment
-app.get('/api/actor', async (req, res) => {
+// 4.5 Search Artist / Actor & Full Filmography with Google & TMDB Enrichment
+const handleArtistLookup = async (req, res) => {
   try {
     const query = (req.query.q || '').trim();
     const id = req.query.id;
 
     if (!query && !id) {
-      return res.status(400).json({ success: false, error: 'Actor name (q) or id is required' });
+      return res.status(400).json({ success: false, error: 'Artist name (q) or id is required' });
     }
 
-    let actorId = id;
+    let artistId = id;
     let matches = [];
 
-    if (!actorId) {
+    if (!artistId) {
       matches = await TMDB.searchActors(query);
       if (matches.length === 0) {
-        return res.json({ success: true, actor: null, matches: [] });
+        return res.json({ success: true, artist: null, actor: null, matches: [] });
       }
-      actorId = matches[0].id;
+      artistId = matches[0].id;
     }
 
-    const actor = await TMDB.getActorDetails(actorId);
-    if (!actor) {
-      return res.status(404).json({ success: false, error: 'Actor details not found' });
+    const artist = await TMDB.getActorDetails(artistId);
+    if (!artist) {
+      return res.status(404).json({ success: false, error: 'Artist details not found' });
     }
 
     // Annotate credits with isDownloaded flag
-    if (actor.credits && Array.isArray(actor.credits)) {
-      actor.credits = actor.credits.map(c => ({
+    if (artist.credits && Array.isArray(artist.credits)) {
+      artist.credits = artist.credits.map(c => ({
         ...c,
         isDownloaded: Storage.hasDownloaded(c.title)
       }));
@@ -186,16 +186,20 @@ app.get('/api/actor', async (req, res) => {
     const correctedQuery = matches[0]?.correctedQuery || null;
     res.json({
       success: true,
-      actor,
+      artist,
+      actor: artist,
       matches,
       correctedQuery
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
-});
+};
 
-app.get('/api/actor/search', async (req, res) => {
+app.get('/api/artist', handleArtistLookup);
+app.get('/api/actor', handleArtistLookup);
+
+const handleArtistSearch = async (req, res) => {
   try {
     const query = (req.query.q || '').trim();
     if (!query) {
@@ -206,26 +210,32 @@ app.get('/api/actor/search', async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
-});
+};
 
-app.get('/api/actor/:id', async (req, res) => {
+app.get('/api/artist/search', handleArtistSearch);
+app.get('/api/actor/search', handleArtistSearch);
+
+const handleArtistById = async (req, res) => {
   try {
     const { id } = req.params;
-    const actor = await TMDB.getActorDetails(id);
-    if (!actor) {
-      return res.status(404).json({ success: false, error: 'Actor not found' });
+    const artist = await TMDB.getActorDetails(id);
+    if (!artist) {
+      return res.status(404).json({ success: false, error: 'Artist not found' });
     }
-    if (actor.credits && Array.isArray(actor.credits)) {
-      actor.credits = actor.credits.map(c => ({
+    if (artist.credits && Array.isArray(artist.credits)) {
+      artist.credits = artist.credits.map(c => ({
         ...c,
         isDownloaded: Storage.hasDownloaded(c.title)
       }));
     }
-    res.json({ success: true, actor });
+    res.json({ success: true, artist, actor: artist });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
-});
+};
+
+app.get('/api/artist/:id', handleArtistById);
+app.get('/api/actor/:id', handleArtistById);
 
 // 5. Search The Cine Bay for a movie or TV show
 app.get('/api/search', async (req, res) => {

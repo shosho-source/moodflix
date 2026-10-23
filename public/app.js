@@ -74,15 +74,74 @@ const elements = {
 
 let supabaseClient = null;
 
+// Preloader Status & Progress Update Helper
+function updatePreloaderStatus(message, progressPercent = null) {
+  const statusEl = document.getElementById('loader-status');
+  if (statusEl && message) {
+    statusEl.textContent = message;
+  }
+  const barEl = document.getElementById('loader-progress-bar');
+  if (barEl && progressPercent !== null) {
+    barEl.style.width = `${Math.min(100, Math.max(0, progressPercent))}%`;
+  }
+}
+
 // Initial Loader Screen Dismissal Helper
 function hideInitialLoader() {
   const loader = document.getElementById('loader');
   if (loader && !loader.classList.contains('fade-out')) {
+    const barEl = document.getElementById('loader-progress-bar');
+    if (barEl) barEl.style.width = '100%';
     loader.classList.add('fade-out');
     setTimeout(() => {
       loader.style.display = 'none';
     }, 450);
   }
+}
+
+// Visual Torrent Swarm Scanner Loading Template
+function getTorrentLoadingHtml(title = 'SCANNING SWARM RELEASES...', subtitle = 'Querying The Cine Bay & DHT indexers for verified seeds...') {
+  return `
+    <div class="torrent-fetch-loader retro-box">
+      <div class="torrent-radar-wrap">
+        <div class="torrent-radar">
+          <div class="radar-sweep"></div>
+          <div class="radar-circle rc-1"></div>
+          <div class="radar-circle rc-2"></div>
+          <div class="radar-circle rc-3"></div>
+          <div class="radar-crosshair-h"></div>
+          <div class="radar-crosshair-v"></div>
+          <div class="radar-blip b-1"></div>
+          <div class="radar-blip b-2"></div>
+          <div class="radar-blip b-3"></div>
+        </div>
+      </div>
+      <div class="torrent-loader-info">
+        <div class="torrent-loader-badge">
+          <span class="live-pulse-dot"></span>
+          <span>THE CINE BAY P2P INDEXER</span>
+        </div>
+        <div class="torrent-loader-title scramble-text">${escapeHtml(title)}</div>
+        <div class="torrent-loader-sub">${escapeHtml(subtitle)}</div>
+        <div class="torrent-signal-bars">
+          <span class="sig-bar bar-1"></span>
+          <span class="sig-bar bar-2"></span>
+          <span class="sig-bar bar-3"></span>
+          <span class="sig-bar bar-4"></span>
+          <span class="sig-bar bar-5"></span>
+          <span class="sig-bar bar-6"></span>
+          <span class="sig-bar bar-7"></span>
+        </div>
+        <div class="torrent-loader-status-stream">
+          <span class="stream-tag">[SWARM: ACTIVE]</span>
+          <span class="stream-sep">•</span>
+          <span class="stream-tag">[DHT: RESOLVING]</span>
+          <span class="stream-sep">•</span>
+          <span class="stream-tag">[SORT: SEEDS]</span>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // Retro-Brutalist Toast System
@@ -123,27 +182,62 @@ function showToast(message, type = 'info', duration = 3500) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  const startTime = Date.now();
+  const MIN_LOADER_DURATION = 800; // Guarantees a polished, non-flickering preloader transition
+
   initFluid();
-  initScrambler();
   setupEventListeners();
   
+  // Create Promise for complete window resources with a 1.5s fallback to prevent cross-browser freeze
+  const timeoutPromise = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+  const windowLoadPromise = (document.readyState === 'complete')
+    ? Promise.resolve()
+    : Promise.race([
+        new Promise(resolve => window.addEventListener('load', resolve, { once: true })),
+        timeoutPromise(1500)
+      ]);
+
+  // Create Promise for web font rendering with fallback
+  const fontsPromise = (document.fonts && document.fonts.ready)
+    ? Promise.race([document.fonts.ready, timeoutPromise(1500)])
+    : Promise.resolve();
+
+  // Fail-safe maximum timeout (4 seconds) to prevent infinite screen lock
+  let isDismissed = false;
+  const safetyTimeout = setTimeout(() => {
+    if (!isDismissed) {
+      console.warn('Initial loader dismissed by safety timeout');
+      hideInitialLoader();
+    }
+  }, 4000);
+
   try {
+    updatePreloaderStatus('INITIALIZING MOODFLIX CORE...', 25);
+    await Promise.allSettled([windowLoadPromise, fontsPromise]);
+
+    updatePreloaderStatus('AUTHENTICATING ARCHIVE SESSION...', 50);
     await initSupabaseClient();
+
+    updatePreloaderStatus('SYNCHRONIZING INTERFACE...', 90);
   } catch (err) {
     console.warn('Initialization notice:', err);
     if (!checkShareUrl()) {
-      showAuthView();
+      await showAuthView();
     }
   } finally {
-    hideInitialLoader();
+    clearTimeout(safetyTimeout);
+    const elapsed = Date.now() - startTime;
+    const remainingTime = Math.max(0, MIN_LOADER_DURATION - elapsed);
+    setTimeout(() => {
+      updatePreloaderStatus('SYSTEM READY', 100);
+      setTimeout(() => {
+        isDismissed = true;
+        hideInitialLoader();
+      }, 200);
+    }, remainingTime);
   }
 });
-
-// Fallback safety timers to guarantee loading screen never stays indefinitely
-window.addEventListener('load', () => {
-  hideInitialLoader();
-});
-setTimeout(hideInitialLoader, 1000);
 
 async function initSupabaseClient() {
   const isShared = checkShareUrl();
@@ -153,10 +247,11 @@ async function initSupabaseClient() {
     const config = await res.json();
     if (config.supabaseUrl && config.supabaseAnonKey && window.supabase) {
       supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
-      supabaseClient.auth.onAuthStateChange((event, session) => {
-        if (session && session.user) showDashboardView(session.user);
-        else if (event === 'SIGNED_OUT') {
-          if (!state.isSharedPage) showAuthView();
+      supabaseClient.auth.onAuthStateChange(async (event, session) => {
+        if (session && session.user) {
+          await showDashboardView(session.user);
+        } else if (event === 'SIGNED_OUT') {
+          if (!state.isSharedPage) await showAuthView();
         }
       });
       await checkSession();
@@ -166,34 +261,33 @@ async function initSupabaseClient() {
     console.warn('Failed to load backend config:', err);
   }
 
-  if (!isShared) {
-    showAuthView();
+  try {
+    localStorage.removeItem('moodflix_bypass_auth');
+  } catch (e) {}
+
+  if (isShared) {
+    switchTab('share-view');
+  } else {
+    await showAuthView();
   }
 }
 
 async function checkSession() {
-  try {
-    if (localStorage.getItem('moodflix_bypass_auth') === 'true') {
-      showDashboardView({ email: 'guest@moodflix.dev', id: 'guest' });
-      return;
-    }
-  } catch (e) {}
   if (supabaseClient) {
     const { data } = await supabaseClient.auth.getSession();
     if (data && data.session && data.session.user) {
-      showDashboardView(data.session.user);
+      await showDashboardView(data.session.user);
       return;
     }
   }
   if (state.isSharedPage) {
     switchTab('share-view');
   } else {
-    showAuthView();
+    await showAuthView();
   }
 }
 
-function showAuthView() {
-  hideInitialLoader();
+async function showAuthView() {
   if (state.isSharedPage) {
     switchTab('share-view');
     return;
@@ -206,10 +300,19 @@ function showAuthView() {
   elements.mainNav.style.display = 'none';
   document.getElementById('mobileBottomNav')?.classList.add('hidden');
   document.querySelector('.site-header')?.classList.add('hidden');
+
+  // Ensure cassette hero image is loaded if not complete yet
+  const heroImg = document.querySelector('.cassette-img');
+  if (heroImg && !heroImg.complete) {
+    await new Promise(resolve => {
+      heroImg.addEventListener('load', resolve, { once: true });
+      heroImg.addEventListener('error', resolve, { once: true });
+    });
+  }
 }
 
-function showDashboardView(user) {
-  hideInitialLoader();
+async function showDashboardView(user) {
+  state.user = user;
   document.getElementById('auth-view').classList.add('hidden');
   document.getElementById('user-profile').classList.remove('hidden');
   const userDisplay = (user?.email ? user.email.split('@')[0] : (user?.id ? user.id.slice(0, 8) : 'USER')).toUpperCase();
@@ -218,8 +321,20 @@ function showDashboardView(user) {
   document.getElementById('mobileBottomNav')?.classList.remove('hidden');
   document.querySelector('.site-header')?.classList.remove('hidden');
   
-  if (state.movies.length === 0) loadMovies();
-  if (state.tvShows.length === 0) loadTVShows();
+  // Await movies and TV shows so catalog is completely loaded into DOM before preloader disappears
+  const promises = [];
+  if (state.movies.length === 0) {
+    updatePreloaderStatus('FETCHING CURATED MOVIES...', 65);
+    promises.push(loadMovies());
+  }
+  if (state.tvShows.length === 0) {
+    updatePreloaderStatus('FETCHING TV SERIES RELEASES...', 80);
+    promises.push(loadTVShows());
+  }
+  if (promises.length > 0) {
+    await Promise.allSettled(promises);
+  }
+
   if (!state.isSharedPage) {
     if (state.activeTab === 'auth-view' || state.activeTab === 'share-view' || state.activeTab === 'movies-view' || document.getElementById('diagnostic-view').classList.contains('hidden')) {
       switchTab('diagnostic-view');
@@ -227,13 +342,6 @@ function showDashboardView(user) {
   }
 }
 
-function handleBypassLogin() {
-  try {
-    localStorage.setItem('moodflix_bypass_auth', 'true');
-  } catch (e) {}
-  showToast('Temporary bypass active — Welcome to MoodFlix! 🔓', 'success');
-  showDashboardView({ email: 'guest@moodflix.dev', id: 'guest' });
-}
 
 async function handleGoogleLogin() {
   const btnText = document.getElementById('login-btn-text');
@@ -598,48 +706,18 @@ async function submitQuiz() {
   }
 }
 
-// --- Scrambler ---
+// --- Scrambler (Disabled) ---
 function initScrambler() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$*&%';
-  document.addEventListener('mouseover', e => {
-    let el = e.target.closest('.scramble-text');
-    if (!el) {
-      const container = e.target.closest('.nav-tab, .retro-btn');
-      if (container) el = container.querySelector('.scramble-text');
-    }
-    
-    if (!el || el.querySelector('.material-symbols-outlined') || el.classList.contains('material-symbols-outlined') || el.dataset.isScrambling === 'true') return;
-    
-    const targetText = el.dataset.text || el.innerText.trim();
-    if (!targetText) return;
-    el.dataset.text = targetText;
-    el.dataset.isScrambling = 'true';
-    let iteration = 0;
-    
-    clearInterval(el.interval);
-    el.interval = setInterval(() => {
-      el.innerText = targetText.split('').map((letter, index) => {
-        if (index < iteration) return targetText[index];
-        if (letter.trim() === '') return letter;
-        return chars[Math.floor(Math.random() * chars.length)];
-      }).join('');
-      
-      if (iteration >= targetText.length) {
-        clearInterval(el.interval);
-        el.innerText = targetText;
-        el.dataset.isScrambling = 'false';
-      }
-      iteration += 1 / 2;
-    }, 20);
-  });
+  // Scramble animation disabled for static typography and zero DOM layout thrashing
 }
+window.initScrambler = initScrambler;
 
-// --- Fluid ---
+// --- Fluid Animation (Imported from live fluid_sim repo & optimized for all devices) ---
 let fluidInstance = null;
 function initFluid(retryCount = 0) {
   if (!window.WebGLFluidCustom) {
-    if (retryCount < 25) {
-      setTimeout(() => initFluid(retryCount + 1), 150);
+    if (retryCount < 30) {
+      setTimeout(() => initFluid(retryCount + 1), 100);
     }
     return;
   }
@@ -648,21 +726,25 @@ function initFluid(retryCount = 0) {
     const canvas = document.getElementById('fluid-canvas');
     if (!canvas) return;
 
+    // Device performance profiling without changing any visible behavior
     const isMobile = window.innerWidth < 768 || (navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
-    
+    const isLowPower = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) ||
+                       (navigator.deviceMemory && navigator.deviceMemory <= 4);
+
+    // Exact cartoon fluid parameters from fluid_sim repo with device-scaled resolutions
     fluidInstance = window.WebGLFluidCustom(canvas, {
-      IMMEDIATE: true,
-      TRIGGER: 'hover',
-      SIM_RESOLUTION: 64,
-      DYE_RESOLUTION: isMobile ? 512 : 512,
-      CAPTURE_RESOLUTION: 128,
-      DENSITY_DISSIPATION: isMobile ? 1.6 : 2.5,
+      IMMEDIATE: true,        // Start immediately
+      TRIGGER: 'hover',       // React to mouse hover & touch
+      SIM_RESOLUTION: isMobile ? (isLowPower ? 48 : 64) : (isLowPower ? 96 : 128),
+      DYE_RESOLUTION: isMobile ? (isLowPower ? 384 : 512) : (isLowPower ? 768 : 1024),
+      CAPTURE_RESOLUTION: 512,
+      DENSITY_DISSIPATION: 3.0,
       VELOCITY_DISSIPATION: 0.9,
       PRESSURE: 0.8,
-      PRESSURE_ITERATIONS: 4,
+      PRESSURE_ITERATIONS: isLowPower ? 8 : 10,
       CURL: 35,
-      SPLAT_RADIUS: isMobile ? 0.35 : 0.18,
-      SPLAT_FORCE: isMobile ? 5000 : 2000,
+      SPLAT_RADIUS: isMobile ? 0.15 : 0.1,
+      SPLAT_FORCE: isMobile ? 1500 : 1200,
       SHADING: false,
       COLORFUL: true,
       GUI: false,
@@ -673,56 +755,129 @@ function initFluid(retryCount = 0) {
       SUNRAYS: false,
     });
 
-    // Touch event listeners for seamless Mobile fluid interaction
+    let hasEntered = false;
+    let cachedRect = null;
+    let rectPending = false;
+
+    const updateCachedRect = () => {
+      cachedRect = canvas.getBoundingClientRect();
+      rectPending = false;
+    };
+    updateCachedRect();
+
+    // Cache resize and debounce URL bar height oscillations on mobile Chrome
+    let lastWidth = window.innerWidth;
+    let lastHeight = window.innerHeight;
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      // On mobile Chrome, scrolling past the bottom bar or top bar only alters height by ~56px.
+      // Ignore tiny height changes to prevent costly WebGL texture re-allocations during address bar scroll
+      if (w === lastWidth && Math.abs(h - lastHeight) < 80) {
+        return;
+      }
+      lastWidth = w;
+      lastHeight = h;
+      if (!rectPending) {
+        rectPending = true;
+        requestAnimationFrame(updateCachedRect);
+      }
+    }, { passive: true });
+
+    const dispatchFluidMouse = (type, x, y) => {
+      if (!cachedRect) updateCachedRect();
+      const offsetX = x - cachedRect.left;
+      const offsetY = y - cachedRect.top;
+
+      const evt = new MouseEvent(type, {
+        clientX: x,
+        clientY: y,
+        bubbles: false,
+        cancelable: false
+      });
+      // WebGLFluidCustom specifically reads e.offsetX and e.offsetY
+      Object.defineProperty(evt, 'offsetX', { value: offsetX });
+      Object.defineProperty(evt, 'offsetY', { value: offsetY });
+
+      if (!hasEntered) {
+        hasEntered = true;
+        const enterEvt = new MouseEvent('mouseenter', {
+          clientX: x,
+          clientY: y,
+          bubbles: false,
+          cancelable: false
+        });
+        Object.defineProperty(enterEvt, 'offsetX', { value: offsetX });
+        Object.defineProperty(enterEvt, 'offsetY', { value: offsetY });
+        canvas.dispatchEvent(enterEvt);
+      }
+      canvas.dispatchEvent(evt);
+    };
+
+    // Coalesce high-frequency move/touch events with requestAnimationFrame for smooth 60fps on all devices
+    let rafScheduled = false;
+    let pendingMoves = [];
+
+    const flushFluidEvents = () => {
+      rafScheduled = false;
+      for (let i = 0; i < pendingMoves.length; i++) {
+        const item = pendingMoves[i];
+        dispatchFluidMouse(item.type, item.x, item.y);
+      }
+      pendingMoves.length = 0;
+    };
+
+    const scheduleFluidMove = (type, x, y) => {
+      if (type === 'mousemove') {
+        let found = false;
+        for (let i = 0; i < pendingMoves.length; i++) {
+          if (pendingMoves[i].type === 'mousemove') {
+            pendingMoves[i].x = x;
+            pendingMoves[i].y = y;
+            found = true;
+            break;
+          }
+        }
+        if (!found) pendingMoves.push({ type, x, y });
+      } else {
+        pendingMoves.push({ type, x, y });
+      }
+      if (!rafScheduled) {
+        rafScheduled = true;
+        requestAnimationFrame(flushFluidEvents);
+      }
+    };
+
+    // Touch event listeners for seamless Mobile fluid interaction with rAF batching
     const forwardTouch = (e) => {
       if (!e.touches || e.touches.length === 0) return;
       for (let i = 0; i < e.touches.length; i++) {
         const touch = e.touches[i];
-        const mouseEv = new MouseEvent('mousemove', {
-          clientX: touch.clientX,
-          clientY: touch.clientY,
-          bubbles: true,
-          cancelable: true
-        });
-        canvas.dispatchEvent(mouseEv);
-        window.dispatchEvent(mouseEv);
+        scheduleFluidMove('mousemove', touch.clientX, touch.clientY);
       }
     };
 
     const forwardMouse = (e) => {
       if (e.target !== canvas) {
-        canvas.dispatchEvent(new MouseEvent(e.type, {
-          clientX: e.clientX,
-          clientY: e.clientY,
-          bubbles: true,
-          cancelable: true
-        }));
+        scheduleFluidMove(e.type, e.clientX, e.clientY);
       }
     };
+
     window.addEventListener('mousemove', forwardMouse, { passive: true });
     window.addEventListener('mousedown', forwardMouse, { passive: true });
     window.addEventListener('mouseup', forwardMouse, { passive: true });
     window.addEventListener('touchstart', forwardTouch, { passive: true });
     window.addEventListener('touchmove', forwardTouch, { passive: true });
 
-    // Initial gesture & ambient splats
-    requestAnimationFrame(() => {
+    // Initial gesture after webgl-fluid listener is active (500ms delay internally)
+    setTimeout(() => {
       const rect = canvas.getBoundingClientRect();
       const clientX = rect.width * 0.5;
       const clientY = rect.height * 0.35;
-      window.dispatchEvent(
-        new MouseEvent('mousemove', {
-          clientX,
-          clientY,
-          bubbles: true,
-        })
-      );
-      if (fluidInstance && typeof fluidInstance.splats === 'function') {
-        fluidInstance.splats();
-      } else if (fluidInstance && typeof fluidInstance.multipleSplats === 'function') {
-        fluidInstance.multipleSplats(2);
-      }
-    });
+      dispatchFluidMouse('mouseenter', clientX, clientY);
+      dispatchFluidMouse('mousemove', clientX + 25, clientY + 25);
+      dispatchFluidMouse('mousemove', clientX + 60, clientY + 45);
+    }, 600);
   } catch (e) {
     console.warn('Fluid simulation init failed:', e);
   }
@@ -839,20 +994,20 @@ function setupEventListeners() {
   elements.btnExecuteTvSearch?.addEventListener('click', () => loadTVShows());
   elements.tvCategorySelect.addEventListener('change', () => loadTVShows());
 
-  // Actor Search Form
+  // Artist Search Form
   elements.directSearchForm?.addEventListener('submit', async e => {
     e.preventDefault();
     const query = elements.directSearchInput?.value || '';
     performDirectSearch(query);
   });
 
-  // Actor search clear button
-  const clearActorBtn = document.getElementById('btnClearActorSearch');
-  if (clearActorBtn) {
-    clearActorBtn.addEventListener('click', () => {
+  // Artist search clear button
+  const clearArtistBtn = document.getElementById('btnClearArtistSearch') || document.getElementById('btnClearActorSearch');
+  if (clearArtistBtn) {
+    clearArtistBtn.addEventListener('click', () => {
       if (elements.directSearchInput) {
         elements.directSearchInput.value = '';
-        clearActorBtn.classList.add('hidden');
+        clearArtistBtn.classList.add('hidden');
         elements.directSearchInput.focus();
       }
     });
@@ -860,24 +1015,24 @@ function setupEventListeners() {
 
   if (elements.directSearchInput) {
     elements.directSearchInput.addEventListener('input', () => {
-      if (clearActorBtn) {
+      if (clearArtistBtn) {
         if (elements.directSearchInput.value.trim().length > 0) {
-          clearActorBtn.classList.remove('hidden');
+          clearArtistBtn.classList.remove('hidden');
         } else {
-          clearActorBtn.classList.add('hidden');
+          clearArtistBtn.classList.add('hidden');
         }
       }
     });
   }
 
-  // Quick Actor starter chips
-  document.querySelectorAll('.actor-chip').forEach(chip => {
+  // Quick Artist starter chips
+  document.querySelectorAll('.actor-chip, .artist-chip').forEach(chip => {
     chip.addEventListener('click', () => {
-      const actorName = chip.dataset.actor;
-      if (actorName && elements.directSearchInput) {
-        elements.directSearchInput.value = actorName;
-        if (clearActorBtn) clearActorBtn.classList.remove('hidden');
-        performDirectSearch(actorName);
+      const artistName = chip.dataset.artist || chip.dataset.actor;
+      if (artistName && elements.directSearchInput) {
+        elements.directSearchInput.value = artistName;
+        if (clearArtistBtn) clearArtistBtn.classList.remove('hidden');
+        performDirectSearch(artistName);
       }
     });
   });
@@ -888,6 +1043,9 @@ function setupEventListeners() {
   document.getElementById('close-trailer-modal-btn')?.addEventListener('click', () => {
     document.getElementById('trailer-modal').classList.add('hidden');
     document.getElementById('trailer-iframe').src = '';
+    if (fluidInstance && typeof fluidInstance.resume === 'function' && !document.hidden && state.activeTab !== 'tutorial-view') {
+      fluidInstance.resume();
+    }
   });
 
   // Close modals on clicking overlay backdrop
@@ -897,7 +1055,12 @@ function setupEventListeners() {
         if (e.target === modal) {
           modal.classList.add('hidden');
           const trailerIframe = document.getElementById('trailer-iframe');
-          if (modal.id === 'trailer-modal' && trailerIframe) trailerIframe.src = '';
+          if (modal.id === 'trailer-modal' && trailerIframe) {
+            trailerIframe.src = '';
+            if (fluidInstance && typeof fluidInstance.resume === 'function' && !document.hidden && state.activeTab !== 'tutorial-view') {
+              fluidInstance.resume();
+            }
+          }
         }
       });
     }
@@ -913,6 +1076,9 @@ function setupEventListeners() {
         trailerModal.classList.add('hidden');
         const trailerIframe = document.getElementById('trailer-iframe');
         if (trailerIframe) trailerIframe.src = '';
+        if (fluidInstance && typeof fluidInstance.resume === 'function' && !document.hidden && state.activeTab !== 'tutorial-view') {
+          fluidInstance.resume();
+        }
       }
     }
   });
@@ -970,14 +1136,16 @@ function setupEventListeners() {
   });
 }
 
-// Actor Search & Filmography Engine (Google & TMDB enriched)
-window.actorCreditsCache = [];
+// Artist Search & Filmography Engine (Google & TMDB enriched)
+// Artist Search & Filmography Engine (Google & TMDB enriched)
+window.artistCreditsCache = [];
+window.actorCreditsCache = window.artistCreditsCache;
 
-window.handleActorCardAction = function(index, action, event) {
+window.handleArtistCardAction = function(index, action, event) {
   if (event && event.stopPropagation) {
     event.stopPropagation();
   }
-  const item = window.actorCreditsCache[index];
+  const item = (window.artistCreditsCache || window.actorCreditsCache)[index];
   if (!item) return;
   if (action === 'torrent') {
     openTorrentModal(item, item.mediaType || 'movie');
@@ -987,32 +1155,35 @@ window.handleActorCardAction = function(index, action, event) {
     openDetailView(item, item.mediaType || 'movie');
   }
 };
+window.handleActorCardAction = window.handleArtistCardAction;
 
-window.fetchActorDetailsById = async function(actorId) {
+window.fetchArtistDetailsById = async function(artistId) {
   if (!elements.directSearchResults) return;
   elements.directSearchResults.innerHTML = `
-    <div class="actor-search-loading retro-box">
-      <div class="actor-loading-spinner"></div>
-      <div class="actor-loading-text scramble-text">LOADING ACTOR FILMOGRAPHY & GOOGLE KNOWLEDGE...</div>
+    <div class="actor-search-loading artist-search-loading retro-box">
+      <div class="actor-loading-spinner artist-loading-spinner"></div>
+      <div class="actor-loading-text artist-loading-text scramble-text">LOADING ARTIST FILMOGRAPHY & GOOGLE KNOWLEDGE...</div>
     </div>
   `;
 
   try {
-    const res = await fetch(`/api/actor/${actorId}`);
+    const res = await fetch(`/api/artist/${artistId}`);
     const data = await res.json();
-    if (data.success && data.actor) {
-      renderActorFilmography(data.actor, state.actorMatches || []);
+    const artistData = data.artist || data.actor;
+    if (data.success && artistData) {
+      renderArtistFilmography(artistData, state.artistMatches || state.actorMatches || []);
       elements.directSearchResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
-      showToast('Could not load actor details', 'error');
+      showToast('Could not load artist details', 'error');
     }
   } catch (err) {
-    showToast('Failed to fetch actor profile', 'error');
+    showToast('Failed to fetch artist profile', 'error');
   }
 };
+window.fetchActorDetailsById = window.fetchArtistDetailsById;
 
 function renderFilmographyCards(credits, filter = 'all', sort = 'popularity') {
-  const container = document.getElementById('actorFilmographyGrid');
+  const container = document.getElementById('artistFilmographyGrid') || document.getElementById('actorFilmographyGrid');
   if (!container) return;
 
   let filtered = [...credits];
@@ -1033,6 +1204,7 @@ function renderFilmographyCards(credits, filter = 'all', sort = 'popularity') {
     filtered.sort((a, b) => (a.year || 9999) - (b.year || 9999));
   }
 
+  window.artistCreditsCache = filtered;
   window.actorCreditsCache = filtered;
 
   if (filtered.length === 0) {
@@ -1048,7 +1220,7 @@ function renderFilmographyCards(credits, filter = 'all', sort = 'popularity') {
     const characterDisplay = item.character && item.character !== 'Self / Featured' ? `as ${escapeHtml(item.character)}` : '';
 
     return `
-      <div class="movie-card retro-box actor-filmo-card" data-index="${index}" data-media-id="${item.id}" data-media-type="${item.mediaType}" tabindex="0" role="button" aria-label="${escapeHtml(item.title)} details" onclick="handleActorCardAction(${index}, 'detail', event)">
+      <div class="movie-card retro-box actor-filmo-card artist-filmo-card" data-index="${index}" data-media-id="${item.id}" data-media-type="${item.mediaType}" tabindex="0" role="button" aria-label="${escapeHtml(item.title)} details" onclick="handleArtistCardAction(${index}, 'detail', event)">
         <div class="movie-poster-wrap">
           <img src="${item.poster || 'https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?w=500'}" 
                alt="${escapeHtml(item.title)}" 
@@ -1064,13 +1236,13 @@ function renderFilmographyCards(credits, filter = 'all', sort = 'popularity') {
             <h3 class="movie-card-title scramble-text" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</h3>
             <span class="movie-card-year">${yearDisplay}</span>
           </div>
-          ${characterDisplay ? `<div class="actor-card-role" title="${characterDisplay}">${characterDisplay}</div>` : ''}
-          <div class="actor-card-actions">
-            <button type="button" class="retro-btn actor-card-btn filmo-torrent-btn" onclick="event.stopPropagation(); handleActorCardAction(${index}, 'torrent', event)">
+          ${characterDisplay ? `<div class="actor-card-role artist-card-role" title="${characterDisplay}">${characterDisplay}</div>` : ''}
+          <div class="actor-card-actions artist-card-actions">
+            <button type="button" class="retro-btn actor-card-btn artist-card-btn filmo-torrent-btn" onclick="event.stopPropagation(); handleArtistCardAction(${index}, 'torrent', event)">
               <span class="material-symbols-outlined" style="font-size:14px;">download</span>
               <span>TORRENTS</span>
             </button>
-            <button type="button" class="retro-btn actor-card-btn filmo-trailer-btn" onclick="event.stopPropagation(); handleActorCardAction(${index}, 'trailer', event)" title="Play Trailer">
+            <button type="button" class="retro-btn actor-card-btn artist-card-btn filmo-trailer-btn" onclick="event.stopPropagation(); handleArtistCardAction(${index}, 'trailer', event)" title="Play Trailer">
               <span class="material-symbols-outlined" style="font-size:14px;">play_arrow</span>
               <span>TRAILER</span>
             </button>
@@ -1081,36 +1253,36 @@ function renderFilmographyCards(credits, filter = 'all', sort = 'popularity') {
   }).join('');
 
   // Wire card click directly to open detail view (while preventing clicks inside buttons)
-  container.querySelectorAll('.actor-filmo-card').forEach(card => {
+  container.querySelectorAll('.actor-filmo-card, .artist-filmo-card').forEach(card => {
     card.addEventListener('click', (e) => {
       if (e.target.closest('button')) return;
       const index = parseInt(card.dataset.index, 10);
-      handleActorCardAction(index, 'detail', e);
+      handleArtistCardAction(index, 'detail', e);
     });
     card.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         if (e.target.closest('button')) return;
         e.preventDefault();
         const index = parseInt(card.dataset.index, 10);
-        handleActorCardAction(index, 'detail', e);
+        handleArtistCardAction(index, 'detail', e);
       }
     });
   });
 }
 
-function renderActorFilmography(actor, matches = [], originalQuery = '') {
+function renderArtistFilmography(artist, matches = [], originalQuery = '') {
   if (!elements.directSearchResults) return;
 
-  const totalCredits = actor.credits?.length || 0;
-  const movieCredits = (actor.credits || []).filter(c => c.mediaType === 'movie');
-  const tvCredits = (actor.credits || []).filter(c => c.mediaType === 'tv');
+  const totalCredits = artist.credits?.length || 0;
+  const movieCredits = (artist.credits || []).filter(c => c.mediaType === 'movie');
+  const tvCredits = (artist.credits || []).filter(c => c.mediaType === 'tv');
 
   const cleanOriginal = (originalQuery || '').trim();
-  const hasTypo = cleanOriginal && actor.name.toLowerCase() !== cleanOriginal.toLowerCase();
+  const hasTypo = cleanOriginal && artist.name.toLowerCase() !== cleanOriginal.toLowerCase();
   const typoHtml = hasTypo ? `
-    <div class="actor-typo-notice">
+    <div class="actor-typo-notice artist-typo-notice">
       <span class="material-symbols-outlined" style="font-size: 16px; color: #000;">auto_fix_high</span>
-      <span>Spelling mistake tolerated: showing <strong>${escapeHtml(actor.name)}</strong> for "<em>${escapeHtml(cleanOriginal)}</em>"</span>
+      <span>Spelling mistake tolerated: showing <strong>${escapeHtml(artist.name)}</strong> for "<em>${escapeHtml(cleanOriginal)}</em>"</span>
     </div>
   ` : '';
 
@@ -1118,11 +1290,11 @@ function renderActorFilmography(actor, matches = [], originalQuery = '') {
   let matchesHtml = '';
   if (matches && matches.length > 1) {
     matchesHtml = `
-      <div class="actor-alt-matches">
+      <div class="actor-alt-matches artist-alt-matches">
         <span class="alt-matches-label">ALL MATCHES:</span>
         <div class="alt-matches-scroll">
           ${matches.map(m => `
-            <button type="button" class="alt-match-btn ${m.id === actor.id ? 'active' : ''}" onclick="fetchActorDetailsById(${m.id})">
+            <button type="button" class="alt-match-btn ${m.id === artist.id ? 'active' : ''}" onclick="fetchArtistDetailsById(${m.id})">
               ${escapeHtml(m.name)}
               ${m.knownFor && m.knownFor.length ? `<span class="alt-match-sub">(${escapeHtml(m.knownFor[0])})</span>` : ''}
             </button>
@@ -1133,38 +1305,38 @@ function renderActorFilmography(actor, matches = [], originalQuery = '') {
   }
 
   // Google Knowledge data
-  const googleData = actor.google || {};
-  const googleDesc = googleData.description || 'Film & Television Actor';
-  const googleExtract = googleData.extract || actor.biography || '';
+  const googleData = artist.google || {};
+  const googleDesc = googleData.description || 'Film & Television Artist';
+  const googleExtract = googleData.extract || artist.biography || '';
   const truncatedExtract = googleExtract.length > 320 ? googleExtract.slice(0, 320) + '...' : googleExtract;
 
-  const googleSearchUrl = googleData.searchUrl || `https://www.google.com/search?q=${encodeURIComponent(actor.name + ' actor')}`;
-  const googleNewsUrl = googleData.newsUrl || `https://www.google.com/search?q=${encodeURIComponent(actor.name + ' actor')}&tbm=nws`;
-  const imdbUrl = actor.external?.imdbUrl;
-  const tmdbUrl = actor.external?.tmdbUrl;
+  const googleSearchUrl = googleData.searchUrl || `https://www.google.com/search?q=${encodeURIComponent(artist.name + ' artist')}`;
+  const googleNewsUrl = googleData.newsUrl || `https://www.google.com/search?q=${encodeURIComponent(artist.name + ' artist')}&tbm=nws`;
+  const imdbUrl = artist.external?.imdbUrl;
+  const tmdbUrl = artist.external?.tmdbUrl;
 
   const html = `
-    <div class="actor-profile-card retro-box">
+    <div class="actor-profile-card artist-profile-card retro-box">
       ${typoHtml}
       ${matchesHtml}
-      <div class="actor-profile-layout">
-        <div class="actor-avatar-col">
-          <div class="actor-avatar-frame">
-            <img src="${actor.profile || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500'}" 
-                 alt="${escapeHtml(actor.name)}" class="actor-avatar-img" loading="eager" />
+      <div class="actor-profile-layout artist-profile-layout">
+        <div class="actor-avatar-col artist-avatar-col">
+          <div class="actor-avatar-frame artist-avatar-frame">
+            <img src="${artist.profile || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500'}" 
+                 alt="${escapeHtml(artist.name)}" class="actor-avatar-img artist-avatar-img" loading="eager" />
           </div>
-          <div class="actor-stat-pill">
+          <div class="actor-stat-pill artist-stat-pill">
             <span class="material-symbols-outlined" style="font-size: 15px;">movie</span>
             <span>${totalCredits} CREDITS</span>
           </div>
         </div>
 
-        <div class="actor-info-col">
+        <div class="actor-info-col artist-info-col">
           <div class="actor-header-line">
-            <div class="actor-identity">
-              <h1 class="actor-name scramble-text">${escapeHtml(actor.name)}</h1>
-              <div class="actor-subtitle-row">
-                <span class="actor-badge google-badge">
+            <div class="actor-identity artist-identity">
+              <h1 class="actor-name artist-name scramble-text">${escapeHtml(artist.name)}</h1>
+              <div class="actor-subtitle-row artist-subtitle-row">
+                <span class="actor-badge artist-badge google-badge">
                   <svg width="12" height="12" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 4px;">
                     <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
                     <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"/>
@@ -1173,55 +1345,55 @@ function renderActorFilmography(actor, matches = [], originalQuery = '') {
                   </svg>
                   GOOGLE KNOWLEDGE
                 </span>
-                <span class="actor-badge tmdb-badge">TMDB VERIFIED</span>
-                <span class="actor-occupation">${escapeHtml(googleDesc)}</span>
+                <span class="actor-badge artist-badge tmdb-badge">TMDB VERIFIED</span>
+                <span class="actor-occupation artist-occupation">${escapeHtml(googleDesc)}</span>
               </div>
             </div>
           </div>
 
           <!-- Metadata details -->
-          <div class="actor-meta-grid">
-            ${actor.age ? `
-              <div class="actor-meta-item">
+          <div class="actor-meta-grid artist-meta-grid">
+            ${artist.age ? `
+              <div class="actor-meta-item artist-meta-item">
                 <span class="meta-label">BORN:</span>
-                <span class="meta-value">${escapeHtml(actor.birthday || 'N/A')} (${actor.age} yrs${actor.deathday ? ' • deceased' : ''})</span>
+                <span class="meta-value">${escapeHtml(artist.birthday || 'N/A')} (${artist.age} yrs${artist.deathday ? ' • deceased' : ''})</span>
               </div>` : ''}
-            ${actor.placeOfBirth ? `
-              <div class="actor-meta-item">
+            ${artist.placeOfBirth ? `
+              <div class="actor-meta-item artist-meta-item">
                 <span class="meta-label">BIRTHPLACE:</span>
-                <span class="meta-value">${escapeHtml(actor.placeOfBirth)}</span>
+                <span class="meta-value">${escapeHtml(artist.placeOfBirth)}</span>
               </div>` : ''}
-            <div class="actor-meta-item">
+            <div class="actor-meta-item artist-meta-item">
               <span class="meta-label">KNOWN FOR:</span>
-              <span class="meta-value">${escapeHtml(actor.knownForDepartment || 'Acting')}</span>
+              <span class="meta-value">${escapeHtml(artist.knownForDepartment || 'Performing Arts')}</span>
             </div>
           </div>
 
           <!-- Bio / Google Knowledge Summary -->
-          <div class="actor-bio-box">
-            <p class="actor-bio-text" id="actorBioText">${escapeHtml(truncatedExtract)}</p>
+          <div class="actor-bio-box artist-bio-box">
+            <p class="actor-bio-text artist-bio-text" id="artistBioText">${escapeHtml(truncatedExtract)}</p>
             ${googleExtract.length > 320 ? `
-              <button type="button" class="actor-bio-more-btn" id="btnToggleBio">READ MORE ▼</button>
+              <button type="button" class="actor-bio-more-btn artist-bio-more-btn" id="btnToggleBio">READ MORE ▼</button>
             ` : ''}
           </div>
 
           <!-- Google & External Action Links -->
-          <div class="actor-links-row">
-            <a href="${googleSearchUrl}" target="_blank" rel="noopener noreferrer" class="retro-btn actor-external-btn google-btn-link" title="Explore on Google">
+          <div class="actor-links-row artist-links-row">
+            <a href="${googleSearchUrl}" target="_blank" rel="noopener noreferrer" class="retro-btn actor-external-btn artist-external-btn google-btn-link" title="Explore on Google">
               <span class="material-symbols-outlined" style="font-size: 16px;">search</span>
               <span>GOOGLE SEARCH</span>
             </a>
-            <a href="${googleNewsUrl}" target="_blank" rel="noopener noreferrer" class="retro-btn actor-external-btn" title="Latest Actor News on Google">
+            <a href="${googleNewsUrl}" target="_blank" rel="noopener noreferrer" class="retro-btn actor-external-btn artist-external-btn" title="Latest Artist News on Google">
               <span class="material-symbols-outlined" style="font-size: 16px;">newspaper</span>
               <span>GOOGLE NEWS</span>
             </a>
             ${imdbUrl ? `
-              <a href="${imdbUrl}" target="_blank" rel="noopener noreferrer" class="retro-btn actor-external-btn imdb-btn-link" title="View IMDb Profile">
+              <a href="${imdbUrl}" target="_blank" rel="noopener noreferrer" class="retro-btn actor-external-btn artist-external-btn imdb-btn-link" title="View IMDb Profile">
                 <span>IMDb ↗</span>
               </a>
             ` : ''}
             ${tmdbUrl ? `
-              <a href="${tmdbUrl}" target="_blank" rel="noopener noreferrer" class="retro-btn actor-external-btn tmdb-btn-link" title="View TMDB Page">
+              <a href="${tmdbUrl}" target="_blank" rel="noopener noreferrer" class="retro-btn actor-external-btn artist-external-btn tmdb-btn-link" title="View TMDB Page">
                 <span>TMDB ↗</span>
               </a>
             ` : ''}
@@ -1239,8 +1411,8 @@ function renderActorFilmography(actor, matches = [], originalQuery = '') {
       </div>
 
       <div class="filmography-sort-wrapper">
-        <label for="actorFilmoSort" class="filmo-sort-label">SORT:</label>
-        <select id="actorFilmoSort" class="styled-select filmo-sort-select">
+        <label for="artistFilmoSort" class="filmo-sort-label">SORT:</label>
+        <select id="artistFilmoSort" class="styled-select filmo-sort-select">
           <option value="popularity">Most Popular</option>
           <option value="rating">Highest Rated</option>
           <option value="newest">Newest Releases</option>
@@ -1250,14 +1422,14 @@ function renderActorFilmography(actor, matches = [], originalQuery = '') {
     </div>
 
     <!-- Filmography Grid -->
-    <div id="actorFilmographyGrid" class="movie-grid actor-filmography-grid"></div>
+    <div id="artistFilmographyGrid" class="movie-grid actor-filmography-grid artist-filmography-grid"></div>
   `;
 
   elements.directSearchResults.innerHTML = html;
 
   // Bio toggle
   const bioToggle = document.getElementById('btnToggleBio');
-  const bioText = document.getElementById('actorBioText');
+  const bioText = document.getElementById('artistBioText') || document.getElementById('actorBioText');
   let expanded = false;
   if (bioToggle && bioText) {
     bioToggle.addEventListener('click', () => {
@@ -1273,7 +1445,7 @@ function renderActorFilmography(actor, matches = [], originalQuery = '') {
   }
 
   // Render initial filmography cards
-  renderFilmographyCards(actor.credits || [], 'all', 'popularity');
+  renderFilmographyCards(artist.credits || [], 'all', 'popularity');
 
   // Filter tabs listeners
   const tabs = elements.directSearchResults.querySelectorAll('.filmo-tab');
@@ -1281,65 +1453,74 @@ function renderActorFilmography(actor, matches = [], originalQuery = '') {
     tab.addEventListener('click', () => {
       tabs.forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      const sortVal = document.getElementById('actorFilmoSort')?.value || 'popularity';
-      renderFilmographyCards(actor.credits || [], tab.dataset.filter, sortVal);
+      const sortSelect = document.getElementById('artistFilmoSort') || document.getElementById('actorFilmoSort');
+      const sortVal = sortSelect?.value || 'popularity';
+      renderFilmographyCards(artist.credits || [], tab.dataset.filter, sortVal);
     });
   });
 
   // Sort listener
-  const sortSelect = document.getElementById('actorFilmoSort');
+  const sortSelect = document.getElementById('artistFilmoSort') || document.getElementById('actorFilmoSort');
   if (sortSelect) {
     sortSelect.addEventListener('change', () => {
       const activeFilter = elements.directSearchResults.querySelector('.filmo-tab.active')?.dataset.filter || 'all';
-      renderFilmographyCards(actor.credits || [], activeFilter, sortSelect.value);
+      renderFilmographyCards(artist.credits || [], activeFilter, sortSelect.value);
     });
   }
 }
+window.renderArtistFilmography = renderArtistFilmography;
+window.renderActorFilmography = renderArtistFilmography;
 
 async function performDirectSearch(query, minSeeds = 0, category = '200') {
   const cleanQuery = (query || '').trim();
   if (!cleanQuery) {
-    showToast('Please enter an actor name', 'error');
+    showToast('Please enter an artist name', 'error');
     return;
   }
 
   if (elements.directSearchResults) {
     elements.directSearchResults.innerHTML = `
-      <div class="actor-search-loading retro-box">
-        <div class="actor-loading-spinner"></div>
-        <div class="actor-loading-text scramble-text">SEARCHING GOOGLE & TMDB FOR "${escapeHtml(cleanQuery.toUpperCase())}"...</div>
+      <div class="actor-search-loading artist-search-loading retro-box">
+        <div class="actor-loading-spinner artist-loading-spinner"></div>
+        <div class="actor-loading-text artist-loading-text scramble-text">SEARCHING GOOGLE & TMDB FOR "${escapeHtml(cleanQuery.toUpperCase())}"...</div>
       </div>
     `;
   }
 
   try {
-    const res = await fetch(`/api/actor?q=${encodeURIComponent(cleanQuery)}`);
+    const res = await fetch(`/api/artist?q=${encodeURIComponent(cleanQuery)}`);
     const data = await res.json();
+    const artistData = data.artist || data.actor;
 
-    if (data.success && data.actor) {
-      state.currentActor = data.actor;
+    if (data.success && artistData) {
+      state.currentArtist = artistData;
+      state.currentActor = artistData;
+      state.artistMatches = data.matches || [];
       state.actorMatches = data.matches || [];
-      renderActorFilmography(data.actor, data.matches || [], cleanQuery);
-      if (data.correctedQuery || (data.actor.name && data.actor.name.toLowerCase() !== cleanQuery.toLowerCase())) {
-        showToast(`Tolerated spelling mistake: showing ${data.actor.name} 🎬`, 'success');
+      renderArtistFilmography(artistData, data.matches || [], cleanQuery);
+      if (elements.directSearchResults) {
+        elements.directSearchResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      if (data.correctedQuery || (artistData.name && artistData.name.toLowerCase() !== cleanQuery.toLowerCase())) {
+        showToast(`Tolerated spelling mistake: showing ${artistData.name} 🎬`, 'success');
       } else {
-        showToast(`Found filmography for ${data.actor.name} 🎬`, 'success');
+        showToast(`Found filmography for ${artistData.name} 🎬`, 'success');
       }
     } else {
       // Empty state with suggestions and direct torrent fallback
       if (elements.directSearchResults) {
         elements.directSearchResults.innerHTML = `
-          <div class="actor-empty-state retro-box">
+          <div class="actor-empty-state artist-empty-state retro-box">
             <span class="material-symbols-outlined" style="font-size: 48px; margin-bottom: 12px; opacity: 0.7;">person_off</span>
-            <h3 class="scramble-text" style="font-size: 1.4rem; margin-bottom: 8px;">NO ACTOR FOUND MATCHING "${escapeHtml(cleanQuery)}"</h3>
+            <h3 class="scramble-text" style="font-size: 1.4rem; margin-bottom: 8px;">NO ARTIST FOUND MATCHING "${escapeHtml(cleanQuery)}"</h3>
             <p style="font-family: var(--font-mono); font-size: 13px; max-width: 500px; margin: 0 auto 20px auto; opacity: 0.85;">
-              We couldn't find an actor matching that name. Check spelling or try one of the popular actors below.
+              We couldn't find an artist matching that name. Check spelling or try one of the popular artists below.
             </p>
-            <div class="actor-chips-row" style="justify-content: center; margin-bottom: 24px;">
-              <button type="button" class="actor-chip" onclick="performDirectSearch('Cillian Murphy')">Cillian Murphy</button>
-              <button type="button" class="actor-chip" onclick="performDirectSearch('Keanu Reeves')">Keanu Reeves</button>
-              <button type="button" class="actor-chip" onclick="performDirectSearch('Zendaya')">Zendaya</button>
-              <button type="button" class="actor-chip" onclick="performDirectSearch('Pedro Pascal')">Pedro Pascal</button>
+            <div class="actor-chips-row artist-chips-row" style="justify-content: center; margin-bottom: 24px;">
+              <button type="button" class="actor-chip artist-chip" onclick="performDirectSearch('Cillian Murphy')">Cillian Murphy</button>
+              <button type="button" class="actor-chip artist-chip" onclick="performDirectSearch('Keanu Reeves')">Keanu Reeves</button>
+              <button type="button" class="actor-chip artist-chip" onclick="performDirectSearch('Zendaya')">Zendaya</button>
+              <button type="button" class="actor-chip artist-chip" onclick="performDirectSearch('Pedro Pascal')">Pedro Pascal</button>
             </div>
             <div style="border-top: 1.5px dashed #000; padding-top: 16px; margin-top: 10px;">
               <span style="font-family: var(--font-mono); font-size: 12px; margin-right: 12px;">Looking for raw torrent releases instead?</span>
@@ -1351,14 +1532,14 @@ async function performDirectSearch(query, minSeeds = 0, category = '200') {
           </div>
         `;
       }
-      showToast('No matching actor found', 'info');
+      showToast('No matching artist found', 'info');
     }
   } catch (err) {
     if (elements.directSearchResults) {
       elements.directSearchResults.innerHTML = `
-        <div class="actor-empty-state retro-box">
+        <div class="actor-empty-state artist-empty-state retro-box">
           <span class="material-symbols-outlined" style="font-size: 40px; color: #ff3333; margin-bottom: 10px;">error</span>
-          <h3 style="margin-bottom: 8px;">Failed to execute actor search</h3>
+          <h3 style="margin-bottom: 8px;">Failed to execute artist search</h3>
           <p style="font-family: var(--font-mono); font-size: 12px; opacity: 0.8;">Network error or server unavailable. Please try again.</p>
         </div>
       `;
@@ -1370,7 +1551,11 @@ async function performDirectSearch(query, minSeeds = 0, category = '200') {
 // Fallback search for raw torrent releases if user queries a direct filename
 window.searchRawTorrentsFallback = async function(query) {
   if (!elements.directSearchResults) return;
-  elements.directSearchResults.innerHTML = '<div style="padding:28px;text-align:center;font-family:var(--font-mono);opacity:0.8;">Searching releases on The Cine Bay...</div>';
+  elements.directSearchResults.innerHTML = getTorrentLoadingHtml(
+    `SEARCHING THE CINE BAY FOR "${(query || '').toUpperCase()}"...`,
+    'Connecting to DHT indexer and querying raw torrent releases...'
+  );
+  if (window.initScrambler) initScrambler();
 
   try {
     const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&minSeeds=0&category=200`);
@@ -1392,7 +1577,7 @@ window.searchRawTorrentsFallback = async function(query) {
       elements.directSearchResults.innerHTML = `<div style="padding:28px;text-align:center;font-family:var(--font-mono);">No torrents found for "${escapeHtml(query)}".</div>`;
     }
   } catch (e) {
-    elements.directSearchResults.innerHTML = '<div style="padding:28px;text-align:center;font-family:var(--font-mono);">Failed to load torrent releases.</div>';
+    elements.directSearchResults.innerHTML = '<div style="padding:28px;text-align:center;font-family:var(--font-mono);color:#ff3333;">Failed to load torrent releases.</div>';
   }
 };
 
@@ -1798,10 +1983,24 @@ function generateTorrentRows(torrents, searchTitle, mediaObj = {}) {
 }
 
 async function loadTVSeasonsAccordion(m) {
-  elements.modalTorrentList.innerHTML = 'Loading Seasons...';
+  elements.modalTorrentList.innerHTML = getTorrentLoadingHtml(
+    `RETRIEVING ${m.title.toUpperCase()} SEASONS...`,
+    'Loading season catalog from TMDB & metadata indexers...'
+  );
+  if (window.initScrambler) initScrambler();
+
+  const fetchStart = Date.now();
+  const MIN_ANIMATION_MS = 650;
+
   try {
     const res = await fetch(`/api/details?id=${m.id}&type=tv`);
     const data = await res.json();
+
+    const elapsed = Date.now() - fetchStart;
+    if (elapsed < MIN_ANIMATION_MS) {
+      await new Promise(r => setTimeout(r, MIN_ANIMATION_MS - elapsed));
+    }
+
     if (data.success && data.details && data.details.seasons) {
       const seasons = data.details.seasons.filter(s => s.season_number > 0);
       elements.modalTorrentList.innerHTML = seasons.map(s => `
@@ -1813,10 +2012,10 @@ async function loadTVSeasonsAccordion(m) {
         </div>
       `).join('');
     } else {
-      elements.modalTorrentList.innerHTML = '<div style="padding:20px;text-align:center;">No seasons found.</div>';
+      elements.modalTorrentList.innerHTML = '<div style="padding:20px;text-align:center;font-family:var(--font-mono);">No seasons found.</div>';
     }
   } catch (err) {
-    elements.modalTorrentList.innerHTML = '<div style="padding:20px;text-align:center;">Failed to load seasons.</div>';
+    elements.modalTorrentList.innerHTML = '<div style="padding:20px;text-align:center;font-family:var(--font-mono);color:#ff3333;">Failed to load seasons.</div>';
   }
 }
 
@@ -1832,10 +2031,24 @@ window.toggleSeasonAccordion = async function(seasonNumber, mStr) {
   
   content.classList.add('expanded');
   if (content.innerHTML === '') {
-    content.innerHTML = 'Loading episodes...';
+    content.innerHTML = getTorrentLoadingHtml(
+      `LOADING ${m.title.toUpperCase()} SEASON ${seasonNumber} EPISODES...`,
+      'Retrieving verified episode listings, air dates & release metadata...'
+    );
+    if (window.initScrambler) initScrambler();
+
+    const fetchStart = Date.now();
+    const MIN_ANIMATION_MS = 650;
+
     try {
       const res = await fetch(`/api/tv/episodes?id=${m.id}&season=${seasonNumber}`);
       const data = await res.json();
+
+      const elapsed = Date.now() - fetchStart;
+      if (elapsed < MIN_ANIMATION_MS) {
+        await new Promise(r => setTimeout(r, MIN_ANIMATION_MS - elapsed));
+      }
+
       if (data.success && data.episodes && data.episodes.episodes) {
         const now = new Date();
         content.innerHTML = data.episodes.episodes.map(e => {
@@ -1853,10 +2066,10 @@ window.toggleSeasonAccordion = async function(seasonNumber, mStr) {
           `;
         }).join('');
       } else {
-        content.innerHTML = 'No episodes found.';
+        content.innerHTML = '<div style="padding:10px;text-align:center;font-family:var(--font-mono);">No episodes found.</div>';
       }
     } catch (err) {
-      content.innerHTML = 'Failed to load episodes.';
+      content.innerHTML = '<div style="padding:10px;text-align:center;font-family:var(--font-mono);color:#ff3333;">Failed to load episodes.</div>';
     }
   }
 };
@@ -1873,18 +2086,31 @@ window.toggleEpisodeAccordion = async function(seasonNumber, episodeNumber, mStr
   
   content.classList.add('expanded');
   if (content.innerHTML === '') {
-    content.innerHTML = 'Loading torrents...';
     const searchTitle = `${m.title} S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`;
+    content.innerHTML = getTorrentLoadingHtml(
+      `SCANNING SWARM FOR ${searchTitle}...`,
+      'Querying TV release groups & verified seeders...'
+    );
+    if (window.initScrambler) initScrambler();
+
+    const fetchStart = Date.now();
+    const MIN_ANIMATION_MS = 650;
     
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(searchTitle)}&minSeeds=0&category=205`);
       const data = await res.json();
+
+      const elapsed = Date.now() - fetchStart;
+      if (elapsed < MIN_ANIMATION_MS) {
+        await new Promise(r => setTimeout(r, MIN_ANIMATION_MS - elapsed));
+      }
+
       if (data.success) {
         const epStr = `s${String(seasonNumber).padStart(2, '0')}e${String(episodeNumber).padStart(2, '0')}`;
-        const filteredTorrents = data.torrents.filter(t => t.name.toLowerCase().includes(epStr));
+        const filteredTorrents = (data.torrents || []).filter(t => t.name.toLowerCase().includes(epStr));
         
         if (filteredTorrents.length === 0) {
-           content.innerHTML = '<div style="padding:10px;text-align:center;">No torrents found matching this exact episode.</div>';
+           content.innerHTML = '<div style="padding:14px;text-align:center;font-family:var(--font-mono);font-size:12px;">No torrents found matching this exact episode.</div>';
         } else {
           content.innerHTML = `
             <div class="torrent-list-header" style="display:flex; margin-bottom:10px;">
@@ -1897,7 +2123,7 @@ window.toggleEpisodeAccordion = async function(seasonNumber, episodeNumber, mStr
         }
       }
     } catch (err) {
-      content.innerHTML = 'Failed to fetch torrents.';
+      content.innerHTML = '<div style="padding:14px;text-align:center;font-family:var(--font-mono);font-size:12px;color:#ff3333;">Failed to fetch torrents.</div>';
     }
   }
 };
@@ -1906,6 +2132,11 @@ async function playTrailer(id, type) {
   const modal = document.getElementById('trailer-modal');
   const iframe = document.getElementById('trailer-iframe');
   const loader = document.getElementById('trailer-loader');
+
+  // Pause background fluid simulation during video playback to optimize GPU/CPU
+  if (fluidInstance && typeof fluidInstance.pause === 'function') {
+    fluidInstance.pause();
+  }
 
   // Trigger popup immediately and show loader
   modal.classList.remove('hidden');
@@ -1924,10 +2155,16 @@ async function playTrailer(id, type) {
       iframe.src = `https://www.youtube.com/embed/${data.details.trailerKey}?autoplay=1`;
     } else {
       modal.classList.add('hidden');
+      if (fluidInstance && typeof fluidInstance.resume === 'function' && !document.hidden && state.activeTab !== 'tutorial-view') {
+        fluidInstance.resume();
+      }
       showToast('No trailer found', 'error');
     }
   } catch (err) {
     modal.classList.add('hidden');
+    if (fluidInstance && typeof fluidInstance.resume === 'function' && !document.hidden && state.activeTab !== 'tutorial-view') {
+      fluidInstance.resume();
+    }
     showToast('Failed to load trailer', 'error');
   }
 }
@@ -1962,18 +2199,46 @@ async function openTorrentModal(m, type, isShareMode = false) {
 }
 
 async function fetchTorrentsForModal(searchTitle, type, mediaObj = {}, isShareMode = false) {
-  elements.modalTorrentList.innerHTML = '<div style="padding:24px;text-align:center;font-family:var(--font-mono);">Loading torrents...</div>';
+  elements.modalTorrentList.innerHTML = getTorrentLoadingHtml(
+    `SCANNING SWARM FOR "${searchTitle.toUpperCase()}"...`,
+    'Connecting to The Cine Bay & P2P DHT nodes to filter high-seed releases...'
+  );
+  if (window.initScrambler) initScrambler();
+
+  const fetchStart = Date.now();
+  const MIN_ANIMATION_MS = 650;
+
   try {
     const category = type === 'tv' ? '205' : '200';
     const res = await fetch(`/api/search?q=${encodeURIComponent(searchTitle)}&minSeeds=0&category=${category}`);
     const data = await res.json();
+
+    const elapsed = Date.now() - fetchStart;
+    if (elapsed < MIN_ANIMATION_MS) {
+      await new Promise(r => setTimeout(r, MIN_ANIMATION_MS - elapsed));
+    }
+
     if (data.success && data.torrents && data.torrents.length > 0) {
       renderTorrentRows(elements.modalTorrentList, data.torrents, searchTitle, mediaObj, isShareMode);
     } else {
-      elements.modalTorrentList.innerHTML = '<div style="padding:24px;text-align:center;font-family:var(--font-mono);">No torrents found.</div>';
+      elements.modalTorrentList.innerHTML = `
+        <div class="torrent-empty-state retro-box">
+          <span class="material-symbols-outlined" style="font-size: 36px; opacity: 0.7; margin-bottom: 8px;">search_off</span>
+          <div class="scramble-text" style="font-weight: 700; font-size: 1.1rem; margin-bottom: 6px;">NO RELEASES FOUND</div>
+          <div style="font-family: var(--font-mono); font-size: 12px; opacity: 0.8;">No verified swarm torrents found matching "${escapeHtml(searchTitle)}".</div>
+        </div>
+      `;
+      if (window.initScrambler) initScrambler();
     }
   } catch (err) {
-    elements.modalTorrentList.innerHTML = '<div style="padding:24px;text-align:center;font-family:var(--font-mono);">Failed to fetch torrents.</div>';
+    elements.modalTorrentList.innerHTML = `
+      <div class="torrent-empty-state retro-box error">
+        <span class="material-symbols-outlined" style="font-size: 36px; color: #ff3333; margin-bottom: 8px;">error</span>
+        <div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 6px;">FAILED TO FETCH TORRENTS</div>
+        <div style="font-family: var(--font-mono); font-size: 12px; opacity: 0.8; margin-bottom: 12px;">Swarm network indexer encountered an issue.</div>
+        <button type="button" class="retro-btn" onclick="fetchTorrentsForModal('${escapeHtml(searchTitle)}', '${type}', {}, ${isShareMode})">RETRY SCAN</button>
+      </div>
+    `;
   }
 }
 

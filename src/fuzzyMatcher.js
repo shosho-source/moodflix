@@ -229,7 +229,7 @@ export class FuzzyMatcher {
     try {
       const url = `https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(cleanRaw)}`;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3500);
+      const timeout = setTimeout(() => controller.abort(), 6000);
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeout);
 
@@ -238,7 +238,7 @@ export class FuzzyMatcher {
         const suggestions = (data && Array.isArray(data[1])) ? data[1] : [];
         if (suggestions.length === 0) return null;
 
-        const suffixRegex = /\s+(age|movie|movies|cast|series|tv show|tv series|ending|meaning|full movie|download|net worth|wife|husband|actor|actress|wallpaper|interview|imdb|trailer|release date)$/i;
+        const suffixRegex = /\s+(age|movie|movies|cast|series|tv show|tv series|ending|meaning|full movie|download|net worth|wife|husband|artist|performer|actor|actress|wallpaper|interview|imdb|trailer|release date)$/i;
 
         const candidates = suggestions.map(s => {
           let clean = s.replace(suffixRegex, '').trim();

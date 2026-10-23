@@ -758,9 +758,9 @@ export class TMDB {
   }
 
   /**
-   * Search actors and performers on TMDB.
+   * Search artists and performers on TMDB.
    */
-  static async searchActors(query, options = {}) {
+  static async searchArtists(query, options = {}) {
     if (!query || !query.trim()) return [];
     const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
     if (!hasAuth) return [];
@@ -778,7 +778,7 @@ export class TMDB {
         results = data.results || [];
       }
 
-      // Typo tolerance: If TMDB returns 0 matches for actor query, try spell suggestion!
+      // Typo tolerance: If TMDB returns 0 matches for artist query, try spell suggestion!
       let correctedQuery = null;
       if (results.length === 0) {
         const corrected = await FuzzyMatcher.suggestCorrection(rawQuery);
@@ -812,23 +812,30 @@ export class TMDB {
         correctedQuery: correctedQuery || null
       }));
     } catch (err) {
-      console.warn('Actor search error:', err);
+      console.warn('Artist search error:', err);
       return [];
     }
   }
 
   /**
-   * Fetch Google Knowledge & Wikipedia summary for an actor.
+   * Backward-compatible alias for searchArtists.
    */
-  static async getGoogleKnowledgeData(actorName) {
-    const cleanName = (actorName || '').trim();
+  static async searchActors(query, options = {}) {
+    return TMDB.searchArtists(query, options);
+  }
+
+  /**
+   * Fetch Google Knowledge & Wikipedia summary for an artist.
+   */
+  static async getGoogleKnowledgeData(artistName) {
+    const cleanName = (artistName || '').trim();
     if (!cleanName) return null;
 
     const baseResult = {
-      searchUrl: `https://www.google.com/search?q=${encodeURIComponent(cleanName + ' actor')}`,
-      newsUrl: `https://www.google.com/search?q=${encodeURIComponent(cleanName + ' actor')}&tbm=nws`,
-      imagesUrl: `https://www.google.com/search?q=${encodeURIComponent(cleanName + ' actor')}&tbm=isch`,
-      description: 'Film & Television Actor',
+      searchUrl: `https://www.google.com/search?q=${encodeURIComponent(cleanName + ' artist')}`,
+      newsUrl: `https://www.google.com/search?q=${encodeURIComponent(cleanName + ' artist')}&tbm=nws`,
+      imagesUrl: `https://www.google.com/search?q=${encodeURIComponent(cleanName + ' artist')}&tbm=isch`,
+      description: 'Film & Television Artist',
       extract: '',
       wikiUrl: '',
       source: 'Google Knowledge & Wikipedia'
@@ -860,9 +867,9 @@ export class TMDB {
   }
 
   /**
-   * Fetch full actor profile, credits/filmography, and Google Knowledge enrichment.
+   * Fetch full artist profile, credits/filmography, and Google Knowledge enrichment.
    */
-  static async getActorDetails(personId, options = {}) {
+  static async getArtistDetails(personId, options = {}) {
     const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
     if (!hasAuth) return null;
 
@@ -948,9 +955,16 @@ export class TMDB {
         credits
       };
     } catch (err) {
-      console.warn('Actor details error:', err);
+      console.warn('Artist details error:', err);
       return null;
     }
+  }
+
+  /**
+   * Backward-compatible alias for getArtistDetails.
+   */
+  static async getActorDetails(personId, options = {}) {
+    return TMDB.getArtistDetails(personId, options);
   }
 }
 
