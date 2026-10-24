@@ -260,7 +260,7 @@
       </section>
 
       <!-- VIEW: Movies Feed -->
-      <section id="movies-view" class="view-panel active">
+      <section id="movies-view" class="view-panel hidden">
         <div class="filter-bar retro-box">
           <div class="filter-group search-group">
             <span class="material-symbols-outlined">search</span>
@@ -320,7 +320,7 @@
           <form id="directSearchForm" class="direct-search-form actor-search-form artist-search-form" autocomplete="off">
             <div class="actor-input-group artist-input-group">
               <span class="material-symbols-outlined actor-search-icon artist-search-icon">person_search</span>
-              <input type="text" id="directSearchInput" placeholder="Enter artist name (e.g. Cillian Murphy, Keanu Reeves, Zendaya)..." required autocomplete="off">
+              <input type="text" id="directSearchInput" placeholder="Enter artist or character (e.g. Barney Stinson, Superman, Batman, Keanu Reeves)..." required autocomplete="off">
               <button type="button" id="btnClearArtistSearch" class="actor-clear-btn artist-clear-btn hidden" title="Clear input">✕</button>
             </div>
             <button type="submit" id="btnExecuteArtistSearch" class="retro-btn scramble-text actor-submit-btn artist-submit-btn">
@@ -333,14 +333,14 @@
           <div class="actor-quick-strip artist-quick-strip">
             <span class="quick-chip-label">POPULAR:</span>
             <div class="actor-chips-row artist-chips-row">
+              <button type="button" class="actor-chip artist-chip" data-actor="Barney Stinson" data-artist="Barney Stinson">Barney Stinson</button>
+              <button type="button" class="actor-chip artist-chip" data-actor="Superman" data-artist="Superman">Superman</button>
+              <button type="button" class="actor-chip artist-chip" data-actor="Batman" data-artist="Batman">Batman</button>
               <button type="button" class="actor-chip artist-chip" data-actor="Cillian Murphy" data-artist="Cillian Murphy">Cillian Murphy</button>
               <button type="button" class="actor-chip artist-chip" data-actor="Keanu Reeves" data-artist="Keanu Reeves">Keanu Reeves</button>
               <button type="button" class="actor-chip artist-chip" data-actor="Zendaya" data-artist="Zendaya">Zendaya</button>
               <button type="button" class="actor-chip artist-chip" data-actor="Pedro Pascal" data-artist="Pedro Pascal">Pedro Pascal</button>
               <button type="button" class="actor-chip artist-chip" data-actor="Margot Robbie" data-artist="Margot Robbie">Margot Robbie</button>
-              <button type="button" class="actor-chip artist-chip" data-actor="Leonardo DiCaprio" data-artist="Leonardo DiCaprio">Leonardo DiCaprio</button>
-              <button type="button" class="actor-chip artist-chip" data-actor="Florence Pugh" data-artist="Florence Pugh">Florence Pugh</button>
-              <button type="button" class="actor-chip artist-chip" data-actor="Tom Cruise" data-artist="Tom Cruise">Tom Cruise</button>
             </div>
           </div>
         </div>
@@ -430,6 +430,21 @@
             <h1 class="scramble-text" id="detailTitle">TITLE</h1>
             <p id="detailMeta" class="detail-meta"></p>
             <p id="detailSynopsis" class="detail-synopsis"></p>
+
+            <!-- Cast Section below Synopsis -->
+            <div id="detailCastSection" class="detail-cast-section" style="display: none;">
+              <div class="detail-cast-header-row">
+                <div class="detail-cast-heading">
+                  <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">group</span>
+                  <span>TOP CAST</span>
+                </div>
+                <div class="detail-cast-nav" id="detailCastNav">
+                  <button type="button" class="retro-btn btn-cast-nav" id="btnCastLeft" title="Scroll left" aria-label="Scroll cast left">&lt;</button>
+                  <button type="button" class="retro-btn btn-cast-nav" id="btnCastRight" title="Scroll right" aria-label="Scroll cast right">&gt;</button>
+                </div>
+              </div>
+              <div id="detailCastList" class="detail-cast-list"></div>
+            </div>
 
             <div class="detail-actions">
               <button id="detailTorrentsBtn" class="retro-btn">TORRENTS</button>
@@ -821,7 +836,12 @@
     <div class="modal-card retro-box">
       <div class="modal-header">
         <span class="modal-title scramble-text" id="trailer-modal-title">TRAILER</span>
-        <button id="close-trailer-modal-btn" class="modal-close-btn retro-btn">✕</button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <a id="trailer-yt-link" href="#" target="_blank" rel="noopener noreferrer" class="retro-btn" style="text-decoration:none; display:none; font-size:11px; padding:6px 10px; font-weight:700;">
+            <span>YOUTUBE</span> ↗
+          </a>
+          <button id="close-trailer-modal-btn" class="modal-close-btn retro-btn">✕</button>
+        </div>
       </div>
       <div class="modal-body"
         style="position: relative; min-height: 250px; display: flex; align-items: center; justify-content: center;">
@@ -831,6 +851,18 @@
         </div>
         <iframe id="trailer-iframe" src="" allowfullscreen
           style="width: 100%; height: 400px; z-index: 1; position: relative;"></iframe>
+      </div>
+      <div class="modal-footer" id="trailer-modal-footer"
+        style="padding: 10px 16px; border-top: 2px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 11px;">
+        <span id="trailer-status-text" style="color: var(--text-muted); font-family: var(--font-mono); font-weight: 600;">OFFICIAL TRAILER</span>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button id="trailer-alt-btn" type="button" class="retro-btn" style="font-size: 11px; padding: 4px 10px; display: none;">
+            ⟳ ALT TRAILER
+          </button>
+          <a id="trailer-open-yt-btn" href="#" target="_blank" rel="noopener noreferrer" class="retro-btn" style="text-decoration:none; font-size: 11px; padding: 4px 10px; font-weight: bold; display: none;">
+            OPEN ON YOUTUBE ↗
+          </a>
+        </div>
       </div>
     </div>
   </div>

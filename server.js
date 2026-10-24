@@ -175,6 +175,11 @@ const handleArtistLookup = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Artist details not found' });
     }
 
+    if (matches.length > 0 && matches[0].characterPlayed) {
+      artist.characterPlayed = matches[0].characterPlayed;
+      artist.characterQuery = query;
+    }
+
     // Annotate credits with isDownloaded flag
     if (artist.credits && Array.isArray(artist.credits)) {
       artist.credits = artist.credits.map(c => ({
@@ -189,6 +194,7 @@ const handleArtistLookup = async (req, res) => {
       artist,
       actor: artist,
       matches,
+      characterPlayed: matches[0]?.characterPlayed || null,
       correctedQuery
     });
   } catch (err) {
@@ -218,9 +224,13 @@ app.get('/api/actor/search', handleArtistSearch);
 const handleArtistById = async (req, res) => {
   try {
     const { id } = req.params;
+    const character = req.query.character || req.query.characterPlayed || null;
     const artist = await TMDB.getActorDetails(id);
     if (!artist) {
       return res.status(404).json({ success: false, error: 'Artist not found' });
+    }
+    if (character) {
+      artist.characterPlayed = character;
     }
     if (artist.credits && Array.isArray(artist.credits)) {
       artist.credits = artist.credits.map(c => ({
@@ -228,7 +238,7 @@ const handleArtistById = async (req, res) => {
         isDownloaded: Storage.hasDownloaded(c.title)
       }));
     }
-    res.json({ success: true, artist, actor: artist });
+    res.json({ success: true, artist, actor: artist, characterPlayed: character });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -246,13 +256,15 @@ app.get('/api/search', async (req, res) => {
     const season = req.query.season ? parseInt(req.query.season, 10) : undefined;
     const episode = req.query.episode ? parseInt(req.query.episode, 10) : undefined;
     const imdbId = req.query.imdbId || req.query.imdb || undefined;
+    const tmdbId = req.query.tmdbId || req.query.id || undefined;
+    const year = req.query.year || undefined;
     const type = req.query.type || (category === '205' ? 'tv' : 'movie');
 
     if (!query.trim()) {
       return res.status(400).json({ success: false, error: 'Search query is required' });
     }
 
-    const torrents = await CineBay.search(query, { minSeeds, category, season, episode, imdbId, type });
+    const torrents = await CineBay.search(query, { minSeeds, category, season, episode, imdbId, tmdbId, year, type });
     res.json({ success: true, count: torrents.length, query, torrents });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -379,22 +391,40 @@ app.post('/api/run-cycle', async (req, res) => {
 // 11. Get media details (trailer, providers, runtime)
 app.get('/api/details', async (req, res) => {
   try {
-    const { id, type } = req.query;
-    if (!id) return res.status(400).json({ success: false, error: 'Media ID is required' });
-    const details = await TMDB.getDetails(id, type || 'movie');
+    const { id, type, title, year } = req.query;
+    if (!id && !title) return res.status(400).json({ success: false, error: 'Media ID or title is required' });
+    const details = await TMDB.getDetails(id, type || 'movie', { fallbackTitle: title, fallbackYear: year });
     res.json({ success: true, details });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 12. Get similar media
+// 11b. Direct Trailer Search Endpoint
+app.get('/api/trailer', async (req, res) => {
+  try {
+    const { id, type, title, year } = req.query;
+    let trailerKey = null;
+    if (id) {
+      const details = await TMDB.getDetails(id, type || 'movie', { fallbackTitle: title, fallbackYear: year });
+      trailerKey = details?.trailerKey || null;
+    }
+    if (!trailerKey && title) {
+      trailerKey = await TMDB.findYouTubeTrailer(title, year, type || 'movie');
+    }
+    res.json({ success: true, trailerKey });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 12. Get similar media (legacy route, delegating to TMDB.getSimilarMedia)
 app.get('/api/similar', async (req, res) => {
   try {
     const { id, type } = req.query;
     if (!id) return res.status(400).json({ success: false, error: 'Media ID is required' });
-    const similar = await TMDB.getSimilar(id, type || 'movie');
-    res.json({ success: true, similar });
+    const similar = await TMDB.getSimilarMedia(id, type || 'movie');
+    res.json({ success: true, similar, items: similar });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

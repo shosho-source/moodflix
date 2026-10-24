@@ -92,6 +92,23 @@ export class Downloader {
     const cleanName = rawName.replace(/[/\\?%*:|"<>]/g, '_').trim() || 'download';
     const filename = `${cleanName}.torrent`;
 
+    // 0. If direct torrent URL is provided (e.g. Internet Archive), fetch it directly
+    if (torrent.torrentUrl) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(torrent.torrentUrl, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (res.ok) {
+          const arrayBuffer = await res.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          if (buffer.length > 50 && buffer.slice(0, 1).toString() === 'd') {
+            return { buffer, filename, isGenerated: false };
+          }
+        }
+      } catch (err) {}
+    }
+
     // 1. Attempt to fetch original .torrent from public torrent cache mirrors
     if (infoHash) {
       const mirrors = [
@@ -134,6 +151,12 @@ export class Downloader {
 
     const pieceLength = 262144; // 256 KB standard piece size
     const totalLength = torrent.size ? parseInt(torrent.size, 10) : 1073741824;
+    const numPieces = Math.max(1, Math.ceil(totalLength / pieceLength));
+    const hashBuf = (infoHash && /^[a-f0-9]{40}$/i.test(infoHash)) ? Buffer.from(infoHash, 'hex') : Buffer.alloc(20);
+    const piecesBuf = Buffer.alloc(numPieces * 20);
+    for (let i = 0; i < numPieces; i++) {
+      hashBuf.copy(piecesBuf, i * 20);
+    }
 
     const torrentMeta = {
       'announce': primaryAnnounce,
@@ -145,7 +168,7 @@ export class Downloader {
         'name': rawName,
         'piece length': pieceLength,
         'length': totalLength,
-        'pieces': infoHash && /^[a-f0-9]{40}$/i.test(infoHash) ? Buffer.from(infoHash, 'hex') : Buffer.alloc(20)
+        'pieces': piecesBuf
       }
     };
 
@@ -196,8 +219,8 @@ export class Downloader {
   static openMagnetInClient(magnetUrl) {
     if (!magnetUrl || typeof magnetUrl !== 'string') return;
     const trimmed = magnetUrl.trim();
-    // Validate magnet URL format strictly to prevent command injection attacks
-    if (!/^magnet:\?xt=urn:btih:[a-zA-Z0-9]{32,40}(?:&[a-zA-Z0-9_=\-.:%]+)*$/i.test(trimmed)) {
+    // Validate magnet URL format strictly to prevent command injection attacks while permitting valid query characters (+, /, (, ), etc.)
+    if (!/^magnet:\?xt=urn:btih:[a-zA-Z0-9]{32,40}(?:&[a-zA-Z0-9_=\-.:%+/(~)[\]]+)*$/i.test(trimmed)) {
       console.warn('[Downloader] Invalid or unsafe magnet link rejected:', trimmed.slice(0, 50));
       return;
     }

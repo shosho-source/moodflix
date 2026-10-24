@@ -26,5 +26,13 @@ describe('Storage', () => {
 
     // Clean up
     Storage.deleteDownload(record.id);
+
+    // Test short title boundary matching without false positives
+    const shortItem = { movieTitle: 'Up', name: 'Up.2009.1080p' };
+    const shortRecord = Storage.recordDownload(shortItem);
+    assert.strictEqual(Storage.hasDownloaded('Up'), true);
+    assert.strictEqual(Storage.hasDownloaded('Look Up'), false);
+    assert.strictEqual(Storage.hasDownloaded('Jupiter'), false);
+    Storage.deleteDownload(shortRecord.id);
   });
 });

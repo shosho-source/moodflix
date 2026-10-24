@@ -35,24 +35,22 @@ const elements = {
   btnClearMovieSearch: document.getElementById('btnClearMovieSearch'),
   btnExecuteMovieSearch: document.getElementById('btnExecuteMovieSearch'),
   movieCategorySelect: document.getElementById('movieCategorySelect'),
-  
+
   tvGrid: document.getElementById('tvGrid'),
   tvSearchInput: document.getElementById('tvSearchInput'),
   btnClearTvSearch: document.getElementById('btnClearTvSearch'),
   btnExecuteTvSearch: document.getElementById('btnExecuteTvSearch'),
   tvCategorySelect: document.getElementById('tvCategorySelect'),
-  
+
   directSearchForm: document.getElementById('directSearchForm'),
   directSearchInput: document.getElementById('directSearchInput'),
-  directCategory: document.getElementById('directCategory'),
-  directMinSeeds: document.getElementById('directMinSeeds'),
   directSearchResults: document.getElementById('directSearchResults'),
 
   torrentModal: document.getElementById('torrentModal'),
   modalMovieTitle: document.getElementById('modalMovieTitle'),
   modalTorrentList: document.getElementById('modalTorrentList'),
   btnCloseModal: document.getElementById('btnCloseModal'),
-  
+
   cycleModal: document.getElementById('cycleModal'),
   cycleTerminalLog: document.getElementById('cycleTerminalLog'),
   btnCloseCycleModal: document.getElementById('btnCloseCycleModal'),
@@ -156,7 +154,7 @@ function showToast(message, type = 'info', duration = 3500) {
 
   const toast = document.createElement('div');
   toast.className = `toast-item toast-${type}`;
-  
+
   let iconName = 'info';
   if (type === 'success') iconName = 'check_circle';
   else if (type === 'error') iconName = 'error';
@@ -187,16 +185,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   initFluid();
   setupEventListeners();
-  
+
   // Create Promise for complete window resources with a 1.5s fallback to prevent cross-browser freeze
   const timeoutPromise = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
   const windowLoadPromise = (document.readyState === 'complete')
     ? Promise.resolve()
     : Promise.race([
-        new Promise(resolve => window.addEventListener('load', resolve, { once: true })),
-        timeoutPromise(1500)
-      ]);
+      new Promise(resolve => window.addEventListener('load', resolve, { once: true })),
+      timeoutPromise(1500)
+    ]);
 
   // Create Promise for web font rendering with fallback
   const fontsPromise = (document.fonts && document.fonts.ready)
@@ -261,10 +259,6 @@ async function initSupabaseClient() {
     console.warn('Failed to load backend config:', err);
   }
 
-  try {
-    localStorage.removeItem('moodflix_bypass_auth');
-  } catch (e) {}
-
   if (isShared) {
     switchTab('share-view');
   } else {
@@ -320,7 +314,11 @@ async function showDashboardView(user) {
   elements.mainNav.style.display = 'flex';
   document.getElementById('mobileBottomNav')?.classList.remove('hidden');
   document.querySelector('.site-header')?.classList.remove('hidden');
-  
+
+  if (!state.isSharedPage) {
+    switchTab('diagnostic-view');
+  }
+
   // Await movies and TV shows so catalog is completely loaded into DOM before preloader disappears
   const promises = [];
   if (state.movies.length === 0) {
@@ -334,19 +332,13 @@ async function showDashboardView(user) {
   if (promises.length > 0) {
     await Promise.allSettled(promises);
   }
-
-  if (!state.isSharedPage) {
-    if (state.activeTab === 'auth-view' || state.activeTab === 'share-view' || state.activeTab === 'movies-view' || document.getElementById('diagnostic-view').classList.contains('hidden')) {
-      switchTab('diagnostic-view');
-    }
-  }
 }
 
 
 async function handleGoogleLogin() {
   const btnText = document.getElementById('login-btn-text');
   if (btnText) btnText.textContent = 'LOGGING IN...';
-  
+
   try {
     if (!supabaseClient) {
       showToast('Supabase Auth is not configured. Entering Local Mode...', 'info');
@@ -370,12 +362,12 @@ async function handleGoogleLogin() {
 }
 
 async function handleSignOut() {
-  try {
-    localStorage.removeItem('moodflix_bypass_auth');
-  } catch (e) {}
   if (supabaseClient) await supabaseClient.auth.signOut();
   showAuthView();
 }
+
+window.showDashboardView = showDashboardView;
+window.showAuthView = showAuthView;
 
 function renderSharedMovieView(data = {}) {
   const {
@@ -446,8 +438,8 @@ function renderSharedMovieView(data = {}) {
           iframe.classList.remove('hidden');
           iframe.src = `https://www.youtube.com/embed/${trailer}?autoplay=1`;
         }
-      } else if (mediaId) {
-        playTrailer(mediaId, mediaType || 'movie');
+      } else if (mediaId || title) {
+        playTrailer(mediaId, mediaType || 'movie', title, year);
       } else {
         showToast('Searching trailer...', 'info');
       }
@@ -461,7 +453,7 @@ function renderSharedMovieView(data = {}) {
       state.isSharedPage = false;
       try {
         window.history.replaceState({}, document.title, window.location.pathname);
-      } catch (e) {}
+      } catch (e) { }
       showAuthView();
     };
   }
@@ -610,7 +602,7 @@ function renderQuizStep() {
 
   step.options.forEach(opt => {
     const isSelected = step.multi ? quizAnswers[step.key].includes(opt.value) : quizAnswers[step.key] === opt.value;
-    
+
     const div = document.createElement('div');
     div.className = `quiz-option ${isSelected ? 'selected' : ''}`;
     div.innerHTML = `
@@ -657,18 +649,12 @@ document.getElementById('btnQuizBack')?.addEventListener('click', () => {
   }
 });
 
-document.getElementById('btnCancelQuiz')?.addEventListener('click', () => {
-  switchTab('diagnostic-view');
-});
 
-document.getElementById('btnStartDiagnostic')?.addEventListener('click', () => {
-  initQuiz();
-});
 
 async function submitQuiz() {
   document.getElementById('btnQuizNext').innerText = 'COMPUTING...';
   document.getElementById('btnQuizNext').disabled = true;
-  
+
   try {
     const res = await fetch('/api/quiz', {
       method: 'POST',
@@ -676,11 +662,11 @@ async function submitQuiz() {
       body: JSON.stringify(quizAnswers)
     });
     const data = await res.json();
-    
+
     if (data.results && data.results.length > 0) {
       state.diagnosticResults = data.results;
       state.diagnosticIndex = 0;
-      
+
       const diagnosticNav = document.getElementById('diagnosticNav');
       if (diagnosticNav) {
         diagnosticNav.style.display = 'flex';
@@ -691,7 +677,7 @@ async function submitQuiz() {
         if (btnPrev) btnPrev.disabled = true;
         if (btnNext) btnNext.disabled = data.results.length <= 1;
       }
-      
+
       const firstMatch = data.results[0];
       openDetailView(firstMatch, firstMatch.mediaType || 'movie', true);
     } else {
@@ -702,7 +688,11 @@ async function submitQuiz() {
     console.error('Quiz submit error:', err);
     showToast('Failed to fetch recommendations', 'error');
   } finally {
-    document.getElementById('btnQuizNext').innerText = 'NEXT >>';
+    const btnNext = document.getElementById('btnQuizNext');
+    if (btnNext) {
+      btnNext.innerText = 'NEXT >>';
+      btnNext.disabled = false;
+    }
   }
 }
 
@@ -729,7 +719,7 @@ function initFluid(retryCount = 0) {
     // Device performance profiling without changing any visible behavior
     const isMobile = window.innerWidth < 768 || (navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
     const isLowPower = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) ||
-                       (navigator.deviceMemory && navigator.deviceMemory <= 4);
+      (navigator.deviceMemory && navigator.deviceMemory <= 4);
 
     // Exact cartoon fluid parameters from fluid_sim repo with device-scaled resolutions
     fluidInstance = window.WebGLFluidCustom(canvas, {
@@ -894,7 +884,7 @@ document.addEventListener('visibilitychange', () => {
 // --- Listeners ---
 function setupEventListeners() {
   document.getElementById('settingsForm')?.addEventListener('submit', saveSettings);
-  
+
   document.getElementById('google-login-btn')?.addEventListener('click', handleGoogleLogin);
   document.getElementById('signout-btn')?.addEventListener('click', handleSignOut);
 
@@ -1043,8 +1033,15 @@ function setupEventListeners() {
   document.getElementById('close-trailer-modal-btn')?.addEventListener('click', () => {
     document.getElementById('trailer-modal').classList.add('hidden');
     document.getElementById('trailer-iframe').src = '';
+    trailerPlayerState.sources = [];
     if (fluidInstance && typeof fluidInstance.resume === 'function' && !document.hidden && state.activeTab !== 'tutorial-view') {
       fluidInstance.resume();
+    }
+  });
+  document.getElementById('trailer-alt-btn')?.addEventListener('click', () => {
+    if (trailerPlayerState.sources.length > 1) {
+      trailerPlayerState.currentIndex = (trailerPlayerState.currentIndex + 1) % trailerPlayerState.sources.length;
+      renderActiveTrailerSource();
     }
   });
 
@@ -1082,9 +1079,9 @@ function setupEventListeners() {
       }
     }
   });
-  
+
   elements.btnBackToFeed?.addEventListener('click', () => switchTab(state.lastFeedTab));
-  
+
   // Similar Media Scrolling
   const similarContainer = document.getElementById('similarMediaContainer');
   document.getElementById('btnSimilarLeft')?.addEventListener('click', () => {
@@ -1106,13 +1103,13 @@ function setupEventListeners() {
       state.diagnosticIndex--;
       const idx = state.diagnosticIndex;
       const total = state.diagnosticResults.length;
-      
+
       document.getElementById('diagMatchIndex').innerText = idx + 1;
       const btnPrev = document.getElementById('btnDiagPrev');
       const btnNext = document.getElementById('btnDiagNext');
       if (btnPrev) btnPrev.disabled = idx <= 0;
       if (btnNext) btnNext.disabled = idx >= total - 1;
-      
+
       const m = state.diagnosticResults[idx];
       openDetailView(m, m.mediaType || 'movie', true);
     }
@@ -1123,13 +1120,13 @@ function setupEventListeners() {
       state.diagnosticIndex++;
       const idx = state.diagnosticIndex;
       const total = state.diagnosticResults.length;
-      
+
       document.getElementById('diagMatchIndex').innerText = idx + 1;
       const btnPrev = document.getElementById('btnDiagPrev');
       const btnNext = document.getElementById('btnDiagNext');
       if (btnPrev) btnPrev.disabled = idx <= 0;
       if (btnNext) btnNext.disabled = idx >= total - 1;
-      
+
       const m = state.diagnosticResults[idx];
       openDetailView(m, m.mediaType || 'movie', true);
     }
@@ -1141,7 +1138,7 @@ function setupEventListeners() {
 window.artistCreditsCache = [];
 window.actorCreditsCache = window.artistCreditsCache;
 
-window.handleArtistCardAction = function(index, action, event) {
+window.handleArtistCardAction = function (index, action, event) {
   if (event && event.stopPropagation) {
     event.stopPropagation();
   }
@@ -1150,14 +1147,14 @@ window.handleArtistCardAction = function(index, action, event) {
   if (action === 'torrent') {
     openTorrentModal(item, item.mediaType || 'movie');
   } else if (action === 'trailer') {
-    playTrailer(item.id, item.mediaType || 'movie');
+    playTrailer(item.id, item.mediaType || 'movie', item.title, item.year);
   } else if (action === 'detail') {
     openDetailView(item, item.mediaType || 'movie');
   }
 };
 window.handleActorCardAction = window.handleArtistCardAction;
 
-window.fetchArtistDetailsById = async function(artistId) {
+window.fetchArtistDetailsById = async function (artistId, characterPlayed = '') {
   if (!elements.directSearchResults) return;
   elements.directSearchResults.innerHTML = `
     <div class="actor-search-loading artist-search-loading retro-box">
@@ -1167,11 +1164,15 @@ window.fetchArtistDetailsById = async function(artistId) {
   `;
 
   try {
-    const res = await fetch(`/api/artist/${artistId}`);
+    const charParam = characterPlayed ? `?character=${encodeURIComponent(characterPlayed)}` : '';
+    const res = await fetch(`/api/artist/${artistId}${charParam}`);
     const data = await res.json();
     const artistData = data.artist || data.actor;
     if (data.success && artistData) {
-      renderArtistFilmography(artistData, state.artistMatches || state.actorMatches || []);
+      if (characterPlayed && !artistData.characterPlayed) {
+        artistData.characterPlayed = characterPlayed;
+      }
+      renderArtistFilmography(artistData, state.artistMatches || state.actorMatches || [], '');
       elements.directSearchResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
       showToast('Could not load artist details', 'error');
@@ -1286,19 +1287,47 @@ function renderArtistFilmography(artist, matches = [], originalQuery = '') {
     </div>
   ` : '';
 
-  // Alternative matches strip
+  const characterPlayed = artist.characterPlayed || matches[0]?.characterPlayed || null;
+  const characterBannerHtml = characterPlayed ? `
+    <div class="character-match-banner retro-box">
+      <div class="char-banner-tag-row">
+        <span class="status-dot"></span>
+        <span class="char-banner-tag">CHARACTER MATCH</span>
+        <span class="char-banner-role">${escapeHtml(characterPlayed.toUpperCase())}</span>
+      </div>
+      <div class="char-banner-text">
+        <strong>${escapeHtml(artist.name)}</strong> portrayed the character <strong>${escapeHtml(characterPlayed)}</strong>
+        ${matches && matches.length > 1 ? ` — select an actor who portrayed this character below:` : ''}
+      </div>
+    </div>
+  ` : '';
+
+  // Alternative matches strip (or actors who played the character)
   let matchesHtml = '';
   if (matches && matches.length > 1) {
+    const listLabel = characterPlayed ? `ACTORS WHO PLAYED ${escapeHtml(characterPlayed.toUpperCase())}:` : 'ALL MATCHES:';
     matchesHtml = `
-      <div class="actor-alt-matches artist-alt-matches">
-        <span class="alt-matches-label">ALL MATCHES:</span>
+      <div class="actor-alt-matches artist-alt-matches ${characterPlayed ? 'is-character-matches' : ''}">
+        <span class="alt-matches-label">${listLabel}</span>
         <div class="alt-matches-scroll">
           ${matches.map(m => `
-            <button type="button" class="alt-match-btn ${m.id === artist.id ? 'active' : ''}" onclick="fetchArtistDetailsById(${m.id})">
+            <button type="button" class="alt-match-btn ${m.id === artist.id ? 'active' : ''}" onclick="fetchArtistDetailsById(${m.id}, '${escapeHtml(characterPlayed || '')}')">
               ${escapeHtml(m.name)}
-              ${m.knownFor && m.knownFor.length ? `<span class="alt-match-sub">(${escapeHtml(m.knownFor[0])})</span>` : ''}
+              ${m.characterPlayed ? `<span class="alt-match-sub">(as ${escapeHtml(m.characterPlayed)})</span>` : (m.knownFor && m.knownFor.length ? `<span class="alt-match-sub">(${escapeHtml(m.knownFor[0])})</span>` : '')}
             </button>
           `).join('')}
+        </div>
+      </div>
+    `;
+  } else if (matches && matches.length === 1 && characterPlayed) {
+    matchesHtml = `
+      <div class="actor-alt-matches artist-alt-matches is-character-matches">
+        <span class="alt-matches-label">PORTRAYED BY:</span>
+        <div class="alt-matches-scroll">
+          <button type="button" class="alt-match-btn active">
+            ${escapeHtml(artist.name)}
+            <span class="alt-match-sub">(as ${escapeHtml(characterPlayed)})</span>
+          </button>
         </div>
       </div>
     `;
@@ -1317,6 +1346,7 @@ function renderArtistFilmography(artist, matches = [], originalQuery = '') {
 
   const html = `
     <div class="actor-profile-card artist-profile-card retro-box">
+      ${characterBannerHtml}
       ${typoHtml}
       ${matchesHtml}
       <div class="actor-profile-layout artist-profile-layout">
@@ -1501,7 +1531,9 @@ async function performDirectSearch(query, minSeeds = 0, category = '200') {
       if (elements.directSearchResults) {
         elements.directSearchResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
-      if (data.correctedQuery || (artistData.name && artistData.name.toLowerCase() !== cleanQuery.toLowerCase())) {
+      if (artistData.characterPlayed) {
+        showToast(`Character match: ${artistData.name} as ${artistData.characterPlayed} 🎭`, 'success');
+      } else if (data.correctedQuery || (artistData.name && artistData.name.toLowerCase() !== cleanQuery.toLowerCase())) {
         showToast(`Tolerated spelling mistake: showing ${artistData.name} 🎬`, 'success');
       } else {
         showToast(`Found filmography for ${artistData.name} 🎬`, 'success');
@@ -1549,7 +1581,7 @@ async function performDirectSearch(query, minSeeds = 0, category = '200') {
 }
 
 // Fallback search for raw torrent releases if user queries a direct filename
-window.searchRawTorrentsFallback = async function(query) {
+window.searchRawTorrentsFallback = async function (query) {
   if (!elements.directSearchResults) return;
   elements.directSearchResults.innerHTML = getTorrentLoadingHtml(
     `SEARCHING THE CINE BAY FOR "${(query || '').toUpperCase()}"...`,
@@ -1574,10 +1606,35 @@ window.searchRawTorrentsFallback = async function(query) {
       const listContainer = elements.directSearchResults.querySelector('.direct-torrent-list');
       renderTorrentRows(listContainer, data.torrents, query, { title: query }, false);
     } else {
-      elements.directSearchResults.innerHTML = `<div style="padding:28px;text-align:center;font-family:var(--font-mono);">No torrents found for "${escapeHtml(query)}".</div>`;
+      elements.directSearchResults.innerHTML = `
+        <div class="torrent-empty-state retro-box">
+          <span class="material-symbols-outlined" style="font-size: 32px; opacity: 0.7; margin-bottom: 6px;">search_off</span>
+          <div style="font-family: var(--font-mono); font-size: 13px;">No torrents found for "${escapeHtml(query)}".</div>
+          <button type="button" class="btn-try-again" id="directRetryBtn">
+            <span class="material-symbols-outlined">refresh</span>
+            <span>TRY AGAIN</span>
+          </button>
+        </div>
+      `;
+      const retryBtn = elements.directSearchResults.querySelector('#directRetryBtn');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', () => performDirectSearch(query));
+      }
     }
   } catch (e) {
-    elements.directSearchResults.innerHTML = '<div style="padding:28px;text-align:center;font-family:var(--font-mono);color:#ff3333;">Failed to load torrent releases.</div>';
+    elements.directSearchResults.innerHTML = `
+      <div class="torrent-empty-state retro-box error">
+        <div style="font-family: var(--font-mono); font-size: 13px; color: #ff3333;">Failed to load torrent releases.</div>
+        <button type="button" class="btn-try-again" id="directErrorRetryBtn">
+          <span class="material-symbols-outlined">refresh</span>
+          <span>TRY AGAIN</span>
+        </button>
+      </div>
+    `;
+    const retryBtn = elements.directSearchResults.querySelector('#directErrorRetryBtn');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', () => performDirectSearch(query));
+    }
   }
 };
 
@@ -1627,7 +1684,7 @@ function switchTab(tabId) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
   document.querySelectorAll('.mobile-nav-item').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
   document.querySelectorAll('.view-panel').forEach(v => v.classList.toggle('hidden', v.id !== tabId));
-  
+
   const settingsBtn = document.getElementById('header-settings-btn');
   if (settingsBtn) {
     settingsBtn.classList.toggle('active', tabId === 'settings-view');
@@ -1715,7 +1772,7 @@ async function loadMovies() {
       renderMediaGrid(elements.movieGrid, data.movies, 'movie');
       updateTypoBanner('movieTypoBanner', search, data.correctedQuery);
     }
-  } catch (err) {}
+  } catch (err) { }
 }
 
 async function loadTVShows() {
@@ -1729,7 +1786,7 @@ async function loadTVShows() {
       renderMediaGrid(elements.tvGrid, data.shows, 'tv');
       updateTypoBanner('tvTypoBanner', search, data.correctedQuery);
     }
-  } catch (err) {}
+  } catch (err) { }
 }
 
 async function loadSettings() {
@@ -1739,7 +1796,7 @@ async function loadSettings() {
     if (data.success) {
       state.settings = data.settings;
     }
-  } catch (err) {}
+  } catch (err) { }
 }
 
 async function loadSettingsIntoUI() {
@@ -1764,7 +1821,7 @@ async function saveSettings(e) {
   const btn = document.querySelector('.submit-settings-btn');
   const originalText = btn.innerText;
   btn.innerText = 'SAVING...';
-  
+
   const payload = {
     tmdbApiKey: document.getElementById('tmdbApiKey').value,
     tmdbReadToken: document.getElementById('tmdbReadToken').value,
@@ -1805,11 +1862,11 @@ function renderMediaGrid(container, items, type) {
     }
     const safeTitle = escapeHtml(m.title);
     const safeYear = escapeHtml(m.year);
-    const safePoster = escapeHtml(m.poster);
+    const safePoster = escapeHtml(m.poster || 'images/hero.webp');
     return `
       <div class="movie-card" data-idx="${idx}">
         ${unreleasedHtml}
-        <img src="${safePoster}" alt="${safeTitle}">
+        <img src="${safePoster}" alt="${safeTitle}" onerror="this.src='images/hero.webp'">
         <h3>${safeTitle} (${safeYear})</h3>
       </div>
     `;
@@ -1827,27 +1884,138 @@ function openDetailView(m, type, isDiagnostic = false) {
   if (state.activeTab !== 'detail-view') {
     state.lastFeedTab = state.activeTab;
   }
-  
+
   if (!isDiagnostic) {
     const diagnosticNav = document.getElementById('diagnosticNav');
     if (diagnosticNav) diagnosticNav.style.display = 'none';
   }
 
-  elements.detailPoster.src = m.poster;
+  elements.detailPoster.src = m.poster || 'images/hero.webp';
+  elements.detailPoster.onerror = () => { elements.detailPoster.src = 'images/hero.webp'; };
   elements.detailTitle.innerText = m.title;
   elements.detailTitle.dataset.text = m.title;
   elements.detailMeta.innerText = `★ ${m.rating} / 10  •  ${m.year}  •  ${type.toUpperCase()}`;
   elements.detailSynopsis.innerText = m.synopsis || 'No synopsis available.';
 
   elements.detailTorrentsBtn.onclick = () => openTorrentModal(m, type, false);
-  elements.detailTrailerBtn.onclick = () => playTrailer(m.id, type);
+  elements.detailTrailerBtn.onclick = () => playTrailer(m.id, type, m.title, m.year);
   elements.detailShareBtn.onclick = () => openTorrentModal(m, type, true);
+
+  // Load cast members below synopsis
+  loadDetailCast(m, type);
 
   switchTab('detail-view');
   window.scrollTo(0, 0);
 
   // Load similar media
   loadSimilarMedia(m.id, type);
+}
+
+async function loadDetailCast(m, type) {
+  const castSection = document.getElementById('detailCastSection');
+  const castList = document.getElementById('detailCastList');
+  const castNav = document.getElementById('detailCastNav');
+  if (!castSection || !castList) return;
+
+  const currentId = m.id;
+  state.currentDetailId = currentId;
+  const mediaType = (type || m.mediaType || 'movie').toLowerCase();
+
+  castSection.style.display = 'block';
+  if (castNav) castNav.style.display = 'none';
+  castList.innerHTML = '<div class="detail-cast-loading">Loading cast members...</div>';
+
+  try {
+    const res = await fetch(`/api/details?id=${m.id}&type=${mediaType}&title=${encodeURIComponent(m.title)}&year=${m.year || ''}`);
+    const data = await res.json();
+    
+    // Check if another movie was opened while this was fetching
+    if (state.currentDetailId !== currentId) return;
+
+    const cast = data?.details?.cast || [];
+
+    if (cast && cast.length > 0) {
+      castList.innerHTML = cast.map(c => {
+        const safeName = escapeHtml(c.name || 'Performer');
+        const safeCharacter = c.character ? escapeHtml(c.character) : '';
+        const avatarHtml = c.profile
+          ? `<img src="${c.profile}" alt="${safeName}" class="detail-cast-avatar" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'cast-avatar-fallback\\'><span class=\\'material-symbols-outlined\\'>person</span></div>';" />`
+          : `<div class="cast-avatar-fallback"><span class="material-symbols-outlined">person</span></div>`;
+
+        return `
+          <div class="detail-cast-card" data-actor-id="${c.id}" data-actor-name="${safeName}" role="button" tabindex="0" title="View ${safeName} filmography">
+            <div class="detail-cast-avatar-wrap">
+              ${avatarHtml}
+            </div>
+            <div class="detail-cast-meta">
+              <div class="detail-cast-name">${safeName}</div>
+              ${safeCharacter ? `<div class="detail-cast-character" title="${safeCharacter}">${safeCharacter}</div>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      castList.querySelectorAll('.detail-cast-card').forEach(card => {
+        const handleCastClick = () => {
+          const actorId = card.dataset.actorId;
+          const actorName = card.dataset.actorName;
+          if (actorId) {
+            switchTab('search-view');
+            if (elements.directSearchInput) {
+              elements.directSearchInput.value = actorName;
+            }
+            if (typeof window.fetchArtistDetailsById === 'function') {
+              window.fetchArtistDetailsById(actorId);
+            } else if (typeof performDirectSearch === 'function') {
+              performDirectSearch(actorName);
+            }
+            window.scrollTo(0, 0);
+          }
+        };
+        card.addEventListener('click', handleCastClick);
+        card.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleCastClick();
+          }
+        });
+      });
+
+      // Wire scroll navigation buttons
+      if (castNav) {
+        castNav.style.display = cast.length > 3 ? 'flex' : 'none';
+        const btnLeft = document.getElementById('btnCastLeft');
+        const btnRight = document.getElementById('btnCastRight');
+        if (btnLeft) {
+          btnLeft.onclick = () => castList.scrollBy({ left: -260, behavior: 'smooth' });
+        }
+        if (btnRight) {
+          btnRight.onclick = () => castList.scrollBy({ left: 260, behavior: 'smooth' });
+        }
+      }
+
+      // Add mouse horizontal wheel scroll support
+      castList.onwheel = (e) => {
+        if (e.deltaY !== 0 && castList.scrollWidth > castList.clientWidth) {
+          e.preventDefault();
+          castList.scrollLeft += e.deltaY;
+        }
+      };
+
+      castSection.style.display = 'block';
+    } else {
+      castList.innerHTML = '<div class="detail-cast-empty">No cast members listed for this title.</div>';
+      if (castNav) castNav.style.display = 'none';
+      castSection.style.display = 'block';
+    }
+  } catch (err) {
+    console.warn('Failed to load cast for details view:', err);
+    if (state.currentDetailId === currentId) {
+      castList.innerHTML = '<div class="detail-cast-empty">Cast information currently unavailable.</div>';
+      if (castNav) castNav.style.display = 'none';
+      castSection.style.display = 'block';
+    }
+  }
 }
 
 async function loadSimilarMedia(id, type) {
@@ -1865,10 +2033,10 @@ async function loadSimilarMedia(id, type) {
       container.innerHTML = data.items.map((m, idx) => {
         const safeTitle = escapeHtml(m.title);
         const safeYear = escapeHtml(m.year);
-        const safePoster = escapeHtml(m.poster);
+        const safePoster = escapeHtml(m.poster || 'images/hero.webp');
         return `
           <div class="movie-card" data-idx="${idx}" style="cursor: pointer;">
-            <img src="${safePoster}" alt="${safeTitle}">
+            <img src="${safePoster}" alt="${safeTitle}" onerror="this.src='images/hero.webp'">
             <h3>${safeTitle} (${safeYear})</h3>
           </div>
         `;
@@ -1893,7 +2061,27 @@ async function loadSimilarMedia(id, type) {
 function renderTorrentRows(container, torrents, searchTitle, mediaObj = {}, isShareMode = false) {
   if (!container) return;
   if (!torrents || torrents.length === 0) {
-    container.innerHTML = '<div style="padding:24px;text-align:center;font-family:var(--font-mono);font-size:0.9rem;">No torrents found.</div>';
+    container.innerHTML = `
+      <div class="torrent-empty-state retro-box" style="padding:20px 14px; margin: 8px auto;">
+        <div style="font-family: var(--font-mono); font-size: 0.88rem; opacity: 0.85;">No torrents found.</div>
+        <button type="button" class="btn-try-again rows-retry-btn">
+          <span class="material-symbols-outlined">refresh</span>
+          <span>TRY AGAIN</span>
+        </button>
+      </div>
+    `;
+    const retryBtn = container.querySelector('.rows-retry-btn');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (mediaObj.mediaType === 'tv' && mediaObj.season && mediaObj.episode) {
+          container.innerHTML = '';
+          toggleEpisodeAccordion(mediaObj.season, mediaObj.episode, mediaObj);
+        } else if (searchTitle) {
+          fetchTorrentsForModal(searchTitle, mediaObj.mediaType || 'movie', mediaObj, isShareMode);
+        }
+      });
+    }
     return;
   }
 
@@ -1902,11 +2090,11 @@ function renderTorrentRows(container, torrents, searchTitle, mediaObj = {}, isSh
     const safeQuality = escapeHtml(t.qualityBadge || 'HD');
     const safeSeeds = escapeHtml(t.seeders !== undefined ? t.seeders : 0);
     const safePeers = escapeHtml(t.leechers !== undefined ? t.leechers : 0);
-    const safeSize = escapeHtml(t.sizeFormatted || (t.size ? `${(t.size / (1024*1024*1024)).toFixed(2)} GB` : 'N/A'));
+    const safeSize = escapeHtml(t.sizeFormatted || (t.size ? `${(t.size / (1024 * 1024 * 1024)).toFixed(2)} GB` : 'N/A'));
 
     return `
       <div class="torrent-row ${isShareMode ? 'torrent-share-row' : ''}" data-idx="${i}" style="cursor: pointer;">
-        <span class="torrent-name" title="${safeName}">#${i+1} ${safeName}</span>
+        <span class="torrent-name" title="${safeName}">#${i + 1} ${safeName}</span>
         <span>${safeQuality}</span>
         <span>S: ${safeSeeds} / P: ${safePeers}</span>
         <span>${safeSize}</span>
@@ -1982,9 +2170,12 @@ function generateTorrentRows(torrents, searchTitle, mediaObj = {}) {
   return tempDiv.innerHTML;
 }
 
-async function loadTVSeasonsAccordion(m) {
+async function loadTVSeasonsAccordion(m, isShareMode = false) {
+  window._currentTVModalMedia = m;
+  window._isTVModalShareMode = isShareMode;
+
   elements.modalTorrentList.innerHTML = getTorrentLoadingHtml(
-    `RETRIEVING ${m.title.toUpperCase()} SEASONS...`,
+    `RETRIEVING ${(m.title || 'TV SERIES').toUpperCase()} SEASONS...`,
     'Loading season catalog from TMDB & metadata indexers...'
   );
   if (window.initScrambler) initScrambler();
@@ -2001,137 +2192,493 @@ async function loadTVSeasonsAccordion(m) {
       await new Promise(r => setTimeout(r, MIN_ANIMATION_MS - elapsed));
     }
 
-    if (data.success && data.details && data.details.seasons) {
+    if (data.success && data.details && data.details.seasons && data.details.seasons.length > 0) {
       const seasons = data.details.seasons.filter(s => s.season_number > 0);
-      elements.modalTorrentList.innerHTML = seasons.map(s => `
-        <div class="accordion-item" id="season-acc-${s.season_number}">
-          <button class="accordion-btn" onclick="toggleSeasonAccordion(${s.season_number}, '${encodeURIComponent(JSON.stringify(m))}')">
-            Season ${s.season_number} <span>▼</span>
-          </button>
-          <div class="accordion-content" id="season-content-${s.season_number}"></div>
-        </div>
-      `).join('');
+      if (seasons.length === 0) {
+        elements.modalTorrentList.innerHTML = `
+          <div class="torrent-empty-state retro-box" style="padding: 20px 14px;">
+            <div style="font-family: var(--font-mono); font-size: 13px;">No regular seasons found for this series.</div>
+            <button type="button" class="btn-try-again seasons-retry-btn">
+              <span class="material-symbols-outlined">refresh</span>
+              <span>TRY AGAIN</span>
+            </button>
+          </div>
+        `;
+        const retryBtn = elements.modalTorrentList.querySelector('.seasons-retry-btn');
+        if (retryBtn) {
+          retryBtn.addEventListener('click', () => loadTVSeasonsAccordion(m, isShareMode));
+        }
+        return;
+      }
+
+      elements.modalTorrentList.innerHTML = seasons.map(s => {
+        const seasonTitle = s.name && s.name !== `Season ${s.season_number}` 
+          ? `Season ${s.season_number} • ${escapeHtml(s.name)}`
+          : `Season ${s.season_number}`;
+        const epCountBadge = s.episode_count ? `<span class="season-ep-count">[${s.episode_count} EPS]</span>` : '';
+        return `
+          <div class="accordion-item" id="season-acc-${s.season_number}">
+            <button class="accordion-btn" type="button" id="btn-season-${s.season_number}" data-season="${s.season_number}">
+              <div class="season-btn-left">
+                <span class="season-pill">S${String(s.season_number).padStart(2, '0')}</span>
+                <span class="season-title">${seasonTitle}</span>
+                ${epCountBadge}
+              </div>
+              <div class="season-btn-right">
+                <span class="season-btn-status" id="season-status-${s.season_number}"></span>
+                <span class="accordion-arrow">▼</span>
+              </div>
+            </button>
+            <div class="accordion-content" id="season-content-${s.season_number}"></div>
+          </div>
+        `;
+      }).join('');
+
+      // Cleanly bind event listeners to avoid quote breaking in HTML attributes
+      elements.modalTorrentList.querySelectorAll('.accordion-item').forEach(item => {
+        const btn = item.querySelector('.accordion-btn');
+        if (btn) {
+          const seasonNum = parseInt(btn.dataset.season, 10);
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleSeasonAccordion(seasonNum, m, btn);
+          });
+        }
+      });
     } else {
-      elements.modalTorrentList.innerHTML = '<div style="padding:20px;text-align:center;font-family:var(--font-mono);">No seasons found.</div>';
+      elements.modalTorrentList.innerHTML = `
+        <div class="torrent-empty-state retro-box" style="padding: 20px 14px;">
+          <div style="font-family: var(--font-mono); font-size: 13px;">No seasons found.</div>
+          <button type="button" class="btn-try-again seasons-retry-btn">
+            <span class="material-symbols-outlined">refresh</span>
+            <span>TRY AGAIN</span>
+          </button>
+        </div>
+      `;
+      const retryBtn = elements.modalTorrentList.querySelector('.seasons-retry-btn');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', () => loadTVSeasonsAccordion(m, isShareMode));
+      }
     }
   } catch (err) {
-    elements.modalTorrentList.innerHTML = '<div style="padding:20px;text-align:center;font-family:var(--font-mono);color:#ff3333;">Failed to load seasons.</div>';
+    elements.modalTorrentList.innerHTML = `
+      <div class="torrent-empty-state retro-box error" style="padding: 20px 14px;">
+        <div style="font-family: var(--font-mono); font-size: 13px; color:#ff3333;">Failed to load seasons.</div>
+        <button type="button" class="btn-try-again seasons-retry-btn">
+          <span class="material-symbols-outlined">refresh</span>
+          <span>TRY AGAIN</span>
+        </button>
+      </div>
+    `;
+    const retryBtn = elements.modalTorrentList.querySelector('.seasons-retry-btn');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', () => loadTVSeasonsAccordion(m, isShareMode));
+    }
   }
 }
 
-window.toggleSeasonAccordion = async function(seasonNumber, mStr) {
-  const m = JSON.parse(decodeURIComponent(mStr));
+window.toggleSeasonAccordion = async function (seasonNumber, mediaOrStr, triggerBtn) {
+  let m;
+  if (typeof mediaOrStr === 'string') {
+    try {
+      m = JSON.parse(decodeURIComponent(mediaOrStr));
+    } catch {
+      try {
+        m = JSON.parse(mediaOrStr);
+      } catch {
+        m = window._currentTVModalMedia || {};
+      }
+    }
+  } else {
+    m = mediaOrStr || window._currentTVModalMedia || {};
+  }
+
+  const btn = triggerBtn || document.getElementById(`btn-season-${seasonNumber}`) || document.querySelector(`#season-acc-${seasonNumber} .accordion-btn`);
   const content = document.getElementById(`season-content-${seasonNumber}`);
+  if (!content) return;
+
   const isExpanded = content.classList.contains('expanded');
-  
+
   if (isExpanded) {
     content.classList.remove('expanded');
+    if (btn) {
+      btn.classList.remove('expanded');
+      const arrow = btn.querySelector('.accordion-arrow');
+      if (arrow) arrow.textContent = '▼';
+    }
     return;
   }
-  
+
   content.classList.add('expanded');
-  if (content.innerHTML === '') {
-    content.innerHTML = getTorrentLoadingHtml(
-      `LOADING ${m.title.toUpperCase()} SEASON ${seasonNumber} EPISODES...`,
-      'Retrieving verified episode listings, air dates & release metadata...'
-    );
-    if (window.initScrambler) initScrambler();
+  if (btn) {
+    btn.classList.add('expanded');
+    const arrow = btn.querySelector('.accordion-arrow');
+    if (arrow) arrow.textContent = '▲';
+  }
 
-    const fetchStart = Date.now();
-    const MIN_ANIMATION_MS = 650;
+  // If already loaded episodes, avoid re-fetching
+  if (content.innerHTML.trim() !== '' && !content.querySelector('.torrent-fetch-loader')) {
+    return;
+  }
 
-    try {
-      const res = await fetch(`/api/tv/episodes?id=${m.id}&season=${seasonNumber}`);
-      const data = await res.json();
+  // Set loading state on button
+  if (btn) {
+    btn.classList.add('is-loading');
+    const status = btn.querySelector('.season-btn-status') || document.getElementById(`season-status-${seasonNumber}`);
+    if (status) {
+      status.innerHTML = '<span class="live-pulse-dot"></span><span class="status-text">LOADING...</span>';
+    }
+  }
 
-      const elapsed = Date.now() - fetchStart;
-      if (elapsed < MIN_ANIMATION_MS) {
-        await new Promise(r => setTimeout(r, MIN_ANIMATION_MS - elapsed));
-      }
+  // Show rich animated radar scanner in content
+  const showTitle = (m.title || 'TV SERIES').toUpperCase();
+  content.innerHTML = getTorrentLoadingHtml(
+    `LOADING ${escapeHtml(showTitle)} SEASON ${seasonNumber} EPISODES...`,
+    'Retrieving verified episode listings, air dates & release metadata...'
+  );
+  if (window.initScrambler) initScrambler();
 
-      if (data.success && data.episodes && data.episodes.episodes) {
-        const now = new Date();
-        content.innerHTML = data.episodes.episodes.map(e => {
-          let isUnreleased = false;
-          if (e.air_date) {
-            const airDate = new Date(e.air_date);
-            if (airDate > now) isUnreleased = true;
-          }
-          const unreleasedClass = isUnreleased ? 'unreleased' : '';
-          return `
-            <button class="episode-btn ${unreleasedClass}" onclick="toggleEpisodeAccordion(${seasonNumber}, ${e.episode_number}, '${encodeURIComponent(JSON.stringify(m))}')">
-              Ep ${e.episode_number}: ${e.name}
+  const fetchStart = Date.now();
+  const MIN_ANIMATION_MS = 650;
+
+  try {
+    const res = await fetch(`/api/tv/episodes?id=${m.id}&season=${seasonNumber}`);
+    const data = await res.json();
+
+    const elapsed = Date.now() - fetchStart;
+    if (elapsed < MIN_ANIMATION_MS) {
+      await new Promise(r => setTimeout(r, MIN_ANIMATION_MS - elapsed));
+    }
+
+    if (data.success && data.episodes && data.episodes.episodes && data.episodes.episodes.length > 0) {
+      const now = new Date();
+      content.innerHTML = data.episodes.episodes.map(e => {
+        let isUnreleased = false;
+        if (e.air_date) {
+          const airDate = new Date(e.air_date);
+          if (airDate > now) isUnreleased = true;
+        }
+        const unreleasedClass = isUnreleased ? 'unreleased' : '';
+        const airDateFormatted = e.air_date ? ` (${e.air_date.substring(0, 4)})` : '';
+        return `
+          <div class="episode-item" id="ep-item-${seasonNumber}-${e.episode_number}">
+            <button type="button" class="episode-btn ${unreleasedClass}" id="btn-ep-${seasonNumber}-${e.episode_number}" data-season="${seasonNumber}" data-episode="${e.episode_number}">
+              <div class="ep-btn-left">
+                <span class="ep-num-badge">E${String(e.episode_number).padStart(2, '0')}</span>
+                <span class="ep-title">${escapeHtml(e.name || `Episode ${e.episode_number}`)}${airDateFormatted}</span>
+                ${isUnreleased ? '<span class="ep-unreleased-tag">[UNRELEASED]</span>' : ''}
+              </div>
+              <div class="ep-btn-right">
+                <span class="ep-btn-status" id="ep-status-${seasonNumber}-${e.episode_number}"></span>
+                <span class="ep-arrow">▼</span>
+              </div>
             </button>
             <div class="episode-content" id="ep-content-${seasonNumber}-${e.episode_number}"></div>
-          `;
-        }).join('');
-      } else {
-        content.innerHTML = '<div style="padding:10px;text-align:center;font-family:var(--font-mono);">No episodes found.</div>';
+          </div>
+        `;
+      }).join('');
+
+      // Wire episode event listeners cleanly
+      content.querySelectorAll('.episode-btn').forEach(epBtn => {
+        const epNum = parseInt(epBtn.dataset.episode, 10);
+        epBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          toggleEpisodeAccordion(seasonNumber, epNum, m, epBtn);
+        });
+      });
+    } else {
+      content.innerHTML = `
+        <div class="torrent-empty-state retro-box" style="padding: 14px; margin: 6px auto;">
+          <div style="font-family: var(--font-mono); font-size: 12px;">No episodes found for this season.</div>
+          <button type="button" class="btn-try-again season-ep-retry-btn">
+            <span class="material-symbols-outlined">refresh</span>
+            <span>TRY AGAIN</span>
+          </button>
+        </div>
+      `;
+      const retryBtn = content.querySelector('.season-ep-retry-btn');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          content.innerHTML = '';
+          toggleSeasonAccordion(seasonNumber, m, btn);
+        });
       }
-    } catch (err) {
-      content.innerHTML = '<div style="padding:10px;text-align:center;font-family:var(--font-mono);color:#ff3333;">Failed to load episodes.</div>';
+    }
+  } catch (err) {
+    content.innerHTML = `
+      <div class="torrent-empty-state retro-box error" style="padding: 14px; margin: 6px auto;">
+        <div style="font-family: var(--font-mono); font-size: 12px; color:#ff3333;">Failed to load episodes.</div>
+        <button type="button" class="btn-try-again season-ep-retry-btn">
+          <span class="material-symbols-outlined">refresh</span>
+          <span>TRY AGAIN</span>
+        </button>
+      </div>
+    `;
+    const retryBtn = content.querySelector('.season-ep-retry-btn');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        content.innerHTML = '';
+        toggleSeasonAccordion(seasonNumber, m, btn);
+      });
+    }
+  } finally {
+    if (btn) {
+      btn.classList.remove('is-loading');
+      const status = btn.querySelector('.season-btn-status') || document.getElementById(`season-status-${seasonNumber}`);
+      if (status) status.innerHTML = '';
     }
   }
 };
 
-window.toggleEpisodeAccordion = async function(seasonNumber, episodeNumber, mStr) {
-  const m = JSON.parse(decodeURIComponent(mStr));
+window.toggleEpisodeAccordion = async function (seasonNumber, episodeNumber, mediaOrStr, triggerBtn) {
+  let m;
+  if (typeof mediaOrStr === 'string') {
+    try {
+      m = JSON.parse(decodeURIComponent(mediaOrStr));
+    } catch {
+      try {
+        m = JSON.parse(mediaOrStr);
+      } catch {
+        m = window._currentTVModalMedia || {};
+      }
+    }
+  } else {
+    m = mediaOrStr || window._currentTVModalMedia || {};
+  }
+
+  const btn = triggerBtn || document.getElementById(`btn-ep-${seasonNumber}-${episodeNumber}`) || document.querySelector(`.episode-btn[data-season="${seasonNumber}"][data-episode="${episodeNumber}"]`);
   const content = document.getElementById(`ep-content-${seasonNumber}-${episodeNumber}`);
+  if (!content) return;
+
   const isExpanded = content.classList.contains('expanded');
-  
+
   if (isExpanded) {
     content.classList.remove('expanded');
+    if (btn) {
+      btn.classList.remove('expanded');
+      const arrow = btn.querySelector('.ep-arrow');
+      if (arrow) arrow.textContent = '▼';
+    }
     return;
   }
-  
+
   content.classList.add('expanded');
-  if (content.innerHTML === '') {
-    const searchTitle = `${m.title} S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`;
-    content.innerHTML = getTorrentLoadingHtml(
-      `SCANNING SWARM FOR ${searchTitle}...`,
-      'Querying TV release groups & verified seeders...'
-    );
-    if (window.initScrambler) initScrambler();
+  if (btn) {
+    btn.classList.add('expanded');
+    const arrow = btn.querySelector('.ep-arrow');
+    if (arrow) arrow.textContent = '▲';
+  }
 
-    const fetchStart = Date.now();
-    const MIN_ANIMATION_MS = 650;
-    
-    try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(searchTitle)}&minSeeds=0&category=205`);
-      const data = await res.json();
+  // If already loaded torrents, avoid re-fetching
+  if (content.innerHTML.trim() !== '' && !content.querySelector('.torrent-fetch-loader')) {
+    return;
+  }
 
-      const elapsed = Date.now() - fetchStart;
-      if (elapsed < MIN_ANIMATION_MS) {
-        await new Promise(r => setTimeout(r, MIN_ANIMATION_MS - elapsed));
+  const searchTitle = `${m.title || 'Series'} S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`;
+
+  if (btn) {
+    btn.classList.add('is-loading');
+    const status = btn.querySelector('.ep-btn-status') || document.getElementById(`ep-status-${seasonNumber}-${episodeNumber}`);
+    if (status) {
+      status.innerHTML = '<span class="live-pulse-dot"></span><span class="status-text">SCANNING...</span>';
+    }
+  }
+
+  content.innerHTML = getTorrentLoadingHtml(
+    `SCANNING SWARM FOR ${searchTitle.toUpperCase()}...`,
+    'Querying TV release groups & verified seeders across The Cine Bay...'
+  );
+  if (window.initScrambler) initScrambler();
+
+  const fetchStart = Date.now();
+  const MIN_ANIMATION_MS = 650;
+
+  try {
+    const imdbParam = m?.imdbId || m?.imdb || '';
+    const tmdbIdParam = m?.id || '';
+    const yearParam = m?.year || '';
+    const res = await fetch(`/api/search?q=${encodeURIComponent(searchTitle)}&minSeeds=0&category=205&season=${seasonNumber}&episode=${episodeNumber}&type=tv&imdbId=${encodeURIComponent(imdbParam)}&tmdbId=${encodeURIComponent(tmdbIdParam)}&year=${encodeURIComponent(yearParam)}`);
+    const data = await res.json();
+
+    const elapsed = Date.now() - fetchStart;
+    if (elapsed < MIN_ANIMATION_MS) {
+      await new Promise(r => setTimeout(r, MIN_ANIMATION_MS - elapsed));
+    }
+
+    if (data.success) {
+      const epNum = parseInt(episodeNumber, 10);
+      const sNum = parseInt(seasonNumber, 10);
+      const epStr = `s${String(sNum).padStart(2, '0')}e${String(epNum).padStart(2, '0')}`;
+      const epPattern = new RegExp(`(\\b|[^a-z0-9])(s0*${sNum}\\s*e0*${epNum}|${sNum}x0*${epNum}|e0*${epNum}|ep0*${epNum}|episode\\s*0*${epNum})(\\b|[^a-z0-9])`, 'i');
+      const animePattern = new RegExp(`([\\s_\\[\\-]0*${epNum}[\\s_\\]\\.\\-])`, 'i');
+      const seasonPackPattern = new RegExp(`(\\b|[^a-z0-9])(s0*${sNum}\\b|season\\s*0*${sNum}\\b).*?(complete|batch|pack)`, 'i');
+
+      let filteredTorrents = (data.torrents || []).filter(t => {
+        const lower = (t.name || '').toLowerCase();
+        return lower.includes(epStr) || epPattern.test(lower) || animePattern.test(lower) || seasonPackPattern.test(lower);
+      });
+
+      // If strict filter yields 0 but data.torrents has releases, display all to allow season packs/alternate releases
+      if (filteredTorrents.length === 0 && data.torrents && data.torrents.length > 0) {
+        filteredTorrents = data.torrents;
       }
 
-      if (data.success) {
-        const epStr = `s${String(seasonNumber).padStart(2, '0')}e${String(episodeNumber).padStart(2, '0')}`;
-        const filteredTorrents = (data.torrents || []).filter(t => t.name.toLowerCase().includes(epStr));
-        
-        if (filteredTorrents.length === 0) {
-           content.innerHTML = '<div style="padding:14px;text-align:center;font-family:var(--font-mono);font-size:12px;">No torrents found matching this exact episode.</div>';
-        } else {
-          content.innerHTML = `
-            <div class="torrent-list-header" style="display:flex; margin-bottom:10px;">
-              <span>Release</span><span>Quality</span><span>Seeds/Peers</span><span>Size</span><span>Action</span>
-            </div>
-            <div class="ep-torrent-items"></div>
-          `;
-          const itemsContainer = content.querySelector('.ep-torrent-items');
-          renderTorrentRows(itemsContainer, filteredTorrents, searchTitle, { ...m, mediaType: 'tv', season: seasonNumber, episode: episodeNumber }, false);
+      if (filteredTorrents.length === 0) {
+        content.innerHTML = `
+          <div class="torrent-empty-state retro-box" style="padding: 16px 12px; margin: 6px auto;">
+            <div style="font-family: var(--font-mono); font-size: 12px; opacity: 0.85;">No torrents found matching this exact episode.</div>
+            <button type="button" class="btn-try-again ep-retry-btn">
+              <span class="material-symbols-outlined">refresh</span>
+              <span>TRY AGAIN</span>
+            </button>
+          </div>
+        `;
+        const retryBtn = content.querySelector('.ep-retry-btn');
+        if (retryBtn) {
+          retryBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            content.innerHTML = '';
+            toggleEpisodeAccordion(seasonNumber, episodeNumber, m, btn);
+          });
         }
+      } else {
+        content.innerHTML = `
+          <div class="torrent-list-header" style="display:flex; margin-bottom:10px;">
+            <span>Release</span><span>Quality</span><span>Seeds/Peers</span><span>Size</span><span>Action</span>
+          </div>
+          <div class="ep-torrent-items"></div>
+        `;
+        const itemsContainer = content.querySelector('.ep-torrent-items');
+        renderTorrentRows(itemsContainer, filteredTorrents, searchTitle, { ...m, mediaType: 'tv', season: seasonNumber, episode: episodeNumber }, window._isTVModalShareMode || false);
       }
-    } catch (err) {
-      content.innerHTML = '<div style="padding:14px;text-align:center;font-family:var(--font-mono);font-size:12px;color:#ff3333;">Failed to fetch torrents.</div>';
+    } else {
+      content.innerHTML = `
+        <div class="torrent-empty-state retro-box error" style="padding: 16px 12px; margin: 6px auto;">
+          <div style="font-family: var(--font-mono); font-size: 12px; color:#ff3333;">Failed to load episode torrents.</div>
+          <button type="button" class="btn-try-again ep-retry-btn">
+            <span class="material-symbols-outlined">refresh</span>
+            <span>TRY AGAIN</span>
+          </button>
+        </div>
+      `;
+      const retryBtn = content.querySelector('.ep-retry-btn');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          content.innerHTML = '';
+          toggleEpisodeAccordion(seasonNumber, episodeNumber, m, btn);
+        });
+      }
+    }
+  } catch (err) {
+    content.innerHTML = `
+      <div class="torrent-empty-state retro-box error" style="padding: 16px 12px; margin: 6px auto;">
+        <div style="font-family: var(--font-mono); font-size: 12px; color:#ff3333;">Failed to fetch torrents.</div>
+        <button type="button" class="btn-try-again ep-retry-btn">
+          <span class="material-symbols-outlined">refresh</span>
+          <span>TRY AGAIN</span>
+        </button>
+      </div>
+    `;
+    const retryBtn = content.querySelector('.ep-retry-btn');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        content.innerHTML = '';
+        toggleEpisodeAccordion(seasonNumber, episodeNumber, m, btn);
+      });
+    }
+  } finally {
+    if (btn) {
+      btn.classList.remove('is-loading');
+      const status = btn.querySelector('.ep-btn-status') || document.getElementById(`ep-status-${seasonNumber}-${episodeNumber}`);
+      if (status) status.innerHTML = '';
     }
   }
 };
 
-async function playTrailer(id, type) {
+const trailerPlayerState = {
+  sources: [],
+  currentIndex: 0,
+  title: '',
+  year: '',
+  type: ''
+};
+
+function renderActiveTrailerSource() {
+  const iframe = document.getElementById('trailer-iframe');
+  const loader = document.getElementById('trailer-loader');
+  const ytLink = document.getElementById('trailer-yt-link');
+  const openYtBtn = document.getElementById('trailer-open-yt-btn');
+  const altBtn = document.getElementById('trailer-alt-btn');
+  const statusText = document.getElementById('trailer-status-text');
+
+  if (!trailerPlayerState.sources.length) return;
+
+  const current = trailerPlayerState.sources[trailerPlayerState.currentIndex];
+  if (loader) loader.classList.add('hidden');
+  if (iframe) {
+    iframe.classList.remove('hidden');
+    iframe.src = current.embedUrl;
+  }
+
+  // Update YouTube watch links in header and footer
+  if (ytLink) {
+    ytLink.href = current.watchUrl;
+    ytLink.style.display = 'inline-flex';
+  }
+  if (openYtBtn) {
+    openYtBtn.href = current.watchUrl;
+    openYtBtn.style.display = 'inline-flex';
+  }
+
+  // Show ALT button if more than 1 source exists
+  if (altBtn) {
+    if (trailerPlayerState.sources.length > 1) {
+      altBtn.style.display = 'inline-flex';
+      altBtn.textContent = `⟳ ALT TRAILER (${trailerPlayerState.currentIndex + 1}/${trailerPlayerState.sources.length})`;
+    } else {
+      altBtn.style.display = 'none';
+    }
+  }
+
+  if (statusText) {
+    statusText.textContent = current.label || 'OFFICIAL TRAILER';
+  }
+}
+
+async function playTrailer(id, type, title = '', year = '') {
   const modal = document.getElementById('trailer-modal');
   const iframe = document.getElementById('trailer-iframe');
   const loader = document.getElementById('trailer-loader');
+  const titleEl = document.getElementById('trailer-modal-title');
+  const ytLink = document.getElementById('trailer-yt-link');
+  const openYtBtn = document.getElementById('trailer-open-yt-btn');
+  const altBtn = document.getElementById('trailer-alt-btn');
+  const statusText = document.getElementById('trailer-status-text');
+
+  if (!title && elements.detailTitle && elements.detailTitle.innerText && elements.detailTitle.innerText !== 'TITLE') {
+    title = elements.detailTitle.innerText;
+  }
+
+  if (title && titleEl) {
+    titleEl.textContent = `TRAILER: ${title.toUpperCase()}`;
+  } else if (titleEl) {
+    titleEl.textContent = 'TRAILER';
+  }
+
+  if (ytLink) {
+    ytLink.style.display = 'none';
+    ytLink.href = '#';
+  }
+  if (openYtBtn) {
+    openYtBtn.style.display = 'none';
+    openYtBtn.href = '#';
+  }
+  if (altBtn) altBtn.style.display = 'none';
+  if (statusText) statusText.textContent = 'CONNECTING...';
 
   // Pause background fluid simulation during video playback to optimize GPU/CPU
   if (fluidInstance && typeof fluidInstance.pause === 'function') {
@@ -2142,17 +2689,71 @@ async function playTrailer(id, type) {
   modal.classList.remove('hidden');
   iframe.classList.add('hidden');
   loader.classList.remove('hidden');
+  loader.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+      <span class="live-pulse-dot" style="width:12px;height:12px;"></span>
+      <span>SEARCHING OFFICIAL TRAILER...</span>
+    </div>
+  `;
   iframe.src = ''; // Clear old trailer
 
+  const sources = [];
+  const seenUrls = new Set();
+  const addSource = (embedUrl, watchUrl, label) => {
+    if (embedUrl && !seenUrls.has(embedUrl)) {
+      seenUrls.add(embedUrl);
+      sources.push({ embedUrl, watchUrl, label });
+    }
+  };
+
   try {
-    const res = await fetch(`/api/details?id=${id}&type=${type}`);
+    const url = `/api/details?id=${id || ''}&type=${type || 'movie'}&title=${encodeURIComponent(title || '')}&year=${encodeURIComponent(year || '')}`;
+    const res = await fetch(url);
     const data = await res.json();
-    if (data.success && data.details && data.details.trailerKey) {
-      iframe.onload = () => {
-        loader.classList.add('hidden');
-        iframe.classList.remove('hidden');
-      };
-      iframe.src = `https://www.youtube.com/embed/${data.details.trailerKey}?autoplay=1`;
+    
+    const details = data.success && data.details ? data.details : null;
+    const trailerKeys = details?.trailerKeys || (details?.trailerKey ? [details.trailerKey] : []);
+
+    trailerKeys.forEach((key, idx) => {
+      addSource(
+        `https://www.youtube.com/embed/${key}?autoplay=1`,
+        `https://www.youtube.com/watch?v=${key}`,
+        idx === 0 ? 'OFFICIAL TRAILER' : `ALT TRAILER #${idx + 1}`
+      );
+    });
+
+    // Fallback: If details had 0 keys, query dedicated /api/trailer
+    if (sources.length === 0 && (title || id)) {
+      try {
+        const tRes = await fetch(`/api/trailer?title=${encodeURIComponent(title || '')}&year=${encodeURIComponent(year || '')}&type=${type || 'movie'}&id=${id || ''}`);
+        const tData = await tRes.json();
+        if (tData.success && tData.trailerKey) {
+          addSource(
+            `https://www.youtube.com/embed/${tData.trailerKey}?autoplay=1`,
+            `https://www.youtube.com/watch?v=${tData.trailerKey}`,
+            'OFFICIAL TRAILER'
+          );
+        }
+      } catch (e) { }
+    }
+
+    // Always provide YouTube Search stream as a guaranteed fallback source
+    if (title) {
+      const searchQuery = `${title} ${year || ''} ${type === 'tv' ? 'tv series' : 'movie'} official trailer`.replace(/\s+/g, ' ').trim();
+      addSource(
+        `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(searchQuery)}&autoplay=1`,
+        `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`,
+        'YOUTUBE SEARCH STREAM'
+      );
+    }
+
+    if (sources.length > 0) {
+      trailerPlayerState.sources = sources;
+      trailerPlayerState.currentIndex = 0;
+      trailerPlayerState.title = title;
+      trailerPlayerState.year = year;
+      trailerPlayerState.type = type;
+      renderActiveTrailerSource();
     } else {
       modal.classList.add('hidden');
       if (fluidInstance && typeof fluidInstance.resume === 'function' && !document.hidden && state.activeTab !== 'tutorial-view') {
@@ -2161,11 +2762,23 @@ async function playTrailer(id, type) {
       showToast('No trailer found', 'error');
     }
   } catch (err) {
-    modal.classList.add('hidden');
-    if (fluidInstance && typeof fluidInstance.resume === 'function' && !document.hidden && state.activeTab !== 'tutorial-view') {
-      fluidInstance.resume();
+    if (title) {
+      const searchQuery = `${title} ${year || ''} ${type === 'tv' ? 'tv series' : 'movie'} official trailer`.replace(/\s+/g, ' ').trim();
+      addSource(
+        `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(searchQuery)}&autoplay=1`,
+        `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`,
+        'YOUTUBE SEARCH STREAM'
+      );
+      trailerPlayerState.sources = sources;
+      trailerPlayerState.currentIndex = 0;
+      renderActiveTrailerSource();
+    } else {
+      modal.classList.add('hidden');
+      if (fluidInstance && typeof fluidInstance.resume === 'function' && !document.hidden && state.activeTab !== 'tutorial-view') {
+        fluidInstance.resume();
+      }
+      showToast('Failed to load trailer', 'error');
     }
-    showToast('Failed to load trailer', 'error');
   }
 }
 
@@ -2191,7 +2804,7 @@ async function openTorrentModal(m, type, isShareMode = false) {
 
   if (type === 'tv') {
     if (elements.modalTorrentHeader) elements.modalTorrentHeader.classList.add('hidden');
-    loadTVSeasonsAccordion(m);
+    loadTVSeasonsAccordion(m, isShareMode);
   } else {
     if (elements.modalTorrentHeader) elements.modalTorrentHeader.classList.remove('hidden');
     fetchTorrentsForModal(m.title, type, m, isShareMode);
@@ -2210,7 +2823,10 @@ async function fetchTorrentsForModal(searchTitle, type, mediaObj = {}, isShareMo
 
   try {
     const category = type === 'tv' ? '205' : '200';
-    const res = await fetch(`/api/search?q=${encodeURIComponent(searchTitle)}&minSeeds=0&category=${category}`);
+    const imdbParam = mediaObj?.imdbId || mediaObj?.imdb || '';
+    const tmdbIdParam = mediaObj?.id || '';
+    const yearParam = mediaObj?.year || '';
+    const res = await fetch(`/api/search?q=${encodeURIComponent(searchTitle)}&minSeeds=0&category=${category}&imdbId=${encodeURIComponent(imdbParam)}&tmdbId=${encodeURIComponent(tmdbIdParam)}&year=${encodeURIComponent(yearParam)}&type=${type || 'movie'}`);
     const data = await res.json();
 
     const elapsed = Date.now() - fetchStart;
@@ -2225,20 +2841,39 @@ async function fetchTorrentsForModal(searchTitle, type, mediaObj = {}, isShareMo
         <div class="torrent-empty-state retro-box">
           <span class="material-symbols-outlined" style="font-size: 36px; opacity: 0.7; margin-bottom: 8px;">search_off</span>
           <div class="scramble-text" style="font-weight: 700; font-size: 1.1rem; margin-bottom: 6px;">NO RELEASES FOUND</div>
-          <div style="font-family: var(--font-mono); font-size: 12px; opacity: 0.8;">No verified swarm torrents found matching "${escapeHtml(searchTitle)}".</div>
+          <div style="font-family: var(--font-mono); font-size: 12px; opacity: 0.8; margin-bottom: 4px;">No verified swarm torrents found matching "${escapeHtml(searchTitle)}".</div>
+          <button type="button" class="btn-try-again" id="modalEmptyRetryBtn">
+            <span class="material-symbols-outlined">refresh</span>
+            <span>TRY AGAIN</span>
+          </button>
         </div>
       `;
       if (window.initScrambler) initScrambler();
+      const retryBtn = elements.modalTorrentList.querySelector('#modalEmptyRetryBtn');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', () => {
+          fetchTorrentsForModal(searchTitle, type, mediaObj, isShareMode);
+        });
+      }
     }
   } catch (err) {
     elements.modalTorrentList.innerHTML = `
       <div class="torrent-empty-state retro-box error">
         <span class="material-symbols-outlined" style="font-size: 36px; color: #ff3333; margin-bottom: 8px;">error</span>
         <div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 6px;">FAILED TO FETCH TORRENTS</div>
-        <div style="font-family: var(--font-mono); font-size: 12px; opacity: 0.8; margin-bottom: 12px;">Swarm network indexer encountered an issue.</div>
-        <button type="button" class="retro-btn" onclick="fetchTorrentsForModal('${escapeHtml(searchTitle)}', '${type}', {}, ${isShareMode})">RETRY SCAN</button>
+        <div style="font-family: var(--font-mono); font-size: 12px; opacity: 0.8; margin-bottom: 4px;">Swarm network indexer encountered an issue.</div>
+        <button type="button" class="btn-try-again" id="modalErrorRetryBtn">
+          <span class="material-symbols-outlined">refresh</span>
+          <span>TRY AGAIN</span>
+        </button>
       </div>
     `;
+    const retryBtn = elements.modalTorrentList.querySelector('#modalErrorRetryBtn');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', () => {
+        fetchTorrentsForModal(searchTitle, type, mediaObj, isShareMode);
+      });
+    }
   }
 }
 
@@ -2254,7 +2889,7 @@ async function executeTorrentShare(torrent, mediaObj = {}, searchTitle = '') {
       if (data.success && data.details && data.details.trailerKey) {
         trailerKey = data.details.trailerKey;
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   const queryParams = new URLSearchParams();
@@ -2266,7 +2901,7 @@ async function executeTorrentShare(torrent, mediaObj = {}, searchTitle = '') {
   if (mediaObj.mediaType || mediaObj.type) queryParams.set('mediaType', mediaObj.mediaType || mediaObj.type);
   if (torrent.magnet) queryParams.set('magnet', torrent.magnet);
   if (torrent.name) queryParams.set('name', torrent.name);
-  if (torrent.sizeFormatted || torrent.size) queryParams.set('size', torrent.sizeFormatted || `${(torrent.size / (1024*1024*1024)).toFixed(2)} GB`);
+  if (torrent.sizeFormatted || torrent.size) queryParams.set('size', torrent.sizeFormatted || `${(torrent.size / (1024 * 1024 * 1024)).toFixed(2)} GB`);
   if (torrent.qualityBadge || torrent.quality) queryParams.set('quality', torrent.qualityBadge || torrent.quality);
   if (torrent.seeders !== undefined) queryParams.set('seeds', torrent.seeders);
   if (trailerKey) queryParams.set('trailer', trailerKey);
@@ -2298,7 +2933,7 @@ async function executeTorrentShare(torrent, mediaObj = {}, searchTitle = '') {
     poster: mediaObj.poster || '',
     magnet: torrent.magnet || '',
     torrentName: torrent.name || title,
-    size: torrent.sizeFormatted || (torrent.size ? `${(torrent.size / (1024*1024*1024)).toFixed(2)} GB` : 'HD'),
+    size: torrent.sizeFormatted || (torrent.size ? `${(torrent.size / (1024 * 1024 * 1024)).toFixed(2)} GB` : 'HD'),
     quality: torrent.qualityBadge || '1080P HD',
     seeds: torrent.seeders || 0,
     trailer: trailerKey,
@@ -2428,10 +3063,10 @@ function generateClientTorrentBlob(torrent = {}, title = '') {
 
 async function triggerDownloadDirect(title, torrent) {
   if (!torrent) return;
-  
+
   const rawName = torrent.name || title || 'download';
   const cleanName = rawName.replace(/[/\\?%*:|"<>]/g, '_').trim() || 'download';
-  
+
   if (torrent.magnet || torrent.infoHash) {
     const params = new URLSearchParams({
       magnet: torrent.magnet || '',
@@ -2442,7 +3077,7 @@ async function triggerDownloadDirect(title, torrent) {
 
     try {
       const res = await fetch(`/api/torrent/download?${params.toString()}`);
-      
+
       let blob;
       if (res.ok && res.status === 200) {
         blob = await res.blob();
@@ -2491,10 +3126,10 @@ async function triggerDownloadDirect(title, torrent) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ movieTitle: title, torrent, openMagnet: false })
-  }).catch(() => {});
+  }).catch(() => { });
 }
 
-window.copyMagnetLink = async function(magnetDec, showSuccessToast = true) {
+window.copyMagnetLink = async function (magnetDec, showSuccessToast = true) {
   const magnet = decodeURIComponent(magnetDec);
   if (!magnet) {
     showToast('No magnet link available', 'error');
@@ -2522,32 +3157,32 @@ window.copyMagnetLink = async function(magnetDec, showSuccessToast = true) {
   }
 };
 
-window.shareSelectedTorrent = function(titleDec, torrentStr, mediaStr) {
+window.shareSelectedTorrent = function (titleDec, torrentStr, mediaStr) {
   const title = decodeURIComponent(titleDec);
   let torrent = {};
   try {
     torrent = JSON.parse(decodeURIComponent(torrentStr || '{}'));
-  } catch (e) {}
+  } catch (e) { }
   let media = {};
   try {
     media = JSON.parse(decodeURIComponent(mediaStr || '{}'));
-  } catch (e) {}
+  } catch (e) { }
   executeTorrentShare(torrent, media, title);
 };
 
-window.triggerDownload = function(titleDec, torrentStr) {
+window.triggerDownload = function (titleDec, torrentStr) {
   const title = decodeURIComponent(titleDec);
   let torrent = {};
   try {
     torrent = JSON.parse(decodeURIComponent(torrentStr));
-  } catch (e) {}
+  } catch (e) { }
   triggerDownloadDirect(title, torrent);
 };
 
 // Register Service Worker for PWA Support
 if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/sw.js').catch(() => { });
   });
 }
 

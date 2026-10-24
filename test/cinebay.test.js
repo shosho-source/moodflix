@@ -31,4 +31,24 @@ describe('CineBay Torrent Provider', () => {
     assert.strictEqual(CineBay.isExecutableOrMalicious('Inception 2010 1080p BluRay x264-SPARKS'), false);
     assert.strictEqual(CineBay.isExecutableOrMalicious('Dune Part Two 2024 2160p UHD HDR'), false);
   });
+
+  it('accurately resolves IMDB ID for difficult and foreign titles via instant suggestion API', async () => {
+    const imdb = await CineBay.lookupImdbId('Godzilla Minus One', 'movie');
+    assert.strictEqual(imdb, 'tt23289160');
+
+    const talkShowImdb = await CineBay.lookupImdbId('Last Week Tonight with John Oliver', 'tv');
+    assert.strictEqual(talkShowImdb, 'tt3530232');
+  });
+
+  it('queries Internet Archive for classics and public domain releases', async () => {
+    const archiveResults = await CineBay.queryInternetArchive('Night of the Living Dead');
+    assert.ok(archiveResults.length > 0);
+    assert.ok(archiveResults.some(r => r.source === 'InternetArchive'));
+    assert.ok(archiveResults.some(r => r.torrentUrl && r.torrentUrl.includes('archive.org')));
+  });
+
+  it('returns valid torrents for challenging titles previously showing as unavailable', async () => {
+    const results = await CineBay.search('Night of the Living Dead 1968');
+    assert.ok(results.length > 0, 'Expected to find torrents for Night of the Living Dead 1968');
+  });
 });

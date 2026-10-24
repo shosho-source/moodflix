@@ -677,12 +677,58 @@ export class TMDB {
     };
   }
 
+  static trailerCache = new Map();
+
+  /**
+   * Search YouTube for an official trailer key if TMDB lacks one.
+   */
+  static async findYouTubeTrailer(title, year = '', type = 'movie') {
+    if (!title) return null;
+    const cacheKey = `${type}:${title}:${year}`.toLowerCase();
+    if (TMDB.trailerCache && TMDB.trailerCache.has(cacheKey)) {
+      return TMDB.trailerCache.get(cacheKey);
+    }
+
+    const typeKeyword = type === 'tv' ? 'tv series' : 'movie';
+    const query = `${title} ${year ? year : ''} ${typeKeyword} official trailer`.replace(/\s+/g, ' ').trim();
+    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+
+    try {
+      const res = await TMDB.fetchWithRetry(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9'
+        }
+      });
+      if (!res || !res.ok) return null;
+
+      const text = await res.text();
+      const matches = [...text.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)];
+      if (matches.length > 0) {
+        const foundKey = matches[0][1];
+        if (TMDB.trailerCache) {
+          if (TMDB.trailerCache.size > 200) {
+            const firstKey = TMDB.trailerCache.keys().next().value;
+            TMDB.trailerCache.delete(firstKey);
+          }
+          TMDB.trailerCache.set(cacheKey, foundKey);
+        }
+        return foundKey;
+      }
+    } catch (err) {
+      console.warn(`[TMDB] YouTube trailer fallback search error for "${title}":`, err.message);
+    }
+
+    return null;
+  }
+
   /**
    * Fetch media details including runtime, trailer, and watch providers.
    */
   static async getDetails(id, type = 'movie', options = {}) {
     const { headers, queryParams } = TMDB.getAuthHeadersAndParams(options);
-    queryParams.append('append_to_response', 'videos,watch/providers');
+    queryParams.append('append_to_response', 'videos,watch/providers,credits');
+    queryParams.set('include_video_language', 'en,null,ja,ko,es,fr,de,zh,it,pt,ru,hi');
     
     const url = `${TMDB.BASE_URL}/${type}/${id}?${queryParams.toString()}`;
     const res = await TMDB.fetchWithRetry(url, { headers });
@@ -692,10 +738,36 @@ export class TMDB {
     const data = await res.json();
     
     let trailerKey = null;
-    if (data.videos && data.videos.results) {
-      const trailer = data.videos.results.find(v => v.type === 'Trailer' && v.site === 'YouTube');
-      if (trailer) trailerKey = trailer.key;
+    const trailerKeys = [];
+    const seenTrailerKeys = new Set();
+    const addTrailerKey = (key) => {
+      if (key && typeof key === 'string' && key.length === 11 && !seenTrailerKeys.has(key)) {
+        seenTrailerKeys.add(key);
+        trailerKeys.push(key);
+      }
+    };
+
+    if (data.videos && Array.isArray(data.videos.results) && data.videos.results.length > 0) {
+      const ytVideos = data.videos.results.filter(v => v.site === 'YouTube' && v.key);
+      const officialTrailers = ytVideos.filter(v => v.type === 'Trailer' && v.official === true);
+      const anyTrailers = ytVideos.filter(v => v.type === 'Trailer');
+      const anyTeasers = ytVideos.filter(v => v.type === 'Teaser');
+      const anyClips = ytVideos.filter(v => v.type === 'Clip' || v.type === 'Opening Credits' || v.type === 'Featurette');
+      
+      [...officialTrailers, ...anyTrailers, ...anyTeasers, ...anyClips, ...ytVideos].forEach(v => addTrailerKey(v.key));
     }
+
+    // Always fetch or fallback to YouTube search if fewer than 2 keys exist to provide alternatives
+    const mediaTitle = data.title || data.name || options.fallbackTitle || '';
+    const mediaYear = (data.release_date || data.first_air_date || options.fallbackYear || '').substring(0, 4);
+    if (trailerKeys.length < 2 && mediaTitle) {
+      try {
+        const ytSearchKey = await TMDB.findYouTubeTrailer(mediaTitle, mediaYear, type);
+        if (ytSearchKey) addTrailerKey(ytSearchKey);
+      } catch (e) {}
+    }
+
+    trailerKey = trailerKeys[0] || null;
     
     let watchProviders = [];
     if (data['watch/providers'] && data['watch/providers'].results && data['watch/providers'].results.US) {
@@ -712,16 +784,33 @@ export class TMDB {
         return true;
       });
     }
+
+    // Parse cast members for the details card
+    let cast = [];
+    const rawCast = data.credits?.cast || data.aggregate_credits?.cast || [];
+    if (Array.isArray(rawCast) && rawCast.length > 0) {
+      cast = rawCast.slice(0, 16).map(c => ({
+        id: c.id,
+        name: c.name || c.original_name,
+        character: (c.character || (c.roles && c.roles[0]?.character) || '').trim(),
+        profile: c.profile_path ? `${TMDB.IMAGE_BASE_URL}${c.profile_path}` : null,
+        order: c.order ?? 999
+      }));
+    }
     
     return {
       runtime: data.runtime || (data.episode_run_time && data.episode_run_time[0]) || 0,
       trailerKey,
+      trailerKeys,
       watchProviders,
       backdrop: data.backdrop_path ? `https://image.tmdb.org/t/p/original${data.backdrop_path}` : null,
       budget: data.budget,
       revenue: data.revenue,
       status: data.status,
       seasons: data.seasons || [],
+      cast,
+      title: data.title || data.name || options.fallbackTitle || '',
+      year: (data.release_date || data.first_air_date || options.fallbackYear || '').substring(0, 4)
     };
   }
 
@@ -739,26 +828,236 @@ export class TMDB {
   }
 
   /**
-   * Fetch similar media.
+   * Fetch similar media (delegates to getSimilarMedia).
    */
   static async getSimilar(id, type = 'movie', options = {}) {
-    const { headers, queryParams } = TMDB.getAuthHeadersAndParams(options);
-    
-    const url = `${TMDB.BASE_URL}/${type}/${id}/similar?${queryParams.toString()}`;
-    const res = await TMDB.fetchWithRetry(url, { headers });
-    
-    if (!res || !res.ok) return [];
-    
-    const data = await res.json();
-    
-    return (data.results || []).map(r => ({
-      ...(type === 'tv' ? TMDB.mapTMDBTVResult(r) : TMDB.mapTMDBMovieResult(r)),
-      category: 'similar'
-    }));
+    return TMDB.getSimilarMedia(id, type, options);
+  }
+
+  static CHARACTER_ACTORS = {
+    'barney stinson': { character: 'Barney Stinson', actors: ['Neil Patrick Harris'] },
+    'superman': { character: 'Superman', actors: ['Henry Cavill', 'Christopher Reeve', 'David Corenswet', 'Tyler Hoechlin', 'Brandon Routh', 'Tom Welling', 'Dean Cain'] },
+    'clark kent': { character: 'Superman', actors: ['Henry Cavill', 'Christopher Reeve', 'David Corenswet', 'Tyler Hoechlin', 'Brandon Routh', 'Tom Welling'] },
+    'batman': { character: 'Batman', actors: ['Christian Bale', 'Robert Pattinson', 'Ben Affleck', 'Michael Keaton', 'Adam West', 'George Clooney', 'Val Kilmer'] },
+    'bruce wayne': { character: 'Batman', actors: ['Christian Bale', 'Robert Pattinson', 'Ben Affleck', 'Michael Keaton', 'Adam West', 'George Clooney', 'Val Kilmer'] },
+    'spider-man': { character: 'Spider-Man', actors: ['Tom Holland', 'Tobey Maguire', 'Andrew Garfield'] },
+    'spiderman': { character: 'Spider-Man', actors: ['Tom Holland', 'Tobey Maguire', 'Andrew Garfield'] },
+    'peter parker': { character: 'Spider-Man', actors: ['Tom Holland', 'Tobey Maguire', 'Andrew Garfield'] },
+    'walter white': { character: 'Walter White', actors: ['Bryan Cranston'] },
+    'heisenberg': { character: 'Walter White', actors: ['Bryan Cranston'] },
+    'jesse pinkman': { character: 'Jesse Pinkman', actors: ['Aaron Paul'] },
+    'saul goodman': { character: 'Saul Goodman', actors: ['Bob Odenkirk'] },
+    'jimmy mcgill': { character: 'Saul Goodman', actors: ['Bob Odenkirk'] },
+    'sherlock holmes': { character: 'Sherlock Holmes', actors: ['Benedict Cumberbatch', 'Robert Downey Jr.', 'Henry Cavill', 'Jonny Lee Miller', 'Ian McKellen'] },
+    'sherlock': { character: 'Sherlock Holmes', actors: ['Benedict Cumberbatch', 'Robert Downey Jr.', 'Henry Cavill', 'Jonny Lee Miller'] },
+    'dr watson': { character: 'Dr. John Watson', actors: ['Martin Freeman', 'Jude Law'] },
+    'john watson': { character: 'Dr. John Watson', actors: ['Martin Freeman', 'Jude Law'] },
+    'iron man': { character: 'Iron Man', actors: ['Robert Downey Jr.'] },
+    'tony stark': { character: 'Iron Man', actors: ['Robert Downey Jr.'] },
+    'captain america': { character: 'Captain America', actors: ['Chris Evans', 'Anthony Mackie'] },
+    'steve rogers': { character: 'Captain America', actors: ['Chris Evans'] },
+    'thor': { character: 'Thor', actors: ['Chris Hemsworth'] },
+    'loki': { character: 'Loki', actors: ['Tom Hiddleston'] },
+    'black widow': { character: 'Black Widow', actors: ['Scarlett Johansson', 'Florence Pugh'] },
+    'natasha romanoff': { character: 'Black Widow', actors: ['Scarlett Johansson'] },
+    'hawkeye': { character: 'Hawkeye', actors: ['Jeremy Renner'] },
+    'clint barton': { character: 'Hawkeye', actors: ['Jeremy Renner'] },
+    'hulk': { character: 'Hulk', actors: ['Mark Ruffalo', 'Edward Norton'] },
+    'bruce banner': { character: 'Bruce Banner / Hulk', actors: ['Mark Ruffalo', 'Edward Norton'] },
+    'thanos': { character: 'Thanos', actors: ['Josh Brolin'] },
+    'deadpool': { character: 'Deadpool', actors: ['Ryan Reynolds'] },
+    'wade wilson': { character: 'Deadpool', actors: ['Ryan Reynolds'] },
+    'wolverine': { character: 'Wolverine', actors: ['Hugh Jackman'] },
+    'logan': { character: 'Wolverine', actors: ['Hugh Jackman'] },
+    'professor x': { character: 'Professor X', actors: ['Patrick Stewart', 'James McAvoy'] },
+    'charles xavier': { character: 'Professor X', actors: ['Patrick Stewart', 'James McAvoy'] },
+    'magneto': { character: 'Magneto', actors: ['Ian McKellen', 'Michael Fassbender'] },
+    'erik lehnsherr': { character: 'Magneto', actors: ['Ian McKellen', 'Michael Fassbender'] },
+    'james bond': { character: 'James Bond', actors: ['Daniel Craig', 'Sean Connery', 'Pierce Brosnan', 'Roger Moore', 'Timothy Dalton'] },
+    '007': { character: 'James Bond', actors: ['Daniel Craig', 'Sean Connery', 'Pierce Brosnan', 'Roger Moore', 'Timothy Dalton'] },
+    'harry potter': { character: 'Harry Potter', actors: ['Daniel Radcliffe'] },
+    'hermione granger': { character: 'Hermione Granger', actors: ['Emma Watson'] },
+    'ron weasley': { character: 'Ron Weasley', actors: ['Rupert Grint'] },
+    'lord voldemort': { character: 'Lord Voldemort', actors: ['Ralph Fiennes'] },
+    'voldemort': { character: 'Lord Voldemort', actors: ['Ralph Fiennes'] },
+    'severus snape': { character: 'Severus Snape', actors: ['Alan Rickman'] },
+    'snape': { character: 'Severus Snape', actors: ['Alan Rickman'] },
+    'jack sparrow': { character: 'Captain Jack Sparrow', actors: ['Johnny Depp'] },
+    'captain jack sparrow': { character: 'Captain Jack Sparrow', actors: ['Johnny Depp'] },
+    'neo': { character: 'Neo', actors: ['Keanu Reeves'] },
+    'john wick': { character: 'John Wick', actors: ['Keanu Reeves'] },
+    'morpheus': { character: 'Morpheus', actors: ['Laurence Fishburne', 'Yahya Abdul-Mateen II'] },
+    'trinity': { character: 'Trinity', actors: ['Carrie-Anne Moss'] },
+    'joker': { character: 'The Joker', actors: ['Heath Ledger', 'Joaquin Phoenix', 'Jack Nicholson', 'Barry Keoghan', 'Cameron Monaghan'] },
+    'the joker': { character: 'The Joker', actors: ['Heath Ledger', 'Joaquin Phoenix', 'Jack Nicholson', 'Barry Keoghan'] },
+    'harley quinn': { character: 'Harley Quinn', actors: ['Margot Robbie', 'Lady Gaga', 'Kaley Cuoco'] },
+    'wednesday addams': { character: 'Wednesday Addams', actors: ['Jenna Ortega', 'Christina Ricci'] },
+    'wednesday': { character: 'Wednesday Addams', actors: ['Jenna Ortega', 'Christina Ricci'] },
+    'tommy shelby': { character: 'Tommy Shelby', actors: ['Cillian Murphy'] },
+    'thomas shelby': { character: 'Tommy Shelby', actors: ['Cillian Murphy'] },
+    'oppenheimer': { character: 'J. Robert Oppenheimer', actors: ['Cillian Murphy'] },
+    'jon snow': { character: 'Jon Snow', actors: ['Kit Harington'] },
+    'daenerys targaryen': { character: 'Daenerys Targaryen', actors: ['Emilia Clarke'] },
+    'tyrion lannister': { character: 'Tyrion Lannister', actors: ['Peter Dinklage'] },
+    'arya stark': { character: 'Arya Stark', actors: ['Maisie Williams'] },
+    'michael scott': { character: 'Michael Scott', actors: ['Steve Carell'] },
+    'dwight schrute': { character: 'Dwight Schrute', actors: ['Rainn Wilson'] },
+    'jim halpert': { character: 'Jim Halpert', actors: ['John Krasinski'] },
+    'pam beesly': { character: 'Pam Beesly', actors: ['Jenna Fischer'] },
+    'chandler bing': { character: 'Chandler Bing', actors: ['Matthew Perry'] },
+    'joey tribbiani': { character: 'Joey Tribbiani', actors: ['Matt LeBlanc'] },
+    'ross geller': { character: 'Ross Geller', actors: ['David Schwimmer'] },
+    'rachel green': { character: 'Rachel Green', actors: ['Jennifer Aniston'] },
+    'monica geller': { character: 'Monica Geller', actors: ['Courteney Cox'] },
+    'phoebe buffay': { character: 'Phoebe Buffay', actors: ['Lisa Kudrow'] },
+    'ted mosby': { character: 'Ted Mosby', actors: ['Josh Radnor'] },
+    'marshall eriksen': { character: 'Marshall Eriksen', actors: ['Jason Segel'] },
+    'robin scherbatsky': { character: 'Robin Scherbatsky', actors: ['Cobie Smulders'] },
+    'lily aldrin': { character: 'Lily Aldrin', actors: ['Alyson Hannigan'] },
+    'sheldon cooper': { character: 'Sheldon Cooper', actors: ['Jim Parsons'] },
+    'tony soprano': { character: 'Tony Soprano', actors: ['James Gandolfini'] },
+    'don draper': { character: 'Don Draper', actors: ['Jon Hamm'] },
+    'dexter morgan': { character: 'Dexter Morgan', actors: ['Michael C. Hall'] },
+    'dexter': { character: 'Dexter Morgan', actors: ['Michael C. Hall'] },
+    'geralt of rivia': { character: 'Geralt of Rivia', actors: ['Henry Cavill', 'Liam Hemsworth'] },
+    'the witcher': { character: 'Geralt of Rivia', actors: ['Henry Cavill', 'Liam Hemsworth'] },
+    'luke skywalker': { character: 'Luke Skywalker', actors: ['Mark Hamill'] },
+    'darth vader': { character: 'Darth Vader', actors: ['Hayden Christensen', 'James Earl Jones'] },
+    'anakin skywalker': { character: 'Anakin Skywalker', actors: ['Hayden Christensen'] },
+    'han solo': { character: 'Han Solo', actors: ['Harrison Ford', 'Alden Ehrenreich'] },
+    'indiana jones': { character: 'Indiana Jones', actors: ['Harrison Ford'] },
+    'michael corleone': { character: 'Michael Corleone', actors: ['Al Pacino'] },
+    'tony montana': { character: 'Tony Montana', actors: ['Al Pacino'] },
+    'vito corleone': { character: 'Vito Corleone', actors: ['Marlon Brando', 'Robert De Niro'] },
+    'patrick bateman': { character: 'Patrick Bateman', actors: ['Christian Bale'] },
+    'tyler durden': { character: 'Tyler Durden', actors: ['Brad Pitt'] },
+    'arthur fleck': { character: 'Arthur Fleck / Joker', actors: ['Joaquin Phoenix'] },
+    'homelander': { character: 'Homelander', actors: ['Antony Starr'] },
+    'billy butcher': { character: 'Billy Butcher', actors: ['Karl Urban'] },
+    'soldier boy': { character: 'Soldier Boy', actors: ['Jensen Ackles'] },
+    'dean winchester': { character: 'Dean Winchester', actors: ['Jensen Ackles'] },
+    'sam winchester': { character: 'Sam Winchester', actors: ['Jared Padalecki'] },
+    'peacemaker': { character: 'Peacemaker', actors: ['John Cena'] },
+    'katniss everdeen': { character: 'Katniss Everdeen', actors: ['Jennifer Lawrence'] },
+    'bella swan': { character: 'Bella Swan', actors: ['Kristen Stewart'] },
+    'edward cullen': { character: 'Edward Cullen', actors: ['Robert Pattinson'] },
+    'ethan hunt': { character: 'Ethan Hunt', actors: ['Tom Cruise'] },
+    'maverick': { character: 'Pete "Maverick" Mitchell', actors: ['Tom Cruise'] },
+    'barbie': { character: 'Barbie', actors: ['Margot Robbie'] },
+    'ken': { character: 'Ken', actors: ['Ryan Gosling'] },
+    'forrest gump': { character: 'Forrest Gump', actors: ['Tom Hanks'] },
+    'gandalf': { character: 'Gandalf', actors: ['Ian McKellen'] },
+    'frodo baggins': { character: 'Frodo Baggins', actors: ['Elijah Wood'] },
+    'frodo': { character: 'Frodo Baggins', actors: ['Elijah Wood'] },
+    'aragorn': { character: 'Aragorn', actors: ['Viggo Mortensen'] },
+    'legolas': { character: 'Legolas', actors: ['Orlando Bloom'] },
+    'gollum': { character: 'Gollum', actors: ['Andy Serkis'] },
+    'hannibal lecter': { character: 'Hannibal Lecter', actors: ['Anthony Hopkins', 'Mads Mikkelsen'] },
+    'hercule poirot': { character: 'Hercule Poirot', actors: ['Kenneth Branagh', 'David Suchet'] },
+    'wonder woman': { character: 'Wonder Woman', actors: ['Gal Gadot', 'Lynda Carter'] },
+    'diana prince': { character: 'Wonder Woman', actors: ['Gal Gadot', 'Lynda Carter'] },
+    'aquaman': { character: 'Aquaman', actors: ['Jason Momoa'] },
+    'arthur curry': { character: 'Aquaman', actors: ['Jason Momoa'] },
+    'the flash': { character: 'The Flash', actors: ['Grant Gustin', 'Ezra Miller'] },
+    'flash': { character: 'The Flash', actors: ['Grant Gustin', 'Ezra Miller'] },
+    'barry allen': { character: 'The Flash', actors: ['Grant Gustin', 'Ezra Miller'] },
+    'doctor strange': { character: 'Doctor Strange', actors: ['Benedict Cumberbatch'] },
+    'stephen strange': { character: 'Doctor Strange', actors: ['Benedict Cumberbatch'] },
+    'lucifer morningstar': { character: 'Lucifer Morningstar', actors: ['Tom Ellis'] },
+    'lucifer': { character: 'Lucifer Morningstar', actors: ['Tom Ellis'] },
+    'beth harmon': { character: 'Beth Harmon', actors: ['Anya Taylor-Joy'] },
+    'eleven': { character: 'Eleven', actors: ['Millie Bobby Brown'] }
+  };
+
+  /**
+   * Find actors who portrayed a fictional character.
+   */
+  static async findActorsByCharacter(query, options = {}) {
+    if (!query || !query.trim()) return [];
+    const raw = query.trim().toLowerCase().replace(/['"!?.]/g, '');
+
+    // 1. Check knowledge map
+    let matchEntry = null;
+    if (TMDB.CHARACTER_ACTORS[raw]) {
+      matchEntry = TMDB.CHARACTER_ACTORS[raw];
+    } else {
+      for (const [charKey, val] of Object.entries(TMDB.CHARACTER_ACTORS)) {
+        if (raw === charKey || raw.includes(charKey) || (charKey.length > 4 && charKey.includes(raw))) {
+          matchEntry = val;
+          break;
+        }
+      }
+    }
+
+    let actorNames = matchEntry ? [...matchEntry.actors] : [];
+    let characterName = matchEntry ? matchEntry.character : query.trim();
+
+    // 2. Dynamic fallback: Wikipedia REST summary extraction
+    if (actorNames.length === 0) {
+      try {
+        const wikiSlug = encodeURIComponent(query.trim().replace(/\s+/g, '_'));
+        const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${wikiSlug}`, {
+          headers: { 'User-Agent': 'MoodFlix/2.0 (contact@moodflix.dev)' }
+        });
+        if (wikiRes.ok) {
+          const wikiData = await wikiRes.json();
+          const extract = wikiData.extract || '';
+          const regexList = [
+            /(?:portrayed|played|voiced)\s+by\s+([A-Z][a-zA-Z\s\.\-]+?)(?:[,.]|\s+in\s+|\s+and\s+)/i,
+            /([A-Z][a-zA-Z\s\.\-]+?)\s+(?:portrays|plays|voices)\s+/i
+          ];
+          for (const reg of regexList) {
+            const m = extract.match(reg);
+            if (m && m[1] && m[1].trim().length > 2 && m[1].trim().length < 40) {
+              actorNames.push(m[1].trim());
+              characterName = wikiData.title || query.trim();
+              break;
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (actorNames.length === 0) return [];
+
+    // 3. Resolve actor details from TMDB
+    const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
+    if (!hasAuth) return [];
+
+    const actorResults = [];
+    const seenIds = new Set();
+    for (const name of actorNames) {
+      try {
+        const searchParams = new URLSearchParams(queryParams);
+        searchParams.set('query', name);
+        searchParams.set('include_adult', 'false');
+        const searchUrl = `${TMDB.BASE_URL}/search/person?${searchParams.toString()}`;
+        const res = await TMDB.fetchWithRetry(searchUrl, { headers });
+        if (res && res.ok) {
+          const data = await res.json();
+          const first = (data.results || [])[0];
+          if (first && !seenIds.has(first.id)) {
+            seenIds.add(first.id);
+            actorResults.push({
+              id: first.id,
+              name: first.name,
+              profile: first.profile_path ? `${TMDB.IMAGE_BASE_URL}${first.profile_path}` : null,
+              knownForDepartment: first.known_for_department || 'Acting',
+              popularity: first.popularity || 0,
+              knownFor: (first.known_for || []).map(k => k.title || k.name).filter(Boolean).slice(0, 4),
+              characterPlayed: characterName,
+              isCharacterMatch: true
+            });
+          }
+        }
+      } catch (err) {}
+    }
+
+    return actorResults;
   }
 
   /**
-   * Search artists and performers on TMDB.
+   * Search artists and performers on TMDB, with seamless character resolution.
    */
   static async searchArtists(query, options = {}) {
     if (!query || !query.trim()) return [];
@@ -766,6 +1065,20 @@ export class TMDB {
     if (!hasAuth) return [];
 
     const rawQuery = query.trim();
+    const cleanLower = rawQuery.toLowerCase().replace(/['"!?.]/g, '');
+
+    // Check if query is a known fictional character first
+    const isKnownCharacter = Object.keys(TMDB.CHARACTER_ACTORS).some(key => 
+      cleanLower === key || (key.length >= 4 && (cleanLower.includes(key) || key.includes(cleanLower)))
+    );
+
+    if (isKnownCharacter) {
+      const characterActors = await TMDB.findActorsByCharacter(rawQuery, options);
+      if (characterActors.length > 0) {
+        return characterActors;
+      }
+    }
+
     queryParams.set('query', rawQuery);
     queryParams.set('include_adult', 'false');
     const url = `${TMDB.BASE_URL}/search/person?${queryParams.toString()}`;
@@ -778,11 +1091,23 @@ export class TMDB {
         results = data.results || [];
       }
 
-      // Typo tolerance: If TMDB returns 0 matches for artist query, try spell suggestion!
+      // Typo tolerance: If TMDB returns 0 matches for artist query, try character resolution or spell suggestion!
       let correctedQuery = null;
       if (results.length === 0) {
+        // Dynamic character resolution fallback
+        const dynamicCharActors = await TMDB.findActorsByCharacter(rawQuery, options);
+        if (dynamicCharActors.length > 0) {
+          return dynamicCharActors;
+        }
+
         const corrected = await FuzzyMatcher.suggestCorrection(rawQuery);
         if (corrected && corrected.toLowerCase() !== rawQuery.toLowerCase()) {
+          // Check if corrected query is a character
+          const correctedCharActors = await TMDB.findActorsByCharacter(corrected, options);
+          if (correctedCharActors.length > 0) {
+            return correctedCharActors;
+          }
+
           correctedQuery = corrected;
           queryParams.set('query', corrected);
           const retryRes = await TMDB.fetchWithRetry(`${TMDB.BASE_URL}/search/person?${queryParams.toString()}`, { headers });

@@ -26,6 +26,11 @@ export class TheRottenCine {
     if (this.onLog) {
       this.onLog(entry);
     }
+    if (this.logger && typeof this.logger[type] === 'function') {
+      this.logger[type](msg);
+    } else if (this.logger && typeof this.logger.log === 'function') {
+      this.logger.log(msg);
+    }
   }
 
   /**
@@ -145,6 +150,8 @@ export class TheRottenCine {
   }
 
   async run(options = {}) {
+    if (options.logger) this.logger = options.logger;
+    if (options.onLog) this.onLog = options.onLog;
     return this.execute(options);
   }
 }

@@ -56,5 +56,15 @@ describe('Downloader', () => {
     assert.ok(res.buffer.length > 50, 'Buffer must have content');
     assert.strictEqual(res.filename.endsWith('.torrent'), true);
     assert.strictEqual(res.buffer.slice(0, 1).toString(), 'd', 'Must start with bencode dictionary marker');
+    
+    // Pieces length must match Math.ceil(size / 262144) * 20
+    const expectedPieces = Math.ceil(2147483648 / 262144) * 20;
+    assert.ok(res.buffer.includes(Buffer.from(`6:pieces${expectedPieces}:`)), 'Pieces buffer must match piece count * 20');
+  });
+
+  it('permits valid magnet links with spaces, plus signs, brackets, and tracker slashes', () => {
+    assert.doesNotThrow(() => {
+      Downloader.openMagnetInClient('magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a&dn=The+Matrix+(1999)+[1080p]&tr=udp://tracker.opentrackr.org:1337/announce');
+    });
   });
 });

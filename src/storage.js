@@ -104,10 +104,17 @@ export class Storage {
   static hasDownloaded(movieTitle) {
     if (!movieTitle) return false;
     const norm = movieTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!norm) return false;
     const data = Storage.read();
     return (data.downloads || []).some(d => {
       const target = (d.movieTitle || d.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      return target === norm || target.includes(norm) || norm.includes(target);
+      if (!target) return false;
+      if (target === norm) return true;
+      // Only permit substring inclusion if both titles are >= 6 characters to prevent false positives on short words like 'it', 'up', 'saw'
+      if (norm.length >= 6 && target.length >= 6) {
+        return target.includes(norm) || norm.includes(target);
+      }
+      return false;
     });
   }
 
