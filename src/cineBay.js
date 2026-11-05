@@ -51,21 +51,38 @@ export class CineBay {
   /**
    * Search The Cine Bay & multiple high-speed torrent swarms for a movie or TV title
    * @param {string} query Search terms (e.g. "Inception 2010", "Gladiator")
-   * @param {object} options Filter options (category, minSeeds, imdbId, season, episode, tmdbId, type)
+   * @param {object} options Filter options (category, minSeeds, imdbId, season, episode, tmdbId, type, isSeasonPack)
    */
   static async search(query, options = {}) {
     const rawQuery = (query || '').trim();
     if (!rawQuery) return [];
 
-    const category = options.category || '200'; // 200 = Video / Movies, 205 = TV
+    let isTv = options.category === '205' || options.type === 'tv';
+    let season = options.season;
+    let episode = options.episode;
+
+    if (!season) {
+      const sMatch = rawQuery.match(/S(\d+)(?!E\d+)/i) || rawQuery.match(/Season\s*(\d+)/i);
+      if (sMatch) {
+        season = parseInt(sMatch[1], 10);
+      }
+    }
+
+    if (isTv && season && !episode && (options.isSeasonPack || options.seasonPack || /season\s*\d+|s\d+\b|complete|batch/i.test(rawQuery))) {
+      options.isSeasonPack = true;
+      options.seasonPack = true;
+      options.season = season;
+    }
+
+    const category = options.category || (isTv ? '205' : '200'); // 200 = Video / Movies, 205 = TV
     const minSeeds = options.minSeeds || 0;
 
     // 1. Run Torrentio + Apibay + YTS.GG + Internet Archive queries in parallel
     const [torrentioResults, apibayResults, ytsResults, archiveResults] = await Promise.all([
       CineBay.queryTorrentio(rawQuery, options),
-      CineBay.queryApibay(rawQuery, category),
+      CineBay.queryApibay(rawQuery, category, options),
       CineBay.queryYts(rawQuery, options),
-      CineBay.queryInternetArchive(rawQuery, category)
+      CineBay.queryInternetArchive(rawQuery, category, options)
     ]);
 
     const seenHashes = new Set();
@@ -85,9 +102,9 @@ export class CineBay {
       if (cleanTitle && cleanTitle.toLowerCase() !== rawQuery.toLowerCase()) {
         const [cleanTorrentio, cleanApibay, cleanYts, cleanArchive] = await Promise.all([
           CineBay.queryTorrentio(cleanTitle, options),
-          CineBay.queryApibay(cleanTitle, category),
+          CineBay.queryApibay(cleanTitle, category, options),
           CineBay.queryYts(cleanTitle, options),
-          CineBay.queryInternetArchive(cleanTitle, category)
+          CineBay.queryInternetArchive(cleanTitle, category, options)
         ]);
         for (const t of [...cleanYts, ...cleanTorrentio, ...cleanApibay, ...cleanArchive]) {
           const hash = (t.infoHash || t.id || '').toLowerCase();
@@ -105,9 +122,9 @@ export class CineBay {
       if (simplified && simplified.toLowerCase() !== rawQuery.toLowerCase()) {
         const [simTorrentio, simApibay, simYts, simArchive] = await Promise.all([
           CineBay.queryTorrentio(simplified, options),
-          CineBay.queryApibay(simplified, category),
+          CineBay.queryApibay(simplified, category, options),
           CineBay.queryYts(simplified, options),
-          CineBay.queryInternetArchive(simplified, category)
+          CineBay.queryInternetArchive(simplified, category, options)
         ]);
         for (const t of [...simYts, ...simTorrentio, ...simApibay, ...simArchive]) {
           const hash = (t.infoHash || t.id || '').toLowerCase();
@@ -140,9 +157,9 @@ export class CineBay {
         if (corrected && corrected.toLowerCase() !== rawQuery.toLowerCase()) {
           const [typoTorrentio, typoApibay, typoYts, typoArchive] = await Promise.all([
             CineBay.queryTorrentio(corrected, options),
-            CineBay.queryApibay(corrected, category),
+            CineBay.queryApibay(corrected, category, options),
             CineBay.queryYts(corrected, options),
-            CineBay.queryInternetArchive(corrected, category)
+            CineBay.queryInternetArchive(corrected, category, options)
           ]);
           for (const t of [...typoYts, ...typoTorrentio, ...typoApibay, ...typoArchive]) {
             const hash = (t.infoHash || t.id || '').toLowerCase();
@@ -182,6 +199,61 @@ export class CineBay {
   }
 
   /**
+   * Checks if a torrent name represents a full season pack, batch, or multi-season release for a given season.
+   */
+  static isSeasonPackName(name, season = 1) {
+    if (!name || typeof name !== 'string') return false;
+    const sNum = parseInt(season, 10) || 1;
+    const lower = name.toLowerCase();
+
+    // Multi-season packs (e.g. S01-S05, Seasons 1-4, All Seasons, Complete Series)
+    const multiMatch = lower.match(/s(\d+)\s*[-–—]\s*s?(\d+)/i) || lower.match(/seasons?\s*(\d+)\s*[-–—]\s*(\d+)/i);
+    if (multiMatch) {
+      const startS = parseInt(multiMatch[1], 10);
+      const endS = parseInt(multiMatch[2], 10);
+      if (sNum >= startS && sNum <= endS) return true;
+      return false;
+    }
+    if (/\b(all\s*seasons|complete\s*(series|collection))\b/i.test(lower)) {
+      return true;
+    }
+
+    // Exclude releases specifying a different single season (e.g. 'Season 2' when sNum is 1)
+    const otherSeasonRegex = new RegExp('(?:season\\s*0*(?!' + sNum + '\\b)\\d+|s0*(?!' + sNum + '\\b)\\d+(?:\\b|[^e0-9]))', 'i');
+    if (otherSeasonRegex.test(lower) && !new RegExp('s0*' + sNum + '|season\\s*0*' + sNum, 'i').test(lower)) {
+      return false;
+    }
+
+    // Exclude single episode releases of another episode number (e.g. S01E05 without batch / complete tags)
+    const singleOtherEpRegex = new RegExp('s0*' + sNum + '\\s*e(?!0*1[\\b\\-])\\d+', 'i');
+    if (singleOtherEpRegex.test(lower) && !/(complete|batch|pack|\b0*1\s*[-~]\s*\d+\b)/i.test(lower)) {
+      return false;
+    }
+
+    // Match season patterns: Season 1, S01, 1st Season, Complete, Batch, Collection, or full episode range (e.g. 01-25)
+    const seasonRegex = new RegExp('(\\b|[^a-z0-9])(season\\s*0*' + sNum + '\\b|s0*' + sNum + '(\\b|[^e0-9])|' + sNum + '(st|nd|rd|th)\\s*season|complete|batch|collection|\\b0*1\\s*[-~]\\s*\\d+\\b)', 'i');
+    return seasonRegex.test(lower);
+  }
+
+  /**
+   * Search for whole season packs / complete series anime batches
+   * @param {string} query Show or anime title
+   * @param {number} season Season number (defaults to 1)
+   * @param {object} options Extra options (imdbId, tmdbId, minSeeds)
+   */
+  static async searchSeasonPack(query, season = 1, options = {}) {
+    const sNum = parseInt(season, 10) || 1;
+    return CineBay.search(query, {
+      ...options,
+      season: sNum,
+      isSeasonPack: true,
+      seasonPack: true,
+      type: 'tv',
+      category: '205'
+    });
+  }
+
+  /**
    * Queries Torrentio API (combines 1337x, YTS, ThePirateBay, RARBG, TorrentGalaxy, EZTV, Nyaa)
    */
   static async queryTorrentio(query, options = {}) {
@@ -190,6 +262,7 @@ export class CineBay {
       let isTv = options.category === '205' || options.type === 'tv';
       let season = options.season;
       let episode = options.episode;
+      const isSeasonPackQuery = Boolean(options.isSeasonPack || options.seasonPack);
 
       // Extract season and episode from query if present (e.g. S01E01, 1x01, Season 1 Episode 2)
       if (!season || !episode) {
@@ -207,9 +280,15 @@ export class CineBay {
 
       if (!imdbId) return [];
 
+      const targetSeason = season ? parseInt(season, 10) : 1;
       const urls = [];
       if (isTv) {
-        if (season && episode) {
+        if (isSeasonPackQuery) {
+          urls.push(`https://torrentio.strem.fun/stream/series/${imdbId}:${targetSeason}:1.json`);
+          if (targetSeason === 1) {
+            urls.push(`https://torrentio.strem.fun/stream/series/${imdbId}:1:2.json`);
+          }
+        } else if (season && episode) {
           urls.push(`https://torrentio.strem.fun/stream/series/${imdbId}:${season}:${episode}.json`);
         } else {
           // If no specific episode requested, query Season 1 Episode 1 and movie stream (for specials/miniseries)
@@ -241,10 +320,18 @@ export class CineBay {
 
       for (const s of allStreams) {
         if (!s.infoHash || seenStreamHashes.has(s.infoHash)) continue;
-        seenStreamHashes.add(s.infoHash);
 
         const lines = (s.title || '').split('\n');
-        const rawName = s.behaviorHints?.filename || lines[0] || query;
+        const rawName = isSeasonPackQuery
+          ? (lines[0] || s.behaviorHints?.filename || query)
+          : (s.behaviorHints?.filename || lines[0] || query);
+
+        if (isSeasonPackQuery && !CineBay.isSeasonPackName(rawName, targetSeason)) {
+          continue;
+        }
+
+        seenStreamHashes.add(s.infoHash);
+
         const seedsMatch = (s.title || '').match(/👤\s*(\d+)/);
         const sizeMatch = (s.title || '').match(/💾\s*([0-9.]+\s*[GMK]B)/i);
         const seeds = seedsMatch ? parseInt(seedsMatch[1], 10) : 15;
@@ -257,6 +344,7 @@ export class CineBay {
           else if (sizeFormatted.toUpperCase().includes('MB')) sizeBytes = Math.round(num * 1024 * 1024);
         }
 
+        const isPack = isSeasonPackQuery || CineBay.isSeasonPackName(rawName, season || 1);
         const magnet = CineBay.buildMagnet(s.infoHash, rawName);
         results.push({
           id: s.infoHash,
@@ -272,7 +360,9 @@ export class CineBay {
           category: isTv ? '205' : '200',
           imdb: imdbId,
           magnet,
-          source: 'Torrentio'
+          source: 'Torrentio',
+          isSeasonPack: isPack,
+          season: isPack ? targetSeason : undefined
         });
       }
 
@@ -385,10 +475,16 @@ export class CineBay {
   /**
    * Queries Internet Archive (archive.org) for public domain movies, classic series, and releases
    */
-  static async queryInternetArchive(term, category = '200') {
+  static async queryInternetArchive(term, category = '200', options = {}) {
     try {
-      const clean = term.replace(/[^\w\s]/gi, ' ').replace(/\s+/g, ' ').trim();
+      const isSeasonPackQuery = Boolean(options.isSeasonPack || options.seasonPack);
+      const targetSeason = options.season ? parseInt(options.season, 10) : 1;
+      let clean = term.replace(/[^\w\s]/gi, ' ').replace(/\s+/g, ' ').trim();
       if (!clean || clean.length < 2) return [];
+
+      if (isSeasonPackQuery) {
+        clean = `${clean} Season ${targetSeason}`;
+      }
 
       const mediaFilter = category === '205' ? '(movies OR television)' : '(movies)';
       const url = `https://archive.org/advancedsearch.php?q=title%3A(${encodeURIComponent(clean)})+AND+mediatype%3A${mediaFilter}&fl[]=identifier,title,year,downloads,item_size&sort[]=downloads+desc&rows=15&page=1&output=json`;
@@ -401,7 +497,7 @@ export class CineBay {
       const data = JSON.parse(text);
       const docs = data.response?.docs || [];
 
-      return docs.map(d => {
+      const results = docs.map(d => {
         const titleStr = `${d.title || clean}${d.year ? ` (${d.year})` : ''} [Internet Archive]`;
         const sizeBytes = parseInt(d.item_size || 0, 10);
         const sizeFormatted = sizeBytes > 1073741824
@@ -416,6 +512,7 @@ export class CineBay {
         const magnet = `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(titleStr)}&tr=${CineBay.DEFAULT_TRACKERS.map(encodeURIComponent).join('&tr=')}`;
         const torrentUrl = `https://archive.org/download/${d.identifier}/${d.identifier}_archive.torrent`;
 
+        const isPack = isSeasonPackQuery || CineBay.isSeasonPackName(titleStr, targetSeason);
         return {
           id: d.identifier,
           name: titleStr,
@@ -430,9 +527,16 @@ export class CineBay {
           category: category === '205' ? '205' : '200',
           magnet,
           torrentUrl,
-          source: 'InternetArchive'
+          source: 'InternetArchive',
+          isSeasonPack: isPack,
+          season: isPack ? targetSeason : undefined
         };
       });
+
+      if (isSeasonPackQuery) {
+        return results.filter(r => CineBay.isSeasonPackName(r.name, targetSeason));
+      }
+      return results;
     } catch (e) {
       return [];
     }
@@ -441,49 +545,82 @@ export class CineBay {
   /**
    * Queries ThePirateBay / Apibay with multiple mirror failover and safe HTML/JSON parsing
    */
-  static async queryApibay(term, category = '200') {
+  static async queryApibay(term, category = '200', options = {}) {
     const mirrors = [
       'https://apibay.org/q.php',
       'https://thepiratebay0.org/q.php',
       'https://pirateproxy.live/q.php'
     ];
     const catParam = category === 'all' ? '0' : category;
+    const isSeasonPackQuery = Boolean(options.isSeasonPack || options.seasonPack);
+    const targetSeason = options.season ? parseInt(options.season, 10) : 1;
 
-    for (const mirror of mirrors) {
-      try {
-        const url = `${mirror}?q=${encodeURIComponent(term)}&cat=${catParam}`;
-        const res = await fetch(url, {
-          signal: AbortSignal.timeout(4500),
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-        });
+    const termsToQuery = [term];
+    if (isSeasonPackQuery) {
+      const cleanTerm = term.replace(/s\d+/gi, '').replace(/season\s*\d+/gi, '').trim();
+      const padSeason = String(targetSeason).padStart(2, '0');
+      termsToQuery.unshift(`${cleanTerm} S${padSeason}`);
+      termsToQuery.push(`${cleanTerm} Season ${targetSeason}`);
+    }
 
-        if (res.ok) {
-          const text = await res.text();
-          if (!text || text.trim().startsWith('<')) continue; // Skip Cloudflare HTML challenge pages
-          const data = JSON.parse(text);
+    const allItems = [];
+    const seenHashes = new Set();
 
-          if (Array.isArray(data) && data.length > 0 && data[0].id !== '0' && data[0].name !== 'No results returned') {
-            return data.map(item => {
-              const magnet = CineBay.buildMagnet(item.info_hash, item.name);
-              return {
-                id: item.id,
-                name: item.name,
-                infoHash: item.info_hash,
-                seeders: parseInt(item.seeders || 0, 10),
-                leechers: parseInt(item.leechers || 0, 10),
-                size: parseInt(item.size || 0, 10),
-                added: item.added ? new Date(parseInt(item.added, 10) * 1000).toISOString() : null,
-                status: item.status || 'member',
-                username: item.username || 'ThePirateBay',
-                category: item.category,
-                imdb: item.imdb || null,
-                magnet,
-                source: 'ThePirateBay'
-              };
-            });
+    for (const qTerm of termsToQuery) {
+      for (const mirror of mirrors) {
+        try {
+          const url = `${mirror}?q=${encodeURIComponent(qTerm)}&cat=${catParam}`;
+          const res = await fetch(url, {
+            signal: AbortSignal.timeout(4500),
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+          });
+
+          if (res.ok) {
+            const text = await res.text();
+            if (!text || text.trim().startsWith('<')) continue;
+            const data = JSON.parse(text);
+
+            if (Array.isArray(data) && data.length > 0 && data[0].id !== '0' && data[0].name !== 'No results returned') {
+              for (const item of data) {
+                if (item.info_hash && !seenHashes.has(item.info_hash.toLowerCase())) {
+                  seenHashes.add(item.info_hash.toLowerCase());
+                  allItems.push(item);
+                }
+              }
+              break; // Mirror succeeded for this term
+            }
           }
-        }
-      } catch (err) {}
+        } catch (err) {}
+      }
+    }
+
+    if (allItems.length > 0) {
+      const mapped = allItems.map(item => {
+        const magnet = CineBay.buildMagnet(item.info_hash, item.name);
+        const isPack = isSeasonPackQuery || CineBay.isSeasonPackName(item.name, targetSeason);
+        return {
+          id: item.id,
+          name: item.name,
+          infoHash: item.info_hash,
+          seeders: parseInt(item.seeders || 0, 10),
+          leechers: parseInt(item.leechers || 0, 10),
+          size: parseInt(item.size || 0, 10),
+          added: item.added ? new Date(parseInt(item.added, 10) * 1000).toISOString() : null,
+          status: item.status || 'member',
+          username: item.username || 'ThePirateBay',
+          category: item.category,
+          imdb: item.imdb || null,
+          magnet,
+          source: 'ThePirateBay',
+          isSeasonPack: isPack,
+          season: isPack ? targetSeason : undefined
+        };
+      });
+
+      if (isSeasonPackQuery) {
+        return mapped.filter(r => CineBay.isSeasonPackName(r.name, targetSeason));
+      }
+      return mapped;
     }
 
     // Fallback: If category search returned nothing and category was not 0, try universal category 0

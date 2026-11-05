@@ -2008,6 +2008,234 @@ iframe {
   letter-spacing: 1px;
 }
 
+/* ==========================================================================
+   WHOLE SEASON PACK (1 TORRENT FILE) SUITE
+   ========================================================================== */
+
+.btn-season-pack-quick {
+  background: #ffcc00 !important;
+  color: #000000 !important;
+  border: 1.5px solid #000000 !important;
+  box-shadow: 2px 2px 0px #000000 !important;
+  padding: 4px 10px !important;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem !important;
+  font-weight: 800 !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.15s ease;
+  z-index: 2;
+}
+
+.btn-season-pack-quick:hover {
+  background: #ffffff !important;
+  color: #000000 !important;
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px #000000 !important;
+}
+
+.season-pack-quick-icon {
+  font-size: 15px !important;
+}
+
+.season-pack-banner {
+  background: rgba(255, 204, 0, 0.08);
+  border: 2px solid #ffcc00;
+  box-shadow: 3px 3px 0px #000000;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.season-pack-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.season-pack-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.season-pack-tag {
+  background: #ffcc00;
+  color: #000000;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.68rem;
+  font-weight: 900;
+  padding: 2px 7px;
+  border: 1px solid #000000;
+  letter-spacing: 0.08em;
+  display: inline-flex;
+  align-items: center;
+}
+
+.season-pack-tag-icon {
+  font-size: 14px !important;
+  margin-right: 3px;
+}
+
+.season-pack-badge-note {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #ffcc00;
+  letter-spacing: 0.04em;
+}
+
+.season-pack-headline {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.95rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: var(--retro-fg, #ffffff);
+  text-transform: uppercase;
+}
+
+.season-pack-subtext {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.76rem;
+  opacity: 0.85;
+  color: var(--retro-fg, #cccccc);
+  line-height: 1.35;
+}
+
+.season-pack-cta-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.btn-load-season-pack {
+  background: #ffcc00 !important;
+  color: #000000 !important;
+  border: 2px solid #000000 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+  padding: 9px 14px !important;
+  font-size: 0.82rem !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.06em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.15s ease;
+}
+
+.btn-load-season-pack:hover {
+  background: #ffffff !important;
+  color: #000000 !important;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px #000000 !important;
+}
+
+.season-pack-results-area {
+  background: var(--retro-surface, #1e1e1e);
+  border: 2px solid #ffcc00;
+  box-shadow: 3px 3px 0px #000000;
+  padding: 14px;
+  margin-bottom: 16px;
+  animation: accordionFadeIn 0.2s ease-out;
+}
+
+.season-pack-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed rgba(255, 204, 0, 0.4);
+}
+
+.season-pack-header-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #ffcc00;
+  letter-spacing: 0.06em;
+}
+
+.btn-close-season-pack {
+  background: transparent !important;
+  color: var(--retro-fg, #ffffff) !important;
+  border: 1px solid var(--retro-border, #444) !important;
+  padding: 4px 10px !important;
+  font-size: 0.72rem !important;
+  cursor: pointer;
+}
+
+.btn-close-season-pack:hover {
+  background: #ff3333 !important;
+  color: #ffffff !important;
+  border-color: #ff3333 !important;
+}
+
+.season-episodes-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 16px 0 12px;
+  opacity: 0.65;
+}
+
+.season-episodes-divider::before,
+.season-episodes-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px dashed var(--retro-border, #444);
+}
+
+.season-episodes-divider span {
+  padding: 0 10px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.detail-season-pack-btn {
+  background: #ffcc00 !important;
+  color: #000000 !important;
+  font-weight: 800 !important;
+}
+
+.detail-season-pack-btn:hover {
+  background: #ffffff !important;
+}
+
+@media (max-width: 600px) {
+  .btn-season-pack-quick {
+    padding: 3px 6px !important;
+    font-size: 0.65rem !important;
+  }
+  .season-pack-quick-label {
+    display: none;
+  }
+  .season-pack-banner {
+    padding: 10px 12px;
+  }
+  .btn-load-season-pack {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .episode-btn.unreleased {
   opacity: 0.5;
   border-style: dashed;

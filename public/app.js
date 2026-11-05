@@ -5041,6 +5041,16 @@ function openDetailView(m, type, isDiagnostic = false) {
   elements.detailTrailerBtn.onclick = () => playTrailer(m.id, effectiveType, m.title, m.year);
   elements.detailShareBtn.onclick = () => openTorrentModal(m, effectiveType, true);
 
+  const detailSeasonPackBtn = document.getElementById('detailSeasonPackBtn');
+  if (detailSeasonPackBtn) {
+    if (effectiveType === 'tv') {
+      detailSeasonPackBtn.classList.remove('hidden');
+      detailSeasonPackBtn.onclick = () => openTorrentModal(m, 'tv', false, 1);
+    } else {
+      detailSeasonPackBtn.classList.add('hidden');
+    }
+  }
+
   // Detail Actions: Watched, Watch Later, Add to List
   updateDetailButtons(m);
   const detailWatchedBtn = document.getElementById('detailWatchedBtn');
@@ -5543,7 +5553,7 @@ function generateTorrentRows(torrents, searchTitle, mediaObj = {}) {
   return tempDiv.innerHTML;
 }
 
-async function loadTVSeasonsAccordion(m, isShareMode = false) {
+async function loadTVSeasonsAccordion(m, isShareMode = false, autoLoadSeasonPack = null) {
   window._currentTVModalMedia = m;
   window._isTVModalShareMode = isShareMode;
 
@@ -5579,7 +5589,7 @@ async function loadTVSeasonsAccordion(m, isShareMode = false) {
         `;
         const retryBtn = elements.modalTorrentList.querySelector('.seasons-retry-btn');
         if (retryBtn) {
-          retryBtn.addEventListener('click', () => loadTVSeasonsAccordion(m, isShareMode));
+          retryBtn.addEventListener('click', () => loadTVSeasonsAccordion(m, isShareMode, autoLoadSeasonPack));
         }
         return;
       }
@@ -5598,6 +5608,10 @@ async function loadTVSeasonsAccordion(m, isShareMode = false) {
                 ${epCountBadge}
               </div>
               <div class="season-btn-right">
+                <button type="button" class="btn-season-pack-quick retro-btn" data-season="${s.season_number}" title="Download Whole Season ${s.season_number} (1 Torrent File)">
+                  <span class="material-symbols-outlined season-pack-quick-icon">folder_zip</span>
+                  <span class="season-pack-quick-label">WHOLE SEASON (1 TORRENT)</span>
+                </button>
                 <span class="season-btn-status" id="season-status-${s.season_number}"></span>
                 <span class="accordion-arrow">▼</span>
               </div>
@@ -5610,14 +5624,39 @@ async function loadTVSeasonsAccordion(m, isShareMode = false) {
       // Cleanly bind event listeners to avoid quote breaking in HTML attributes
       elements.modalTorrentList.querySelectorAll('.accordion-item').forEach(item => {
         const btn = item.querySelector('.accordion-btn');
+        const quickBtn = item.querySelector('.btn-season-pack-quick');
         if (btn) {
           const seasonNum = parseInt(btn.dataset.season, 10);
           btn.addEventListener('click', (e) => {
+            if (e.target.closest('.btn-season-pack-quick')) return;
             e.preventDefault();
             toggleSeasonAccordion(seasonNum, m, btn);
           });
         }
+        if (quickBtn) {
+          quickBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const seasonNum = parseInt(quickBtn.dataset.season, 10);
+            const accordionBtn = document.getElementById(`btn-season-${seasonNum}`);
+            const content = document.getElementById(`season-content-${seasonNum}`);
+            if (!content || !content.classList.contains('expanded')) {
+              await toggleSeasonAccordion(seasonNum, m, accordionBtn);
+            }
+            loadSeasonPackTorrents(seasonNum, m);
+          });
+        }
       });
+
+      if (autoLoadSeasonPack) {
+        const targetS = parseInt(autoLoadSeasonPack, 10) || 1;
+        const targetBtn = document.getElementById(`btn-season-${targetS}`);
+        if (targetBtn) {
+          toggleSeasonAccordion(targetS, m, targetBtn).then(() => {
+            loadSeasonPackTorrents(targetS, m);
+          });
+        }
+      }
     } else {
       elements.modalTorrentList.innerHTML = `
         <div class="torrent-empty-state retro-box" style="padding: 20px 14px;">
@@ -5630,7 +5669,7 @@ async function loadTVSeasonsAccordion(m, isShareMode = false) {
       `;
       const retryBtn = elements.modalTorrentList.querySelector('.seasons-retry-btn');
       if (retryBtn) {
-        retryBtn.addEventListener('click', () => loadTVSeasonsAccordion(m, isShareMode));
+        retryBtn.addEventListener('click', () => loadTVSeasonsAccordion(m, isShareMode, autoLoadSeasonPack));
       }
     }
   } catch (err) {
@@ -5645,7 +5684,7 @@ async function loadTVSeasonsAccordion(m, isShareMode = false) {
     `;
     const retryBtn = elements.modalTorrentList.querySelector('.seasons-retry-btn');
     if (retryBtn) {
-      retryBtn.addEventListener('click', () => loadTVSeasonsAccordion(m, isShareMode));
+      retryBtn.addEventListener('click', () => loadTVSeasonsAccordion(m, isShareMode, autoLoadSeasonPack));
     }
   }
 }
@@ -5725,7 +5764,45 @@ window.toggleSeasonAccordion = async function (seasonNumber, mediaOrStr, trigger
 
     if (data.success && data.episodes && data.episodes.episodes && data.episodes.episodes.length > 0) {
       const now = new Date();
-      content.innerHTML = data.episodes.episodes.map(e => {
+      const seasonPackBannerHtml = `
+        <div class="season-pack-banner retro-box" id="season-pack-banner-${seasonNumber}">
+          <div class="season-pack-info">
+            <div class="season-pack-badge-row">
+              <span class="season-pack-tag">
+                <span class="material-symbols-outlined season-pack-tag-icon">folder_zip</span>
+                <span>1 TORRENT FILE</span>
+              </span>
+              <span class="season-pack-badge-note">[COMPLETE SEASON ${seasonNumber} BATCH]</span>
+            </div>
+            <div class="season-pack-headline scramble-text">DOWNLOAD WHOLE SEASON ${seasonNumber}</div>
+            <div class="season-pack-subtext">Download all ${data.episodes.episodes.length} episodes bundled together as 1 verified .torrent or magnet file.</div>
+          </div>
+          <div class="season-pack-cta-wrap">
+            <button type="button" class="retro-btn btn-load-season-pack" id="btn-load-season-pack-${seasonNumber}" data-season="${seasonNumber}" title="Download Season ${seasonNumber} as 1 Torrent File">
+              <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle; margin-right:4px;">download</span>
+              <span class="scramble-text">GET WHOLE SEASON (.TORRENT)</span>
+            </button>
+          </div>
+        </div>
+        <div class="season-pack-results-area hidden" id="season-pack-results-${seasonNumber}">
+          <div class="season-pack-results-header">
+            <div class="season-pack-header-title">
+              <span class="material-symbols-outlined" style="color:var(--retro-accent,#ffcc00); vertical-align:middle; margin-right:4px;">folder_zip</span>
+              <span class="scramble-text">SEASON ${seasonNumber} COMPLETE BATCH RELEASES</span>
+            </div>
+            <button type="button" class="retro-btn btn-close-season-pack" id="btn-close-season-pack-${seasonNumber}" data-season="${seasonNumber}">
+              ✕ HIDE BATCHES
+            </button>
+          </div>
+          <div class="season-pack-filter-bar torrent-filter-bar" id="season-pack-filter-bar-${seasonNumber}"></div>
+          <div class="season-pack-torrent-container" id="season-pack-torrents-${seasonNumber}"></div>
+        </div>
+        <div class="season-episodes-divider">
+          <span>OR SELECT INDIVIDUAL EPISODES BELOW</span>
+        </div>
+      `;
+
+      const episodesHtml = data.episodes.episodes.map(e => {
         let isUnreleased = false;
         if (e.air_date) {
           const airDate = new Date(e.air_date);
@@ -5750,6 +5827,27 @@ window.toggleSeasonAccordion = async function (seasonNumber, mediaOrStr, trigger
           </div>
         `;
       }).join('');
+
+      content.innerHTML = seasonPackBannerHtml + episodesHtml;
+
+      // Wire season pack actions
+      const loadPackBtn = content.querySelector(`#btn-load-season-pack-${seasonNumber}`);
+      if (loadPackBtn) {
+        loadPackBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          loadSeasonPackTorrents(seasonNumber, m);
+        });
+      }
+      const closePackBtn = content.querySelector(`#btn-close-season-pack-${seasonNumber}`);
+      if (closePackBtn) {
+        closePackBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const resultsArea = document.getElementById(`season-pack-results-${seasonNumber}`);
+          if (resultsArea) resultsArea.classList.add('hidden');
+        });
+      }
 
       // Wire episode event listeners cleanly
       content.querySelectorAll('.episode-btn').forEach(epBtn => {
@@ -5987,6 +6085,123 @@ window.toggleEpisodeAccordion = async function (seasonNumber, episodeNumber, med
   }
 };
 
+window.loadSeasonPackTorrents = async function (seasonNumber, mediaOrStr) {
+  let m;
+  if (typeof mediaOrStr === 'string') {
+    try {
+      m = JSON.parse(decodeURIComponent(mediaOrStr));
+    } catch {
+      try {
+        m = JSON.parse(mediaOrStr);
+      } catch {
+        m = window._currentTVModalMedia || {};
+      }
+    }
+  } else {
+    m = mediaOrStr || window._currentTVModalMedia || {};
+  }
+
+  const sNum = parseInt(seasonNumber, 10) || 1;
+  const resultsContainer = document.getElementById(`season-pack-results-${sNum}`);
+  const torrentsList = document.getElementById(`season-pack-torrents-${sNum}`);
+  const filterBar = document.getElementById(`season-pack-filter-bar-${sNum}`);
+
+  if (resultsContainer) {
+    resultsContainer.classList.remove('hidden');
+  }
+
+  if (torrentsList) {
+    torrentsList.innerHTML = getTorrentLoadingHtml(
+      `SCANNING FOR COMPLETE SEASON ${sNum} AS 1 TORRENT FILE...`,
+      'Retrieving verified season batches & whole-season torrents across trackers...'
+    );
+    if (window.initScrambler) initScrambler();
+  }
+
+  const fetchStart = Date.now();
+  const MIN_ANIMATION_MS = 650;
+
+  try {
+    const title = m.title || 'Series';
+    const imdbParam = m.imdbId || m.imdb || '';
+    const tmdbIdParam = m.id || '';
+    const yearParam = m.year || '';
+
+    const res = await fetch(`/api/season/torrents?title=${encodeURIComponent(title)}&season=${sNum}&imdbId=${encodeURIComponent(imdbParam)}&id=${encodeURIComponent(tmdbIdParam)}&year=${encodeURIComponent(yearParam)}&type=tv`);
+    const data = await res.json();
+
+    const elapsed = Date.now() - fetchStart;
+    if (elapsed < MIN_ANIMATION_MS) {
+      await new Promise(r => setTimeout(r, MIN_ANIMATION_MS - elapsed));
+    }
+
+    if (data.success && data.torrents && data.torrents.length > 0) {
+      const allTorrents = data.torrents;
+      if (torrentsList) {
+        torrentsList.innerHTML = `
+          <div class="torrent-list-header" style="display:flex; margin-bottom:10px;">
+            <span>Release</span><span>Quality</span><span>Seeds/Peers</span><span>Size</span><span>Action</span>
+          </div>
+          <div class="season-pack-items-list" id="season-pack-items-list-${sNum}"></div>
+        `;
+        const itemsList = document.getElementById(`season-pack-items-list-${sNum}`);
+        if (filterBar) {
+          renderTorrentFilterBar(filterBar, allTorrents, (filteredList) => {
+            if (filteredList.length === 0) {
+              itemsList.innerHTML = `
+                <div class="torrent-empty-state retro-box" style="padding:14px; margin:6px auto;">
+                  <div style="font-family: var(--font-mono); font-size:12px;">No batch releases matching selected filter.</div>
+                </div>
+              `;
+            } else {
+              renderTorrentRows(itemsList, filteredList, `${title} Season ${sNum}`, { ...m, mediaType: 'tv', season: sNum, isSeasonPack: true }, window._isTVModalShareMode || false);
+            }
+          });
+        }
+        renderTorrentRows(itemsList, allTorrents, `${title} Season ${sNum}`, { ...m, mediaType: 'tv', season: sNum, isSeasonPack: true }, window._isTVModalShareMode || false);
+      }
+    } else {
+      if (torrentsList) {
+        torrentsList.innerHTML = `
+          <div class="torrent-empty-state retro-box" style="padding: 16px 12px; margin: 6px auto;">
+            <div style="font-family: var(--font-mono); font-size: 12px; opacity: 0.85;">No complete season batch torrents found for Season ${sNum}. You can download individual episodes below.</div>
+            <button type="button" class="btn-try-again season-pack-retry-btn">
+              <span class="material-symbols-outlined">refresh</span>
+              <span>TRY AGAIN</span>
+            </button>
+          </div>
+        `;
+        const retryBtn = torrentsList.querySelector('.season-pack-retry-btn');
+        if (retryBtn) {
+          retryBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            loadSeasonPackTorrents(sNum, m);
+          });
+        }
+      }
+    }
+  } catch (err) {
+    if (torrentsList) {
+      torrentsList.innerHTML = `
+        <div class="torrent-empty-state retro-box error" style="padding: 16px 12px; margin: 6px auto;">
+          <div style="font-family: var(--font-mono); font-size: 12px; color:#ff3333;">Failed to load season torrents.</div>
+          <button type="button" class="btn-try-again season-pack-retry-btn">
+            <span class="material-symbols-outlined">refresh</span>
+            <span>TRY AGAIN</span>
+          </button>
+        </div>
+      `;
+      const retryBtn = torrentsList.querySelector('.season-pack-retry-btn');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          loadSeasonPackTorrents(sNum, m);
+        });
+      }
+    }
+  }
+};
+
 const trailerPlayerState = {
   sources: [],
   currentIndex: 0,
@@ -6170,7 +6385,7 @@ async function playTrailer(id, type, title = '', year = '') {
   }
 }
 
-async function openTorrentModal(m, type, isShareMode = false) {
+async function openTorrentModal(m, type, isShareMode = false, autoLoadSeasonPack = null) {
   elements.modalMovieTitle.innerText = isShareMode ? `SHARE: ${m.title}` : m.title;
   elements.torrentModal.classList.remove('hidden');
 
@@ -6193,7 +6408,7 @@ async function openTorrentModal(m, type, isShareMode = false) {
   if (type === 'tv') {
     if (elements.modalTorrentHeader) elements.modalTorrentHeader.classList.add('hidden');
     if (elements.modalTorrentFilterBar) elements.modalTorrentFilterBar.classList.add('hidden');
-    loadTVSeasonsAccordion(m, isShareMode);
+    loadTVSeasonsAccordion(m, isShareMode, autoLoadSeasonPack);
   } else {
     if (elements.modalTorrentHeader) elements.modalTorrentHeader.classList.remove('hidden');
     fetchTorrentsForModal(m.title, type, m, isShareMode);

@@ -405,13 +405,48 @@ app.get('/api/search', async (req, res) => {
     const tmdbId = req.query.tmdbId || req.query.id || undefined;
     const year = req.query.year || undefined;
     const type = req.query.type || (category === '205' ? 'tv' : 'movie');
+    const isSeasonPack = req.query.isSeasonPack === 'true' || req.query.seasonPack === 'true';
 
     if (!query.trim()) {
       return res.status(400).json({ success: false, error: 'Search query is required' });
     }
 
-    const torrents = await CineBay.search(query, { minSeeds, category, season, episode, imdbId, tmdbId, year, type });
+    const torrents = await CineBay.search(query, { minSeeds, category, season, episode, imdbId, tmdbId, year, type, isSeasonPack, seasonPack: isSeasonPack });
     res.json({ success: true, count: torrents.length, query, torrents });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5b. Search Whole Season Pack Torrents (Whole Season as 1 Torrent File)
+app.get('/api/season/torrents', async (req, res) => {
+  try {
+    const title = req.query.title || req.query.q || '';
+    const season = req.query.season ? parseInt(req.query.season, 10) : 1;
+    const imdbId = req.query.imdbId || req.query.imdb || undefined;
+    const tmdbId = req.query.tmdbId || req.query.id || undefined;
+    const year = req.query.year || undefined;
+    const type = req.query.type || 'tv';
+
+    if (!title.trim() && !imdbId && !tmdbId) {
+      return res.status(400).json({ success: false, error: 'Title, tmdbId, or imdbId is required' });
+    }
+
+    const searchQuery = `${title || 'Series'} Season ${season}`.trim();
+    const torrents = await CineBay.searchSeasonPack(searchQuery, season, {
+      imdbId,
+      tmdbId,
+      year,
+      type
+    });
+
+    res.json({
+      success: true,
+      season,
+      count: torrents.length,
+      title,
+      torrents
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
