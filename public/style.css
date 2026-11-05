@@ -2031,8 +2031,8 @@ iframe {
 }
 
 .btn-season-pack-quick:hover {
-  background: #ffffff !important;
-  color: #000000 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
   transform: translate(-1px, -1px);
   box-shadow: 3px 3px 0px #000000 !important;
 }
@@ -2135,8 +2135,8 @@ iframe {
 }
 
 .btn-load-season-pack:hover {
-  background: #ffffff !important;
-  color: #000000 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
   transform: translate(-1px, -1px);
   box-shadow: 4px 4px 0px #000000 !important;
 }
@@ -3742,8 +3742,8 @@ iframe {
   }
 
   .wl-subnav-btn:hover {
-    background: #ffcc00 !important;
-    color: #000000 !important;
+    background: #000000 !important;
+    color: #ffffff !important;
   }
 
   .wl-subnav-btn.active {
@@ -7747,8 +7747,8 @@ iframe {
 }
 
 .wl-more-trigger:hover {
-  background: #ffcc00 !important;
-  color: #000000 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
   transform: translate(-1px, -1px) !important;
   box-shadow: 3px 3px 0 var(--retro-border, #000000) !important;
 }
@@ -7877,7 +7877,8 @@ iframe {
 }
 
 .watchlist-filter-btn:hover {
-  background: #ffcc00;
+  background: #000000;
+  color: #ffffff;
 }
 
 .watchlist-filter-btn.active {
@@ -8080,7 +8081,8 @@ iframe {
 }
 
 .btn-wl-trailer:hover {
-  background: #ffcc00 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
 }
 
 .watchlist-remove-btn {
@@ -9017,7 +9019,8 @@ iframe {
 }
 
 .wl-subnav-btn:hover {
-  background: #ffcc00;
+  background: #000000;
+  color: #ffffff;
   transform: translate(-1px, -1px);
   box-shadow: 3.5px 3.5px 0 var(--retro-border, #000000);
 }
@@ -9086,7 +9089,8 @@ iframe {
 }
 
 .filter-pill:hover {
-  background: #ffcc00;
+  background: #000000;
+  color: #ffffff;
   transform: translate(-1px, -1px);
   box-shadow: 2px 2px 0 var(--retro-border, #000000);
 }
@@ -9140,7 +9144,7 @@ iframe {
 .wl-search-input:focus {
   width: 200px;
   outline: none !important;
-  box-shadow: 3.5px 3.5px 0 #ffcc00 !important;
+  box-shadow: 3.5px 3.5px 0 #000000 !important;
 }
 
 .wl-sort-wrap {
@@ -9276,8 +9280,8 @@ iframe {
 }
 
 .retro-select-option:hover {
-  background: #ffcc00 !important;
-  color: #000000 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
 }
 
 .retro-select-option.active {
@@ -9287,7 +9291,7 @@ iframe {
 
 .retro-select-option.active:hover {
   background: #000000 !important;
-  color: #ffcc00 !important;
+  color: #ffffff !important;
 }
 
 .retro-option-text {
@@ -9374,8 +9378,8 @@ select option {
 
 .wl-more-filters-btn:hover,
 .wl-import-btn:hover {
-  background: #ffcc00 !important;
-  color: #000000 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
   transform: translate(-1px, -1px);
   box-shadow: 3.5px 3.5px 0 #000000 !important;
 }
@@ -9600,7 +9604,8 @@ select option {
 }
 
 .filter-reset-btn:hover {
-  background: #ffcc00 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
   transform: translate(-1px, -1px) !important;
   box-shadow: 4px 4px 0px #000000 !important;
 }
@@ -9692,7 +9697,8 @@ select option {
 }
 
 .wl-alert-btn:hover {
-  background: #ffcc00;
+  background: #000000;
+  color: #ffffff;
   transform: scale(1.05);
 }
 
@@ -9770,7 +9776,8 @@ select option {
 }
 
 .wl-step-btn:hover {
-  background: #ffcc00;
+  background: #000000;
+  color: #ffffff;
 }
 
 .wl-step-btn.btn-wl-episodes {
@@ -11057,8 +11064,8 @@ select option {
 }
 
 .ie-btn:hover {
-  background: #ffcc00 !important;
-  color: #000000 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
   transform: translate(-1.5px, -1.5px) !important;
   box-shadow: 3.5px 3.5px 0 #000000 !important;
 }
@@ -11358,7 +11365,8 @@ select option {
 }
 
 .streaming-provider-badge:hover {
-  background: #ffcc00;
+  background: #000000;
+  color: #ffffff;
   transform: translate(-1px, -1px);
   box-shadow: 2.5px 2.5px 0 #000000;
 }
