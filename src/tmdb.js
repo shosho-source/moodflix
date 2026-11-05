@@ -1164,23 +1164,144 @@ export class TMDB {
   }
 
   static CHARACTER_ACTORS = {
+    // Iconic TV & Sitcom Characters
     'barney stinson': { character: 'Barney Stinson', actors: ['Neil Patrick Harris'] },
-    'superman': { character: 'Superman', actors: ['Henry Cavill', 'Christopher Reeve', 'David Corenswet', 'Tyler Hoechlin', 'Brandon Routh', 'Tom Welling', 'Dean Cain'] },
-    'clark kent': { character: 'Superman', actors: ['Henry Cavill', 'Christopher Reeve', 'David Corenswet', 'Tyler Hoechlin', 'Brandon Routh', 'Tom Welling'] },
-    'batman': { character: 'Batman', actors: ['Christian Bale', 'Robert Pattinson', 'Ben Affleck', 'Michael Keaton', 'Adam West', 'George Clooney', 'Val Kilmer'] },
-    'bruce wayne': { character: 'Batman', actors: ['Christian Bale', 'Robert Pattinson', 'Ben Affleck', 'Michael Keaton', 'Adam West', 'George Clooney', 'Val Kilmer'] },
-    'spider-man': { character: 'Spider-Man', actors: ['Tom Holland', 'Tobey Maguire', 'Andrew Garfield'] },
-    'spiderman': { character: 'Spider-Man', actors: ['Tom Holland', 'Tobey Maguire', 'Andrew Garfield'] },
-    'peter parker': { character: 'Spider-Man', actors: ['Tom Holland', 'Tobey Maguire', 'Andrew Garfield'] },
+    'ted mosby': { character: 'Ted Mosby', actors: ['Josh Radnor'] },
+    'marshall eriksen': { character: 'Marshall Eriksen', actors: ['Jason Segel'] },
+    'robin scherbatsky': { character: 'Robin Scherbatsky', actors: ['Cobie Smulders'] },
+    'lily aldrin': { character: 'Lily Aldrin', actors: ['Alyson Hannigan'] },
+    'michael scott': { character: 'Michael Scott', actors: ['Steve Carell'] },
+    'dwight schrute': { character: 'Dwight Schrute', actors: ['Rainn Wilson'] },
+    'jim halpert': { character: 'Jim Halpert', actors: ['John Krasinski'] },
+    'pam beesly': { character: 'Pam Beesly', actors: ['Jenna Fischer'] },
+    'ron swanson': { character: 'Ron Swanson', actors: ['Nick Offerman'] },
+    'leslie knope': { character: 'Leslie Knope', actors: ['Amy Poehler'] },
+    'jake peralta': { character: 'Jake Peralta', actors: ['Andy Samberg'] },
+    'captain holt': { character: 'Captain Raymond Holt', actors: ['Andre Braugher'] },
+    'raymond holt': { character: 'Captain Raymond Holt', actors: ['Andre Braugher'] },
+    'chandler bing': { character: 'Chandler Bing', actors: ['Matthew Perry'] },
+    'joey tribbiani': { character: 'Joey Tribbiani', actors: ['Matt LeBlanc'] },
+    'ross geller': { character: 'Ross Geller', actors: ['David Schwimmer'] },
+    'rachel green': { character: 'Rachel Green', actors: ['Jennifer Aniston'] },
+    'monica geller': { character: 'Monica Geller', actors: ['Courteney Cox'] },
+    'phoebe buffay': { character: 'Phoebe Buffay', actors: ['Lisa Kudrow'] },
+    'sheldon cooper': { character: 'Sheldon Cooper', actors: ['Jim Parsons'] },
+
+    // Breaking Bad & Better Call Saul
     'walter white': { character: 'Walter White', actors: ['Bryan Cranston'] },
     'heisenberg': { character: 'Walter White', actors: ['Bryan Cranston'] },
     'jesse pinkman': { character: 'Jesse Pinkman', actors: ['Aaron Paul'] },
     'saul goodman': { character: 'Saul Goodman', actors: ['Bob Odenkirk'] },
     'jimmy mcgill': { character: 'Saul Goodman', actors: ['Bob Odenkirk'] },
-    'sherlock holmes': { character: 'Sherlock Holmes', actors: ['Benedict Cumberbatch', 'Robert Downey Jr.', 'Henry Cavill', 'Jonny Lee Miller', 'Ian McKellen'] },
-    'sherlock': { character: 'Sherlock Holmes', actors: ['Benedict Cumberbatch', 'Robert Downey Jr.', 'Henry Cavill', 'Jonny Lee Miller'] },
-    'dr watson': { character: 'Dr. John Watson', actors: ['Martin Freeman', 'Jude Law'] },
-    'john watson': { character: 'Dr. John Watson', actors: ['Martin Freeman', 'Jude Law'] },
+    'gus fring': { character: 'Gus Fring', actors: ['Giancarlo Esposito'] },
+    'gustavo fring': { character: 'Gus Fring', actors: ['Giancarlo Esposito'] },
+    'mike ehrmantraut': { character: 'Mike Ehrmantraut', actors: ['Jonathan Banks'] },
+    'hank schrader': { character: 'Hank Schrader', actors: ['Dean Norris'] },
+    'kim wexler': { character: 'Kim Wexler', actors: ['Rhea Seehorn'] },
+    'lalo salamanca': { character: 'Lalo Salamanca', actors: ['Tony Dalton'] },
+
+    // Peaky Blinders
+    'tommy shelby': { character: 'Tommy Shelby', actors: ['Cillian Murphy'] },
+    'thomas shelby': { character: 'Tommy Shelby', actors: ['Cillian Murphy'] },
+    'arthur shelby': { character: 'Arthur Shelby Jr.', actors: ['Paul Anderson'] },
+    'polly gray': { character: 'Polly Gray', actors: ['Helen McCrory'] },
+    'alfie solomons': { character: 'Alfie Solomons', actors: ['Tom Hardy'] },
+
+    // The Boys
+    'homelander': { character: 'Homelander', actors: ['Antony Starr'] },
+    'billy butcher': { character: 'Billy Butcher', actors: ['Karl Urban'] },
+    'hughie campbell': { character: 'Hughie Campbell', actors: ['Jack Quaid'] },
+    'starlight': { character: 'Starlight / Annie January', actors: ['Erin Moriarty'] },
+    'annie january': { character: 'Starlight / Annie January', actors: ['Erin Moriarty'] },
+    'soldier boy': { character: 'Soldier Boy', actors: ['Jensen Ackles'] },
+    'a-train': { character: 'A-Train', actors: ['Jessie T. Usher'] },
+    'frenchie': { character: 'Frenchie', actors: ['Tomer Capone'] },
+
+    // Succession
+    'kendall roy': { character: 'Kendall Roy', actors: ['Jeremy Strong'] },
+    'logan roy': { character: 'Logan Roy', actors: ['Brian Cox'] },
+    'roman roy': { character: 'Roman Roy', actors: ['Kieran Culkin'] },
+    'shiv roy': { character: 'Shiv Roy', actors: ['Sarah Snook'] },
+    'tom wambsgans': { character: 'Tom Wambsgans', actors: ['Matthew Macfadyen'] },
+    'cousin greg': { character: 'Greg Hirsch', actors: ['Nicholas Braun'] },
+
+    // Game of Thrones & House of the Dragon
+    'jon snow': { character: 'Jon Snow', actors: ['Kit Harington'] },
+    'daenerys targaryen': { character: 'Daenerys Targaryen', actors: ['Emilia Clarke'] },
+    'daenerys': { character: 'Daenerys Targaryen', actors: ['Emilia Clarke'] },
+    'tyrion lannister': { character: 'Tyrion Lannister', actors: ['Peter Dinklage'] },
+    'tyrion': { character: 'Tyrion Lannister', actors: ['Peter Dinklage'] },
+    'arya stark': { character: 'Arya Stark', actors: ['Maisie Williams'] },
+    'sansa stark': { character: 'Sansa Stark', actors: ['Sophie Turner'] },
+    'cersei lannister': { character: 'Cersei Lannister', actors: ['Lena Headey'] },
+    'jaime lannister': { character: 'Jaime Lannister', actors: ['Nikolaj Coster-Waldau'] },
+    'ned stark': { character: 'Ned Stark', actors: ['Sean Bean'] },
+    'joffrey baratheon': { character: 'Joffrey Baratheon', actors: ['Jack Gleeson'] },
+    'ramsay bolton': { character: 'Ramsay Bolton', actors: ['Iwan Rheon'] },
+    'the hound': { character: 'Sandor Clegane / The Hound', actors: ['Rory McCann'] },
+    'sandor clegane': { character: 'Sandor Clegane / The Hound', actors: ['Rory McCann'] },
+    'daemon targaryen': { character: 'Daemon Targaryen', actors: ['Matt Smith'] },
+    'rhaenyra targaryen': { character: 'Rhaenyra Targaryen', actors: ['Emma D\'Arcy', 'Milly Alcock'] },
+    'aemond targaryen': { character: 'Aemond Targaryen', actors: ['Ewan Mitchell'] },
+    'alicent hightower': { character: 'Alicent Hightower', actors: ['Olivia Cooke', 'Emily Carey'] },
+
+    // Stranger Things & Pop TV
+    'eleven': { character: 'Eleven', actors: ['Millie Bobby Brown'] },
+    'mike wheeler': { character: 'Mike Wheeler', actors: ['Finn Wolfhard'] },
+    'dustin henderson': { character: 'Dustin Henderson', actors: ['Gaten Matarazzo'] },
+    'steve harrington': { character: 'Steve Harrington', actors: ['Joe Keery'] },
+    'eddie munson': { character: 'Eddie Munson', actors: ['Joseph Quinn'] },
+    'jim hopper': { character: 'Jim Hopper', actors: ['David Harbour'] },
+    'hopper': { character: 'Jim Hopper', actors: ['David Harbour'] },
+    'wednesday addams': { character: 'Wednesday Addams', actors: ['Jenna Ortega', 'Christina Ricci'] },
+    'wednesday': { character: 'Wednesday Addams', actors: ['Jenna Ortega', 'Christina Ricci'] },
+    'tony soprano': { character: 'Tony Soprano', actors: ['James Gandolfini'] },
+    'don draper': { character: 'Don Draper', actors: ['Jon Hamm'] },
+    'dexter morgan': { character: 'Dexter Morgan', actors: ['Michael C. Hall'] },
+    'dexter': { character: 'Dexter Morgan', actors: ['Michael C. Hall'] },
+    'lucifer morningstar': { character: 'Lucifer Morningstar', actors: ['Tom Ellis'] },
+    'lucifer': { character: 'Lucifer Morningstar', actors: ['Tom Ellis'] },
+    'beth harmon': { character: 'Beth Harmon', actors: ['Anya Taylor-Joy'] },
+    'dean winchester': { character: 'Dean Winchester', actors: ['Jensen Ackles'] },
+    'sam winchester': { character: 'Sam Winchester', actors: ['Jared Padalecki'] },
+    'peacemaker': { character: 'Peacemaker', actors: ['John Cena'] },
+
+    // DC Comics & Gotham
+    'superman': { character: 'Superman', actors: ['Henry Cavill', 'Christopher Reeve', 'David Corenswet', 'Tyler Hoechlin', 'Brandon Routh', 'Tom Welling', 'Dean Cain'] },
+    'clark kent': { character: 'Superman', actors: ['Henry Cavill', 'Christopher Reeve', 'David Corenswet', 'Tyler Hoechlin', 'Brandon Routh', 'Tom Welling'] },
+    'batman': { character: 'Batman', actors: ['Christian Bale', 'Robert Pattinson', 'Ben Affleck', 'Michael Keaton', 'Adam West', 'George Clooney', 'Val Kilmer'] },
+    'bruce wayne': { character: 'Batman', actors: ['Christian Bale', 'Robert Pattinson', 'Ben Affleck', 'Michael Keaton', 'Adam West', 'George Clooney', 'Val Kilmer'] },
+    'the joker': { character: 'The Joker', actors: ['Heath Ledger', 'Joaquin Phoenix', 'Jack Nicholson', 'Barry Keoghan', 'Cameron Monaghan'] },
+    'joker': { character: 'The Joker', actors: ['Heath Ledger', 'Joaquin Phoenix', 'Jack Nicholson', 'Barry Keoghan', 'Cameron Monaghan'] },
+    'arthur fleck': { character: 'Arthur Fleck / Joker', actors: ['Joaquin Phoenix'] },
+    'harley quinn': { character: 'Harley Quinn', actors: ['Margot Robbie', 'Lady Gaga', 'Kaley Cuoco'] },
+    'wonder woman': { character: 'Wonder Woman', actors: ['Gal Gadot', 'Lynda Carter'] },
+    'diana prince': { character: 'Wonder Woman', actors: ['Gal Gadot', 'Lynda Carter'] },
+    'aquaman': { character: 'Aquaman', actors: ['Jason Momoa'] },
+    'arthur curry': { character: 'Aquaman', actors: ['Jason Momoa'] },
+    'the flash': { character: 'The Flash', actors: ['Grant Gustin', 'Ezra Miller'] },
+    'flash': { character: 'The Flash', actors: ['Grant Gustin', 'Ezra Miller'] },
+    'barry allen': { character: 'The Flash', actors: ['Grant Gustin', 'Ezra Miller'] },
+    'catwoman': { character: 'Catwoman / Selina Kyle', actors: ['Zoë Kravitz', 'Anne Hathaway', 'Michelle Pfeiffer'] },
+    'selina kyle': { character: 'Catwoman / Selina Kyle', actors: ['Zoë Kravitz', 'Anne Hathaway', 'Michelle Pfeiffer'] },
+    'penguin': { character: 'The Penguin / Oswald Cobblepot', actors: ['Colin Farrell', 'Danny DeVito', 'Robin Lord Taylor'] },
+    'oswald cobblepot': { character: 'The Penguin / Oswald Cobblepot', actors: ['Colin Farrell', 'Danny DeVito', 'Robin Lord Taylor'] },
+    'riddler': { character: 'The Riddler / Edward Nygma', actors: ['Paul Dano', 'Jim Carrey', 'Cory Michael Smith'] },
+    'edward nygma': { character: 'The Riddler / Edward Nygma', actors: ['Paul Dano', 'Jim Carrey', 'Cory Michael Smith'] },
+    'jim gordon': { character: 'Jim Gordon', actors: ['Gary Oldman', 'Jeffrey Wright', 'Ben McKenzie'] },
+    'gordon': { character: 'Jim Gordon', actors: ['Gary Oldman', 'Jeffrey Wright', 'Ben McKenzie'] },
+    'alfred pennyworth': { character: 'Alfred Pennyworth', actors: ['Michael Caine', 'Andy Serkis', 'Jeremy Irons'] },
+    'alfred': { character: 'Alfred Pennyworth', actors: ['Michael Caine', 'Andy Serkis', 'Jeremy Irons'] },
+    'bane': { character: 'Bane', actors: ['Tom Hardy'] },
+    'lex luthor': { character: 'Lex Luthor', actors: ['Gene Hackman', 'Jesse Eisenberg', 'Nicholas Hoult', 'Kevin Spacey'] },
+    'lois lane': { character: 'Lois Lane', actors: ['Amy Adams', 'Margot Kidder', 'Rachel Brosnahan'] },
+
+    // Marvel Universe
+    'spider-man': { character: 'Spider-Man', actors: ['Tom Holland', 'Tobey Maguire', 'Andrew Garfield'] },
+    'spiderman': { character: 'Spider-Man', actors: ['Tom Holland', 'Tobey Maguire', 'Andrew Garfield'] },
+    'peter parker': { character: 'Spider-Man', actors: ['Tom Holland', 'Tobey Maguire', 'Andrew Garfield'] },
+    'miles morales': { character: 'Miles Morales / Spider-Man', actors: ['Shameik Moore'] },
+    'gwen stacy': { character: 'Gwen Stacy / Spider-Gwen', actors: ['Hailee Steinfeld', 'Emma Stone'] },
     'iron man': { character: 'Iron Man', actors: ['Robert Downey Jr.'] },
     'tony stark': { character: 'Iron Man', actors: ['Robert Downey Jr.'] },
     'captain america': { character: 'Captain America', actors: ['Chris Evans', 'Anthony Mackie'] },
@@ -1198,12 +1319,50 @@ export class TMDB {
     'wade wilson': { character: 'Deadpool', actors: ['Ryan Reynolds'] },
     'wolverine': { character: 'Wolverine', actors: ['Hugh Jackman'] },
     'logan': { character: 'Wolverine', actors: ['Hugh Jackman'] },
+    'doctor strange': { character: 'Doctor Strange', actors: ['Benedict Cumberbatch'] },
+    'stephen strange': { character: 'Doctor Strange', actors: ['Benedict Cumberbatch'] },
+    'scarlet witch': { character: 'Scarlet Witch / Wanda Maximoff', actors: ['Elizabeth Olsen'] },
+    'wanda maximoff': { character: 'Scarlet Witch / Wanda Maximoff', actors: ['Elizabeth Olsen'] },
+    'black panther': { character: 'Black Panther / T\'Challa', actors: ['Chadwick Boseman'] },
+    't\'challa': { character: 'Black Panther / T\'Challa', actors: ['Chadwick Boseman'] },
+    'daredevil': { character: 'Daredevil / Matt Murdock', actors: ['Charlie Cox', 'Ben Affleck'] },
+    'matt murdock': { character: 'Daredevil / Matt Murdock', actors: ['Charlie Cox', 'Ben Affleck'] },
+    'punisher': { character: 'The Punisher / Frank Castle', actors: ['Jon Bernthal', 'Thomas Jane'] },
+    'frank castle': { character: 'The Punisher / Frank Castle', actors: ['Jon Bernthal', 'Thomas Jane'] },
+    'star-lord': { character: 'Star-Lord / Peter Quill', actors: ['Chris Pratt'] },
+    'peter quill': { character: 'Star-Lord / Peter Quill', actors: ['Chris Pratt'] },
     'professor x': { character: 'Professor X', actors: ['Patrick Stewart', 'James McAvoy'] },
     'charles xavier': { character: 'Professor X', actors: ['Patrick Stewart', 'James McAvoy'] },
     'magneto': { character: 'Magneto', actors: ['Ian McKellen', 'Michael Fassbender'] },
     'erik lehnsherr': { character: 'Magneto', actors: ['Ian McKellen', 'Michael Fassbender'] },
-    'james bond': { character: 'James Bond', actors: ['Daniel Craig', 'Sean Connery', 'Pierce Brosnan', 'Roger Moore', 'Timothy Dalton'] },
-    '007': { character: 'James Bond', actors: ['Daniel Craig', 'Sean Connery', 'Pierce Brosnan', 'Roger Moore', 'Timothy Dalton'] },
+
+    // Star Wars
+    'luke skywalker': { character: 'Luke Skywalker', actors: ['Mark Hamill'] },
+    'darth vader': { character: 'Darth Vader', actors: ['Hayden Christensen', 'James Earl Jones'] },
+    'anakin skywalker': { character: 'Anakin Skywalker', actors: ['Hayden Christensen'] },
+    'obi-wan kenobi': { character: 'Obi-Wan Kenobi', actors: ['Ewan McGregor', 'Alec Guinness'] },
+    'obi-wan': { character: 'Obi-Wan Kenobi', actors: ['Ewan McGregor', 'Alec Guinness'] },
+    'obi wan': { character: 'Obi-Wan Kenobi', actors: ['Ewan McGregor', 'Alec Guinness'] },
+    'han solo': { character: 'Han Solo', actors: ['Harrison Ford', 'Alden Ehrenreich'] },
+    'princess leia': { character: 'Princess Leia', actors: ['Carrie Fisher'] },
+    'leia': { character: 'Princess Leia', actors: ['Carrie Fisher'] },
+    'yoda': { character: 'Yoda', actors: ['Frank Oz'] },
+    'mando': { character: 'The Mandalorian / Din Djarin', actors: ['Pedro Pascal'] },
+    'din djarin': { character: 'The Mandalorian / Din Djarin', actors: ['Pedro Pascal'] },
+    'the mandalorian': { character: 'The Mandalorian / Din Djarin', actors: ['Pedro Pascal'] },
+    'ahsoka tano': { character: 'Ahsoka Tano', actors: ['Rosario Dawson', 'Ashley Eckstein'] },
+    'ahsoka': { character: 'Ahsoka Tano', actors: ['Rosario Dawson', 'Ashley Eckstein'] },
+    'boba fett': { character: 'Boba Fett', actors: ['Temuera Morrison'] },
+    'kylo ren': { character: 'Kylo Ren', actors: ['Adam Driver'] },
+    'rey': { character: 'Rey', actors: ['Daisy Ridley'] },
+    'cassian andor': { character: 'Cassian Andor', actors: ['Diego Luna'] },
+    'andor': { character: 'Cassian Andor', actors: ['Diego Luna'] },
+
+    // Dune
+    'paul atreides': { character: 'Paul Atreides', actors: ['Timothée Chalamet', 'Kyle MacLachlan'] },
+    'chani': { character: 'Chani', actors: ['Zendaya'] },
+
+    // Harry Potter & Lord of the Rings
     'harry potter': { character: 'Harry Potter', actors: ['Daniel Radcliffe'] },
     'hermione granger': { character: 'Hermione Granger', actors: ['Emma Watson'] },
     'ron weasley': { character: 'Ron Weasley', actors: ['Rupert Grint'] },
@@ -1211,91 +1370,98 @@ export class TMDB {
     'voldemort': { character: 'Lord Voldemort', actors: ['Ralph Fiennes'] },
     'severus snape': { character: 'Severus Snape', actors: ['Alan Rickman'] },
     'snape': { character: 'Severus Snape', actors: ['Alan Rickman'] },
-    'jack sparrow': { character: 'Captain Jack Sparrow', actors: ['Johnny Depp'] },
-    'captain jack sparrow': { character: 'Captain Jack Sparrow', actors: ['Johnny Depp'] },
+    'albus dumbledore': { character: 'Albus Dumbledore', actors: ['Michael Gambon', 'Richard Harris', 'Jude Law'] },
+    'dumbledore': { character: 'Albus Dumbledore', actors: ['Michael Gambon', 'Richard Harris', 'Jude Law'] },
+    'sirius black': { character: 'Sirius Black', actors: ['Gary Oldman'] },
+    'frodo baggins': { character: 'Frodo Baggins', actors: ['Elijah Wood'] },
+    'frodo': { character: 'Frodo Baggins', actors: ['Elijah Wood'] },
+    'gandalf': { character: 'Gandalf', actors: ['Ian McKellen'] },
+    'aragorn': { character: 'Aragorn', actors: ['Viggo Mortensen'] },
+    'legolas': { character: 'Legolas', actors: ['Orlando Bloom'] },
+    'gimli': { character: 'Gimli', actors: ['John Rhys-Davies'] },
+    'samwise gamgee': { character: 'Samwise Gamgee', actors: ['Sean Astin'] },
+    'sam gamgee': { character: 'Samwise Gamgee', actors: ['Sean Astin'] },
+    'gollum': { character: 'Gollum', actors: ['Andy Serkis'] },
+    'sauron': { character: 'Sauron', actors: ['Charlie Vickers'] },
+    'bilbo baggins': { character: 'Bilbo Baggins', actors: ['Martin Freeman', 'Ian Holm'] },
+    'bilbo': { character: 'Bilbo Baggins', actors: ['Martin Freeman', 'Ian Holm'] },
+
+    // Cinema Icons & Blockbusters
     'neo': { character: 'Neo', actors: ['Keanu Reeves'] },
     'john wick': { character: 'John Wick', actors: ['Keanu Reeves'] },
     'morpheus': { character: 'Morpheus', actors: ['Laurence Fishburne', 'Yahya Abdul-Mateen II'] },
     'trinity': { character: 'Trinity', actors: ['Carrie-Anne Moss'] },
-    'joker': { character: 'The Joker', actors: ['Heath Ledger', 'Joaquin Phoenix', 'Jack Nicholson', 'Barry Keoghan', 'Cameron Monaghan'] },
-    'the joker': { character: 'The Joker', actors: ['Heath Ledger', 'Joaquin Phoenix', 'Jack Nicholson', 'Barry Keoghan'] },
-    'harley quinn': { character: 'Harley Quinn', actors: ['Margot Robbie', 'Lady Gaga', 'Kaley Cuoco'] },
-    'wednesday addams': { character: 'Wednesday Addams', actors: ['Jenna Ortega', 'Christina Ricci'] },
-    'wednesday': { character: 'Wednesday Addams', actors: ['Jenna Ortega', 'Christina Ricci'] },
-    'tommy shelby': { character: 'Tommy Shelby', actors: ['Cillian Murphy'] },
-    'thomas shelby': { character: 'Tommy Shelby', actors: ['Cillian Murphy'] },
-    'oppenheimer': { character: 'J. Robert Oppenheimer', actors: ['Cillian Murphy'] },
-    'jon snow': { character: 'Jon Snow', actors: ['Kit Harington'] },
-    'daenerys targaryen': { character: 'Daenerys Targaryen', actors: ['Emilia Clarke'] },
-    'tyrion lannister': { character: 'Tyrion Lannister', actors: ['Peter Dinklage'] },
-    'arya stark': { character: 'Arya Stark', actors: ['Maisie Williams'] },
-    'michael scott': { character: 'Michael Scott', actors: ['Steve Carell'] },
-    'dwight schrute': { character: 'Dwight Schrute', actors: ['Rainn Wilson'] },
-    'jim halpert': { character: 'Jim Halpert', actors: ['John Krasinski'] },
-    'pam beesly': { character: 'Pam Beesly', actors: ['Jenna Fischer'] },
-    'chandler bing': { character: 'Chandler Bing', actors: ['Matthew Perry'] },
-    'joey tribbiani': { character: 'Joey Tribbiani', actors: ['Matt LeBlanc'] },
-    'ross geller': { character: 'Ross Geller', actors: ['David Schwimmer'] },
-    'rachel green': { character: 'Rachel Green', actors: ['Jennifer Aniston'] },
-    'monica geller': { character: 'Monica Geller', actors: ['Courteney Cox'] },
-    'phoebe buffay': { character: 'Phoebe Buffay', actors: ['Lisa Kudrow'] },
-    'ted mosby': { character: 'Ted Mosby', actors: ['Josh Radnor'] },
-    'marshall eriksen': { character: 'Marshall Eriksen', actors: ['Jason Segel'] },
-    'robin scherbatsky': { character: 'Robin Scherbatsky', actors: ['Cobie Smulders'] },
-    'lily aldrin': { character: 'Lily Aldrin', actors: ['Alyson Hannigan'] },
-    'sheldon cooper': { character: 'Sheldon Cooper', actors: ['Jim Parsons'] },
-    'tony soprano': { character: 'Tony Soprano', actors: ['James Gandolfini'] },
-    'don draper': { character: 'Don Draper', actors: ['Jon Hamm'] },
-    'dexter morgan': { character: 'Dexter Morgan', actors: ['Michael C. Hall'] },
-    'dexter': { character: 'Dexter Morgan', actors: ['Michael C. Hall'] },
-    'geralt of rivia': { character: 'Geralt of Rivia', actors: ['Henry Cavill', 'Liam Hemsworth'] },
-    'the witcher': { character: 'Geralt of Rivia', actors: ['Henry Cavill', 'Liam Hemsworth'] },
-    'luke skywalker': { character: 'Luke Skywalker', actors: ['Mark Hamill'] },
-    'darth vader': { character: 'Darth Vader', actors: ['Hayden Christensen', 'James Earl Jones'] },
-    'anakin skywalker': { character: 'Anakin Skywalker', actors: ['Hayden Christensen'] },
-    'han solo': { character: 'Han Solo', actors: ['Harrison Ford', 'Alden Ehrenreich'] },
+    'ethan hunt': { character: 'Ethan Hunt', actors: ['Tom Cruise'] },
+    'maverick': { character: 'Pete "Maverick" Mitchell', actors: ['Tom Cruise'] },
+    'pete mitchell': { character: 'Pete "Maverick" Mitchell', actors: ['Tom Cruise'] },
+    'jack reacher': { character: 'Jack Reacher', actors: ['Alan Ritchson', 'Tom Cruise'] },
+    'reacher': { character: 'Jack Reacher', actors: ['Alan Ritchson', 'Tom Cruise'] },
+    'james bond': { character: 'James Bond', actors: ['Daniel Craig', 'Sean Connery', 'Pierce Brosnan', 'Roger Moore', 'Timothy Dalton'] },
+    '007': { character: 'James Bond', actors: ['Daniel Craig', 'Sean Connery', 'Pierce Brosnan', 'Roger Moore', 'Timothy Dalton'] },
     'indiana jones': { character: 'Indiana Jones', actors: ['Harrison Ford'] },
+    'jack sparrow': { character: 'Captain Jack Sparrow', actors: ['Johnny Depp'] },
+    'captain jack sparrow': { character: 'Captain Jack Sparrow', actors: ['Johnny Depp'] },
+    'tyler durden': { character: 'Tyler Durden', actors: ['Brad Pitt'] },
+    'patrick bateman': { character: 'Patrick Bateman', actors: ['Christian Bale'] },
+    'forrest gump': { character: 'Forrest Gump', actors: ['Tom Hanks'] },
     'michael corleone': { character: 'Michael Corleone', actors: ['Al Pacino'] },
     'tony montana': { character: 'Tony Montana', actors: ['Al Pacino'] },
     'vito corleone': { character: 'Vito Corleone', actors: ['Marlon Brando', 'Robert De Niro'] },
-    'patrick bateman': { character: 'Patrick Bateman', actors: ['Christian Bale'] },
-    'tyler durden': { character: 'Tyler Durden', actors: ['Brad Pitt'] },
-    'arthur fleck': { character: 'Arthur Fleck / Joker', actors: ['Joaquin Phoenix'] },
-    'homelander': { character: 'Homelander', actors: ['Antony Starr'] },
-    'billy butcher': { character: 'Billy Butcher', actors: ['Karl Urban'] },
-    'soldier boy': { character: 'Soldier Boy', actors: ['Jensen Ackles'] },
-    'dean winchester': { character: 'Dean Winchester', actors: ['Jensen Ackles'] },
-    'sam winchester': { character: 'Sam Winchester', actors: ['Jared Padalecki'] },
-    'peacemaker': { character: 'Peacemaker', actors: ['John Cena'] },
-    'katniss everdeen': { character: 'Katniss Everdeen', actors: ['Jennifer Lawrence'] },
-    'bella swan': { character: 'Bella Swan', actors: ['Kristen Stewart'] },
-    'edward cullen': { character: 'Edward Cullen', actors: ['Robert Pattinson'] },
-    'ethan hunt': { character: 'Ethan Hunt', actors: ['Tom Cruise'] },
-    'maverick': { character: 'Pete "Maverick" Mitchell', actors: ['Tom Cruise'] },
+    'oppenheimer': { character: 'J. Robert Oppenheimer', actors: ['Cillian Murphy'] },
     'barbie': { character: 'Barbie', actors: ['Margot Robbie'] },
     'ken': { character: 'Ken', actors: ['Ryan Gosling'] },
-    'forrest gump': { character: 'Forrest Gump', actors: ['Tom Hanks'] },
-    'gandalf': { character: 'Gandalf', actors: ['Ian McKellen'] },
-    'frodo baggins': { character: 'Frodo Baggins', actors: ['Elijah Wood'] },
-    'frodo': { character: 'Frodo Baggins', actors: ['Elijah Wood'] },
-    'aragorn': { character: 'Aragorn', actors: ['Viggo Mortensen'] },
-    'legolas': { character: 'Legolas', actors: ['Orlando Bloom'] },
-    'gollum': { character: 'Gollum', actors: ['Andy Serkis'] },
-    'hannibal lecter': { character: 'Hannibal Lecter', actors: ['Anthony Hopkins', 'Mads Mikkelsen'] },
+    'katniss everdeen': { character: 'Katniss Everdeen', actors: ['Jennifer Lawrence'] },
+    'katniss': { character: 'Katniss Everdeen', actors: ['Jennifer Lawrence'] },
+    'bella swan': { character: 'Bella Swan', actors: ['Kristen Stewart'] },
+    'edward cullen': { character: 'Edward Cullen', actors: ['Robert Pattinson'] },
+    'sherlock holmes': { character: 'Sherlock Holmes', actors: ['Benedict Cumberbatch', 'Robert Downey Jr.', 'Henry Cavill', 'Jonny Lee Miller', 'Ian McKellen'] },
+    'sherlock': { character: 'Sherlock Holmes', actors: ['Benedict Cumberbatch', 'Robert Downey Jr.', 'Henry Cavill', 'Jonny Lee Miller'] },
+    'dr watson': { character: 'Dr. John Watson', actors: ['Martin Freeman', 'Jude Law'] },
+    'john watson': { character: 'Dr. John Watson', actors: ['Martin Freeman', 'Jude Law'] },
     'hercule poirot': { character: 'Hercule Poirot', actors: ['Kenneth Branagh', 'David Suchet'] },
-    'wonder woman': { character: 'Wonder Woman', actors: ['Gal Gadot', 'Lynda Carter'] },
-    'diana prince': { character: 'Wonder Woman', actors: ['Gal Gadot', 'Lynda Carter'] },
-    'aquaman': { character: 'Aquaman', actors: ['Jason Momoa'] },
-    'arthur curry': { character: 'Aquaman', actors: ['Jason Momoa'] },
-    'the flash': { character: 'The Flash', actors: ['Grant Gustin', 'Ezra Miller'] },
-    'flash': { character: 'The Flash', actors: ['Grant Gustin', 'Ezra Miller'] },
-    'barry allen': { character: 'The Flash', actors: ['Grant Gustin', 'Ezra Miller'] },
-    'doctor strange': { character: 'Doctor Strange', actors: ['Benedict Cumberbatch'] },
-    'stephen strange': { character: 'Doctor Strange', actors: ['Benedict Cumberbatch'] },
-    'lucifer morningstar': { character: 'Lucifer Morningstar', actors: ['Tom Ellis'] },
-    'lucifer': { character: 'Lucifer Morningstar', actors: ['Tom Ellis'] },
-    'beth harmon': { character: 'Beth Harmon', actors: ['Anya Taylor-Joy'] },
-    'eleven': { character: 'Eleven', actors: ['Millie Bobby Brown'] }
+    'hannibal lecter': { character: 'Hannibal Lecter', actors: ['Anthony Hopkins', 'Mads Mikkelsen'] },
+    'dominic toretto': { character: 'Dominic Toretto', actors: ['Vin Diesel'] },
+    'dom toretto': { character: 'Dominic Toretto', actors: ['Vin Diesel'] },
+    'brian o\'conner': { character: 'Brian O\'Conner', actors: ['Paul Walker'] },
+    'terminator': { character: 'The Terminator / T-800', actors: ['Arnold Schwarzenegger'] },
+    't-800': { character: 'The Terminator / T-800', actors: ['Arnold Schwarzenegger'] },
+    'sarah connor': { character: 'Sarah Connor', actors: ['Linda Hamilton', 'Emilia Clarke'] },
+    'ellen ripley': { character: 'Ellen Ripley', actors: ['Sigourney Weaver'] },
+    'ripley': { character: 'Ellen Ripley', actors: ['Sigourney Weaver'] },
+    'john mcclane': { character: 'John McClane', actors: ['Bruce Willis'] },
+    'mad max': { character: 'Mad Max', actors: ['Tom Hardy', 'Mel Gibson'] },
+    'furiosa': { character: 'Imperator Furiosa', actors: ['Charlize Theron', 'Anya Taylor-Joy'] },
+    'hans landa': { character: 'Col. Hans Landa', actors: ['Christoph Waltz'] },
+    'rust cohle': { character: 'Rust Cohle', actors: ['Matthew McConaughey'] },
+    'dom cobb': { character: 'Dom Cobb', actors: ['Leonardo DiCaprio'] },
+    'cobb': { character: 'Dom Cobb', actors: ['Leonardo DiCaprio'] },
+    'jordan belfort': { character: 'Jordan Belfort', actors: ['Leonardo DiCaprio'] },
+
+    // Gaming & Anime Adaptations
+    'joel': { character: 'Joel Miller', actors: ['Pedro Pascal'] },
+    'joel miller': { character: 'Joel Miller', actors: ['Pedro Pascal'] },
+    'ellie': { character: 'Ellie Williams', actors: ['Bella Ramsey', 'Ashley Johnson'] },
+    'ellie williams': { character: 'Ellie Williams', actors: ['Bella Ramsey', 'Ashley Johnson'] },
+    'geralt of rivia': { character: 'Geralt of Rivia', actors: ['Henry Cavill', 'Liam Hemsworth'] },
+    'the witcher': { character: 'Geralt of Rivia', actors: ['Henry Cavill', 'Liam Hemsworth'] },
+    'luffy': { character: 'Monkey D. Luffy', actors: ['Iñaki Godoy', 'Mayumi Tanaka'] },
+    'monkey d. luffy': { character: 'Monkey D. Luffy', actors: ['Iñaki Godoy', 'Mayumi Tanaka'] },
+    'zoro': { character: 'Roronoa Zoro', actors: ['Mackenyu', 'Kazuya Nakai'] },
+    'roronoa zoro': { character: 'Roronoa Zoro', actors: ['Mackenyu', 'Kazuya Nakai'] },
+    'naruto': { character: 'Naruto Uzumaki', actors: ['Junko Takeuchi', 'Maile Flanagan'] },
+    'naruto uzumaki': { character: 'Naruto Uzumaki', actors: ['Junko Takeuchi', 'Maile Flanagan'] },
+    'goku': { character: 'Son Goku', actors: ['Masako Nozawa', 'Sean Schemmel'] },
+    'son goku': { character: 'Son Goku', actors: ['Masako Nozawa', 'Sean Schemmel'] },
+    'levi ackerman': { character: 'Levi Ackerman', actors: ['Hiroshi Kamiya', 'Matthew Mercer'] },
+    'eren yeager': { character: 'Eren Yeager', actors: ['Yuki Kaji', 'Bryce Papenbrook'] },
+    'gojo': { character: 'Gojo Satoru', actors: ['Yuichi Nakamura', 'Kaiji Tang'] },
+    'gojo satoru': { character: 'Gojo Satoru', actors: ['Yuichi Nakamura', 'Kaiji Tang'] },
+    'tanjiro': { character: 'Tanjiro Kamado', actors: ['Natsuki Hanae', 'Zach Aguilar'] },
+    'tanjiro kamado': { character: 'Tanjiro Kamado', actors: ['Natsuki Hanae', 'Zach Aguilar'] },
+    'bojack horseman': { character: 'BoJack Horseman', actors: ['Will Arnett'] },
+    'bojack': { character: 'BoJack Horseman', actors: ['Will Arnett'] },
+    'rick sanchez': { character: 'Rick Sanchez', actors: ['Justin Roiland', 'Ian Cardoni'] },
+    'morty smith': { character: 'Morty Smith', actors: ['Justin Roiland', 'Harry Belden'] }
   };
 
   /**
@@ -1303,7 +1469,13 @@ export class TMDB {
    */
   static async findActorsByCharacter(query, options = {}) {
     if (!query || !query.trim()) return [];
-    const raw = query.trim().toLowerCase().replace(/['"!?.]/g, '');
+    
+    // Clean common prefixes (e.g. "who played batman", "character: walter white", "actor for luffy")
+    const cleaned = query
+      .trim()
+      .replace(/^(?:who\s+(?:played|portrayed|voices)|character(?:\s*:\s*|\s+)|actor\s+for\s+)/i, '')
+      .trim();
+    const raw = cleaned.toLowerCase().replace(/['"!?.]/g, '');
 
     // 1. Check knowledge map
     let matchEntry = null;
@@ -1319,30 +1491,65 @@ export class TMDB {
     }
 
     let actorNames = matchEntry ? [...matchEntry.actors] : [];
-    let characterName = matchEntry ? matchEntry.character : query.trim();
+    let characterName = matchEntry ? matchEntry.character : cleaned;
 
-    // 2. Dynamic fallback: Wikipedia REST summary extraction
+    // 2. Dynamic fallback: Wikipedia Search API + Summary Extraction
     if (actorNames.length === 0) {
       try {
-        const wikiSlug = encodeURIComponent(query.trim().replace(/\s+/g, '_'));
-        const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${wikiSlug}`, {
+        const regexList = [
+          /(?:portrayed|played|voices|voiced)\s+by\s+([A-Z][a-zA-Z\s\.\-]+?)(?:[,.]|\s+in\s+|\s+and\s+|\s+as\s+)/i,
+          /(?:played by|portrayed by|voiced by)\s+([A-Z][a-zA-Z\s\.\-]+?)(?:[,.]|\s+in\s+|\s+and\s+)/i,
+          /(?:starring|stars)\s+([A-Z][a-zA-Z\s\.\-]+?)\s+as\s+/i,
+          /([A-Z][a-zA-Z\s\.\-]+?)\s+(?:portrays|plays|voices|stars as)\s+/i,
+          /as\s+the\s+character[,\s]+played\s+by\s+([A-Z][a-zA-Z\s\.\-]+?)[,.]/i,
+          /([A-Z][a-zA-Z\s\.\-]+?)\s+as\s+(?:the\s+character\s+)?([A-Z][a-zA-Z\s\.\-]+?)[,.]/i
+        ];
+
+        // First attempt direct slug
+        const directSlug = encodeURIComponent(cleaned.replace(/\s+/g, '_'));
+        const directRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${directSlug}`, {
           headers: { 'User-Agent': 'MoodFlix/2.0 (contact@moodflix.dev)' }
-        });
-        if (wikiRes.ok) {
-          const wikiData = await wikiRes.json();
-          const extract = wikiData.extract || '';
-          const regexList = [
-            /(?:portrayed|played|voiced)\s+by\s+([A-Z][a-zA-Z\s\.\-]+?)(?:[,.]|\s+in\s+|\s+and\s+)/i,
-            /([A-Z][a-zA-Z\s\.\-]+?)\s+(?:portrays|plays|voices)\s+/i
-          ];
-          for (const reg of regexList) {
-            const m = extract.match(reg);
-            if (m && m[1] && m[1].trim().length > 2 && m[1].trim().length < 40) {
-              actorNames.push(m[1].trim());
-              characterName = wikiData.title || query.trim();
-              break;
+        }).catch(() => null);
+
+        let candidates = [];
+        if (directRes && directRes.ok) {
+          const directData = await directRes.json();
+          candidates.push(directData);
+        }
+
+        // If direct slug produced no hit or no actor, query Wikipedia search
+        if (candidates.length === 0 || !candidates[0].extract) {
+          const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleaned + ' fictional character')}&format=json`;
+          const sRes = await fetch(searchUrl, { headers: { 'User-Agent': 'MoodFlix/2.0 (contact@moodflix.dev)' } }).catch(() => null);
+          if (sRes && sRes.ok) {
+            const sData = await sRes.json();
+            const hits = (sData.query?.search || []).slice(0, 3);
+            for (const hit of hits) {
+              const sumRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(hit.title)}`, {
+                headers: { 'User-Agent': 'MoodFlix/2.0 (contact@moodflix.dev)' }
+              }).catch(() => null);
+              if (sumRes && sumRes.ok) {
+                const sumData = await sumRes.json();
+                candidates.push(sumData);
+              }
             }
           }
+        }
+
+        for (const cand of candidates) {
+          const extract = cand.extract || '';
+          for (const reg of regexList) {
+            const m = extract.match(reg);
+            if (m && m[1]) {
+              const candidate = m[1].trim();
+              if (candidate.length >= 3 && candidate.length <= 35 && !/^(The|He|She|In|On|At|When|American|British|Canadian|Australian)\b/i.test(candidate)) {
+                actorNames.push(candidate);
+                characterName = (cand.title || cleaned).replace(/\s*\([^)]*\)/g, '').trim();
+                break;
+              }
+            }
+          }
+          if (actorNames.length > 0) break;
         }
       } catch (e) {}
     }
@@ -1394,7 +1601,10 @@ export class TMDB {
     if (!hasAuth) return [];
 
     const rawQuery = query.trim();
-    const cleanLower = rawQuery.toLowerCase().replace(/['"!?.]/g, '');
+    const strippedQuery = rawQuery
+      .replace(/^(?:who\s+(?:played|portrayed|voices)|character(?:\s*:\s*|\s+)|actor\s+for\s+)/i, '')
+      .trim();
+    const cleanLower = strippedQuery.toLowerCase().replace(/['"!?.]/g, '');
 
     // Check if query is a known fictional character first
     const isKnownCharacter = Object.keys(TMDB.CHARACTER_ACTORS).some(key => 

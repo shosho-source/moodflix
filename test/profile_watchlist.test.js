@@ -32,9 +32,9 @@ describe('Profile & Watchlist with Google Login Integration', () => {
     }
   });
 
-  it('Desktop navigation contains Profile / Watchlist tab in place of settings', () => {
+  it('Desktop navigation contains Watchlist tab in place of settings', () => {
     assert.ok(
-      indexHtml.includes('data-tab="profile-view"') && indexHtml.includes('Profile / Watchlist'),
+      indexHtml.includes('data-tab="profile-view"') && (indexHtml.includes('Watchlist') || indexHtml.includes('Profile / Watchlist')),
       'Desktop navigation includes Profile / Watchlist tab'
     );
     // Desktop mainNav should not have settings tab
@@ -44,7 +44,7 @@ describe('Profile & Watchlist with Google Login Integration', () => {
     assert.ok(navMatch[1].includes('data-tab="profile-view"'), 'profile tab is present in desktop nav');
   });
 
-  it('Mobile bottom navigation contains Profile / Watchlist item', () => {
+  it('Mobile bottom navigation contains Watchlist item', () => {
     const mobileNavMatch = indexHtml.match(/<nav class="mobile-bottom-nav[^"]*" id="mobileBottomNav"[\s\S]*?<\/nav>/);
     assert.ok(mobileNavMatch, 'mobileBottomNav found');
     assert.ok(mobileNavMatch[0].includes('data-tab="profile-view"'), 'mobile nav includes profile tab');

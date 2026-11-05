@@ -356,11 +356,11 @@ async function showDashboardView(user) {
     const userDisplay = (user?.user_metadata?.full_name || (user?.email ? user.email.split('@')[0] : (user?.id ? user.id.slice(0, 8) : 'USER'))).toUpperCase();
     if (userEmailEl) userEmailEl.textContent = userDisplay;
     if (signoutBtn) signoutBtn.classList.remove('hidden');
-    if (userProfileEl) userProfileEl.title = `Signed in as ${user.email} - Open Profile / Watchlist`;
+    if (userProfileEl) userProfileEl.title = `Signed in as ${user.email} - Open Watchlist`;
   } else {
     if (userEmailEl) userEmailEl.textContent = 'GUEST';
     if (signoutBtn) signoutBtn.classList.add('hidden');
-    if (userProfileEl) userProfileEl.title = 'Browse as Guest (Click to Open Profile / Watchlist)';
+    if (userProfileEl) userProfileEl.title = 'Browse as Guest (Click to Open Watchlist)';
   }
 
   // Ensure active view is immediately displayed (fixes blank screen on initial load)
@@ -3939,6 +3939,8 @@ function setupEventListeners() {
   elements.btnExecuteTvSearch?.addEventListener('click', () => loadTVShows());
   elements.tvCategorySelect?.addEventListener('change', () => loadTVShows());
 
+  setupArtistSearchSuggestions();
+
   // Artist Search Form
   elements.directSearchForm?.addEventListener('submit', async e => {
     e.preventDefault();
@@ -4160,6 +4162,16 @@ function renderFilmographyCards(credits, filter = 'all', sort = 'popularity') {
     filtered.sort((a, b) => (a.year || 9999) - (b.year || 9999));
   }
 
+  // Prioritize matching character role items first when a character query is searched!
+  const hasCharMatch = filtered.some(c => c.isTargetCharacterMatch);
+  if (hasCharMatch) {
+    filtered.sort((a, b) => {
+      if (a.isTargetCharacterMatch && !b.isTargetCharacterMatch) return -1;
+      if (!a.isTargetCharacterMatch && b.isTargetCharacterMatch) return 1;
+      return 0;
+    });
+  }
+
   window.artistCreditsCache = filtered;
   window.actorCreditsCache = filtered;
 
@@ -4173,10 +4185,18 @@ function renderFilmographyCards(credits, filter = 'all', sort = 'popularity') {
     const typeLabel = isTv ? 'TV' : 'MOVIE';
     const yearDisplay = item.year || 'N/A';
     const ratingDisplay = item.rating > 0 ? `★ ${item.rating.toFixed(1)}` : 'NR';
+    const isCharMatch = Boolean(item.isTargetCharacterMatch);
+    const activeChar = state.currentArtist?.characterPlayed || '';
     const characterDisplay = item.character && item.character !== 'Self / Featured' ? `as ${escapeHtml(item.character)}` : '';
+    const charBadgeHtml = isCharMatch && activeChar ? `
+      <div class="character-role-badge">
+        <span class="material-symbols-outlined" style="font-size:12px;">theater_comedy</span>
+        <span>PORTRAYED ${escapeHtml(activeChar.toUpperCase())}</span>
+      </div>
+    ` : '';
 
     return `
-      <div class="movie-card retro-box actor-filmo-card artist-filmo-card" data-index="${index}" data-media-id="${item.id}" data-media-type="${item.mediaType}" tabindex="0" role="button" aria-label="${escapeHtml(item.title)} details" onclick="handleArtistCardAction(${index}, 'detail', event)">
+      <div class="movie-card retro-box actor-filmo-card artist-filmo-card ${isCharMatch ? 'is-character-role-card' : ''}" data-index="${index}" data-media-id="${item.id}" data-media-type="${item.mediaType}" tabindex="0" role="button" aria-label="${escapeHtml(item.title)} details" onclick="handleArtistCardAction(${index}, 'detail', event)">
         <div class="movie-poster-wrap">
           <img src="${item.poster || 'https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?w=500'}" 
                alt="${escapeHtml(item.title)}" 
@@ -4186,13 +4206,14 @@ function renderFilmographyCards(credits, filter = 'all', sort = 'popularity') {
           <div class="media-type-badge ${isTv ? 'badge-tv' : 'badge-movie'}">${typeLabel}</div>
           <div class="media-rating-pill">${ratingDisplay}</div>
           ${item.isDownloaded ? '<div class="downloaded-badge"><span class="material-symbols-outlined" style="font-size:12px;">check</span> SAVED</div>' : ''}
+          ${charBadgeHtml}
         </div>
         <div class="movie-card-info">
           <div class="movie-card-header">
             <h3 class="movie-card-title scramble-text" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</h3>
             <span class="movie-card-year">${yearDisplay}</span>
           </div>
-          ${characterDisplay ? `<div class="actor-card-role artist-card-role" title="${characterDisplay}">${characterDisplay}</div>` : ''}
+          ${characterDisplay ? `<div class="actor-card-role artist-card-role ${isCharMatch ? 'char-role-highlight' : ''}" title="${characterDisplay}">${isCharMatch ? '★ ' : ''}${characterDisplay}</div>` : ''}
           <div class="actor-card-actions artist-card-actions">
             <button type="button" class="retro-btn actor-card-btn artist-card-btn filmo-torrent-btn" onclick="event.stopPropagation(); handleArtistCardAction(${index}, 'torrent', event)">
               <span class="material-symbols-outlined" style="font-size:14px;">download</span>
@@ -4243,6 +4264,22 @@ function renderArtistFilmography(artist, matches = [], originalQuery = '') {
   ` : '';
 
   const characterPlayed = artist.characterPlayed || matches[0]?.characterPlayed || null;
+  if (characterPlayed && artist.credits && Array.isArray(artist.credits)) {
+    const charNorm = characterPlayed.toLowerCase().trim();
+    const charTokens = charNorm.split(/\s+/).filter(w => w.length > 2);
+    artist.credits.forEach(c => {
+      const creditChar = (c.character || '').toLowerCase();
+      const creditTitle = (c.title || '').toLowerCase();
+      const matchesRole = creditChar && (
+        creditChar.includes(charNorm) ||
+        charNorm.includes(creditChar.replace(/\s*\(.*\)/, '').trim()) ||
+        (charTokens.length > 0 && charTokens.every(t => creditChar.includes(t)))
+      );
+      if (matchesRole) {
+        c.isTargetCharacterMatch = true;
+      }
+    });
+  }
   const characterBannerHtml = characterPlayed ? `
     <div class="character-match-banner retro-box">
       <div class="char-banner-tag-row">
@@ -6798,3 +6835,133 @@ if ('serviceWorker' in navigator && window.location.protocol.startsWith('http'))
   });
 }
 
+
+// Character & Artist Autocomplete Directory
+const POPULAR_CHARACTER_SUGGESTIONS = [
+  { name: 'Barney Stinson', type: 'character', detail: 'How I Met Your Mother • Neil Patrick Harris' },
+  { name: 'Walter White', type: 'character', detail: 'Breaking Bad • Bryan Cranston' },
+  { name: 'Jesse Pinkman', type: 'character', detail: 'Breaking Bad • Aaron Paul' },
+  { name: 'Saul Goodman', type: 'character', detail: 'Better Call Saul • Bob Odenkirk' },
+  { name: 'Gus Fring', type: 'character', detail: 'Breaking Bad • Giancarlo Esposito' },
+  { name: 'Tommy Shelby', type: 'character', detail: 'Peaky Blinders • Cillian Murphy' },
+  { name: 'Arthur Shelby', type: 'character', detail: 'Peaky Blinders • Paul Anderson' },
+  { name: 'Paul Atreides', type: 'character', detail: 'Dune • Timothée Chalamet' },
+  { name: 'Batman', type: 'character', detail: 'Christian Bale, Robert Pattinson, Ben Affleck' },
+  { name: 'The Joker', type: 'character', detail: 'Heath Ledger, Joaquin Phoenix' },
+  { name: 'Superman', type: 'character', detail: 'Henry Cavill, Christopher Reeve' },
+  { name: 'Spider-Man', type: 'character', detail: 'Tom Holland, Tobey Maguire, Andrew Garfield' },
+  { name: 'Iron Man', type: 'character', detail: 'Marvel MCU • Robert Downey Jr.' },
+  { name: 'Deadpool', type: 'character', detail: 'Marvel Universe • Ryan Reynolds' },
+  { name: 'Wolverine', type: 'character', detail: 'X-Men / Deadpool • Hugh Jackman' },
+  { name: 'Kendall Roy', type: 'character', detail: 'Succession • Jeremy Strong' },
+  { name: 'Logan Roy', type: 'character', detail: 'Succession • Brian Cox' },
+  { name: 'Homelander', type: 'character', detail: 'The Boys • Antony Starr' },
+  { name: 'Billy Butcher', type: 'character', detail: 'The Boys • Karl Urban' },
+  { name: 'Jon Snow', type: 'character', detail: 'Game of Thrones • Kit Harington' },
+  { name: 'Daenerys Targaryen', type: 'character', detail: 'Game of Thrones • Emilia Clarke' },
+  { name: 'Daemon Targaryen', type: 'character', detail: 'House of the Dragon • Matt Smith' },
+  { name: 'Michael Scott', type: 'character', detail: 'The Office • Steve Carell' },
+  { name: 'Dwight Schrute', type: 'character', detail: 'The Office • Rainn Wilson' },
+  { name: 'Rust Cohle', type: 'character', detail: 'True Detective • Matthew McConaughey' },
+  { name: 'Hans Landa', type: 'character', detail: 'Inglourious Basterds • Christoph Waltz' },
+  { name: 'Dom Cobb', type: 'character', detail: 'Inception • Leonardo DiCaprio' },
+  { name: 'John Wick', type: 'character', detail: 'Keanu Reeves' },
+  { name: 'Neo', type: 'character', detail: 'The Matrix • Keanu Reeves' },
+  { name: 'The Mandalorian', type: 'character', detail: 'Pedro Pascal' },
+  { name: 'Joel Miller', type: 'character', detail: 'The Last of Us • Pedro Pascal' },
+  { name: 'Ellie Williams', type: 'character', detail: 'The Last of Us • Bella Ramsey' },
+  { name: 'Luffy', type: 'character', detail: 'One Piece • Iñaki Godoy' },
+  { name: 'Wednesday Addams', type: 'character', detail: 'Jenna Ortega, Christina Ricci' },
+  { name: 'Albus Dumbledore', type: 'character', detail: 'Harry Potter • Michael Gambon, Richard Harris' },
+  { name: 'Gandalf', type: 'character', detail: 'Lord of the Rings • Ian McKellen' },
+  { name: 'Tony Soprano', type: 'character', detail: 'The Sopranos • James Gandolfini' },
+  { name: 'Patrick Bateman', type: 'character', detail: 'American Psycho • Christian Bale' },
+  { name: 'Tyler Durden', type: 'character', detail: 'Fight Club • Brad Pitt' },
+  { name: 'Chani', type: 'character', detail: 'Dune • Zendaya' }
+];
+
+function setupArtistSearchSuggestions() {
+  const input = elements.directSearchInput;
+  const dropdown = document.getElementById('artistSearchSuggestions');
+  if (!input || !dropdown) return;
+
+  let activeIndex = -1;
+
+  function closeSuggestions() {
+    dropdown.classList.add('hidden');
+    dropdown.innerHTML = '';
+    activeIndex = -1;
+  }
+
+  input.addEventListener('input', () => {
+    const val = input.value.trim().toLowerCase();
+    if (val.length < 2) {
+      closeSuggestions();
+      return;
+    }
+
+    const matches = POPULAR_CHARACTER_SUGGESTIONS.filter(item =>
+      item.name.toLowerCase().includes(val) || (item.detail && item.detail.toLowerCase().includes(val))
+    ).slice(0, 6);
+
+    if (matches.length === 0) {
+      closeSuggestions();
+      return;
+    }
+
+    dropdown.innerHTML = matches.map((m, idx) => `
+      <div class="char-suggestion-item" data-idx="${idx}" data-name="${escapeHtml(m.name)}">
+        <span class="char-sugg-icon">🎭</span>
+        <div class="char-sugg-info">
+          <strong class="char-sugg-name">${escapeHtml(m.name)}</strong>
+          <span class="char-sugg-actor">${escapeHtml(m.detail)}</span>
+        </div>
+      </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+    activeIndex = -1;
+
+    dropdown.querySelectorAll('.char-suggestion-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const queryName = el.dataset.name;
+        if (queryName) {
+          input.value = queryName;
+          closeSuggestions();
+          performDirectSearch(queryName);
+        }
+      });
+    });
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (dropdown.classList.contains('hidden')) return;
+    const items = dropdown.querySelectorAll('.char-suggestion-item');
+    if (!items.length) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIndex = (activeIndex + 1) % items.length;
+      items.forEach((it, i) => it.classList.toggle('active', i === activeIndex));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIndex = (activeIndex - 1 + items.length) % items.length;
+      items.forEach((it, i) => it.classList.toggle('active', i === activeIndex));
+    } else if (e.key === 'Enter') {
+      if (activeIndex >= 0 && items[activeIndex]) {
+        e.preventDefault();
+        const selName = items[activeIndex].dataset.name;
+        input.value = selName;
+        closeSuggestions();
+        performDirectSearch(selName);
+      }
+    } else if (e.key === 'Escape') {
+      closeSuggestions();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+      closeSuggestions();
+    }
+  });
+}

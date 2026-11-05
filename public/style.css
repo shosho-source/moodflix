@@ -11350,3 +11350,110 @@ select option {
   text-align: center;
   line-height: 1.4;
 }
+
+/* ==========================================================================
+   Enhanced Character Search & Role Highlighting Styles
+   ========================================================================== */
+.character-role-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: #ffcc00;
+  color: #000000;
+  border: 1.5px solid #000000;
+  box-shadow: 1.5px 1.5px 0 #000000;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  letter-spacing: 0.04em;
+  z-index: 5;
+}
+
+.is-character-role-card {
+  border: 2.5px solid #eab308 !important;
+  box-shadow: 4px 4px 0 #000000 !important;
+}
+
+.char-role-highlight {
+  color: #ca8a04 !important;
+  font-weight: 800 !important;
+  font-family: var(--font-mono, monospace) !important;
+}
+
+/* Character Suggestions Dropdown */
+.character-suggestions-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--retro-surface, #ffffff);
+  border: 2px solid var(--retro-border, #000000);
+  box-shadow: 4px 4px 0 var(--retro-border, #000000);
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 50;
+}
+
+.char-suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: background 0.12s ease;
+  font-family: var(--font-mono, monospace);
+  text-align: left;
+}
+
+.char-suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.char-suggestion-item:hover,
+.char-suggestion-item.active {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+.char-suggestion-item:hover .char-sugg-actor,
+.char-suggestion-item.active .char-sugg-actor {
+  color: #facc15 !important;
+}
+
+.char-sugg-icon {
+  font-size: 18px;
+}
+
+.char-sugg-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.char-sugg-name {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.char-sugg-actor {
+  font-size: 11px;
+  opacity: 0.8;
+  color: #666666;
+}
+
+.actor-chip.is-char-chip {
+  background: #fef08a !important;
+  color: #713f12 !important;
+  border-color: #000000 !important;
+  font-weight: 800 !important;
+}
+
+.actor-chip.is-char-chip:hover {
+  background: #000000 !important;
+  color: #fef08a !important;
+}
