@@ -47,6 +47,15 @@ describe('CineBay Torrent Provider', () => {
     assert.ok(archiveResults.some(r => r.torrentUrl && r.torrentUrl.includes('archive.org')));
   });
 
+  it('queries official YTS.GG API and returns verified movie releases with direct .torrent URLs', async () => {
+    const ytsResults = await CineBay.queryYts('Inception', { imdbId: 'tt1375666' });
+    assert.ok(ytsResults.length > 0, 'Expected to find YTS releases for Inception');
+    assert.strictEqual(ytsResults[0].source, 'YTS.GG');
+    assert.ok(ytsResults[0].magnet.startsWith('magnet:?xt=urn:btih:'));
+    assert.ok(ytsResults[0].torrentUrl.includes('yts.gg'));
+    assert.ok(ytsResults.some(r => r.qualityBadge === '1080p' || r.qualityBadge === '720p' || r.qualityBadge === '2160p'));
+  });
+
   it('returns valid torrents for challenging titles previously showing as unavailable', async () => {
     const results = await CineBay.search('Night of the Living Dead 1968');
     assert.ok(results.length > 0, 'Expected to find torrents for Night of the Living Dead 1968');

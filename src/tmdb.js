@@ -130,6 +130,76 @@ export class TMDB {
   }
 
   /**
+   * Fetch combined Movies and TV shows from live TMDB API.
+   */
+  static async getCombinedMedia(options = {}) {
+    const type = options.type || 'all';
+    const search = (options.search || '').trim();
+    const category = options.category || 'all';
+
+    if (type === 'movie') return TMDB.getMovies(options);
+    if (type === 'tv') return TMDB.getTVShows(options);
+
+    const [movies, tvShows] = await Promise.all([
+      TMDB.getMovies({ ...options, type: 'movie' }),
+      TMDB.getTVShows({ ...options, type: 'tv' })
+    ]);
+
+    const seen = new Set();
+    const combined = [];
+    const maxLen = Math.max(movies.length, tvShows.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (movies[i] && !seen.has(`movie_${movies[i].id}`)) {
+        seen.add(`movie_${movies[i].id}`);
+        combined.push(movies[i]);
+      }
+      if (tvShows[i] && !seen.has(`tv_${tvShows[i].id}`)) {
+        seen.add(`tv_${tvShows[i].id}`);
+        combined.push(tvShows[i]);
+      }
+    }
+
+    if (search && combined.length > 0) {
+      return FuzzyMatcher.rankByRelevance(combined, search).slice(0, 24);
+    }
+
+    return combined.slice(0, 24);
+  }
+
+  /**
+   * Fetch Anime (TV series and Movies) from live TMDB API.
+   */
+  static async getAnime(options = {}) {
+    const search = (options.search || '').trim();
+    const category = options.category || 'all';
+    const mediaType = options.type || 'all'; // 'all' | 'tv' | 'movie'
+
+    const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
+    if (!hasAuth) return [];
+
+    let items = [];
+    try {
+      if (search) {
+        items = await TMDB.searchAnimeLive(search, mediaType, headers, queryParams);
+      } else {
+        items = await TMDB.fetchAnimeCategoryLive(category, mediaType, headers, queryParams);
+      }
+    } catch (err) {
+      items = [];
+    }
+
+    if (!Array.isArray(items)) {
+      items = [];
+    }
+
+    if (search && items.length > 0) {
+      items = FuzzyMatcher.rankByRelevance(items, search);
+    }
+
+    return items.slice(0, 24);
+  }
+
+  /**
    * Universal media fetcher for both Movies and TV Shows.
    */
   static async getMedia(options = {}) {
@@ -621,6 +691,156 @@ export class TMDB {
   }
 
   /**
+   * Fetch category feeds for Anime (TV series and Movies).
+   */
+  static async fetchAnimeCategoryLive(category = 'all', mediaType = 'all', headers, baseParams) {
+    const fetchAnimeFor = async (type, page = 1) => {
+      const endpoint = type === 'tv' ? '/discover/tv' : '/discover/movie';
+      const params = new URLSearchParams(baseParams);
+      params.set('with_genres', '16');
+      params.set('with_original_language', 'ja');
+      params.set('page', page.toString());
+
+      if (category === 'top_rated') {
+        params.set('sort_by', 'vote_average.desc');
+        params.set('vote_count.gte', '50');
+      } else if (category === 'popular') {
+        params.set('sort_by', 'popularity.desc');
+      } else if (category === 'airing' || category === 'on_the_air' || category === 'now_playing') {
+        params.set('sort_by', 'popularity.desc');
+        const now = new Date().toISOString().slice(0, 10);
+        if (type === 'tv') {
+          params.set('air_date.lte', now);
+        } else {
+          params.set('primary_release_date.lte', now);
+        }
+      } else {
+        params.set('sort_by', 'popularity.desc');
+      }
+
+      const url = `${TMDB.BASE_URL}${endpoint}?${params.toString()}`;
+      try {
+        const res = await TMDB.fetchWithRetry(url, { headers });
+        if (!res || !res.ok) return [];
+        const data = await res.json();
+        return (data.results || []).map(r => ({
+          ...(type === 'tv' ? TMDB.mapTMDBTVResult(r) : TMDB.mapTMDBMovieResult(r)),
+          category: category === 'all' ? 'trending' : category,
+          isAnime: true
+        }));
+      } catch (e) {
+        return [];
+      }
+    };
+
+    if (mediaType === 'tv') {
+      const [p1, p2] = await Promise.all([fetchAnimeFor('tv', 1), fetchAnimeFor('tv', 2)]);
+      return [...p1, ...p2];
+    } else if (mediaType === 'movie') {
+      const [p1, p2] = await Promise.all([fetchAnimeFor('movie', 1), fetchAnimeFor('movie', 2)]);
+      return [...p1, ...p2];
+    } else {
+      const [tvItems, movieItems] = await Promise.all([
+        fetchAnimeFor('tv', 1),
+        fetchAnimeFor('movie', 1)
+      ]);
+      const combined = [];
+      const seen = new Set();
+      const maxLen = Math.max(tvItems.length, movieItems.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (tvItems[i] && !seen.has(`tv_${tvItems[i].id}`)) {
+          seen.add(`tv_${tvItems[i].id}`);
+          combined.push(tvItems[i]);
+        }
+        if (movieItems[i] && !seen.has(`movie_${movieItems[i].id}`)) {
+          seen.add(`movie_${movieItems[i].id}`);
+          combined.push(movieItems[i]);
+        }
+      }
+      return combined;
+    }
+  }
+
+  /**
+   * Search Anime across TV series and Movies with typo tolerance.
+   */
+  static async searchAnimeLive(query, mediaType = 'all', headers, baseParams) {
+    const raw = query.trim();
+    const cleanTitle = NameCleaner.clean(raw);
+    const seenIds = new Set();
+    const items = [];
+
+    const fetchSearchFor = async (type, searchTerm, page = 1) => {
+      const endpoint = type === 'tv' ? '/search/tv' : '/search/movie';
+      const params = new URLSearchParams(baseParams);
+      params.set('query', searchTerm);
+      params.set('page', page.toString());
+      const url = `${TMDB.BASE_URL}${endpoint}?${params.toString()}`;
+      try {
+        const res = await TMDB.fetchWithRetry(url, { headers });
+        if (res && res.ok) {
+          const data = await res.json();
+          return data.results || [];
+        }
+      } catch (e) {}
+      return [];
+    };
+
+    const isAnimeMatch = (r) => {
+      const hasAnimGenre = Array.isArray(r.genre_ids) && r.genre_ids.includes(16);
+      const isJapanese = r.original_language === 'ja' || (Array.isArray(r.origin_country) && r.origin_country.includes('JP'));
+      return hasAnimGenre || isJapanese;
+    };
+
+    const processResults = (results, type, corrected = null) => {
+      const added = [];
+      for (const item of results) {
+        const key = `${type}_${item.id}`;
+        if (!seenIds.has(key)) {
+          seenIds.add(key);
+          const mapped = type === 'tv' ? TMDB.mapTMDBTVResult(item) : TMDB.mapTMDBMovieResult(item);
+          mapped.isAnime = true;
+          if (corrected) mapped.correctedQuery = corrected;
+          added.push(mapped);
+        }
+      }
+      return added;
+    };
+
+    const runSearch = async (term, corrected = null) => {
+      const typesToSearch = mediaType === 'all' ? ['tv', 'movie'] : [mediaType];
+      const searchPromises = typesToSearch.map(t => fetchSearchFor(t, term, 1));
+      const resLists = await Promise.all(searchPromises);
+
+      let found = [];
+      resLists.forEach((results, idx) => {
+        const t = typesToSearch[idx];
+        const animeFiltered = results.filter(isAnimeMatch);
+        const candidates = animeFiltered.length > 0 ? animeFiltered : results.filter(r => Array.isArray(r.genre_ids) && r.genre_ids.includes(16));
+        found.push(...processResults(candidates.length > 0 ? candidates : results.slice(0, 5), t, corrected));
+      });
+      return found;
+    };
+
+    items.push(...await runSearch(raw));
+
+    if (cleanTitle && cleanTitle !== raw && items.length < 5) {
+      items.push(...await runSearch(cleanTitle));
+    }
+
+    let corrected = null;
+    if (items.length < 3) {
+      corrected = await FuzzyMatcher.suggestCorrection(cleanTitle || raw);
+      if (corrected && corrected.toLowerCase() !== raw.toLowerCase()) {
+        const correctedItems = await runSearch(corrected, corrected);
+        items.push(...correctedItems);
+      }
+    }
+
+    return items;
+  }
+
+  /**
    * Normalizes TMDB movie response object.
    */
   static mapTMDBMovieResult(item) {
@@ -769,21 +989,33 @@ export class TMDB {
 
     trailerKey = trailerKeys[0] || null;
     
+    // Regional Streaming Providers
+    const region = (options.region || 'US').toUpperCase();
+    const allProvidersResults = data['watch/providers']?.results || {};
+    const regionData = allProvidersResults[region] || allProvidersResults['US'] || Object.values(allProvidersResults)[0] || {};
+    
+    const formatProvider = p => ({
+      provider_id: p.provider_id,
+      provider_name: p.provider_name,
+      logo: p.logo_path ? `https://image.tmdb.org/t/p/original${p.logo_path}` : null,
+      display_priority: p.display_priority
+    });
+
+    const streamingFlatrate = (regionData.flatrate || []).map(formatProvider);
+    const streamingRent = (regionData.rent || []).map(formatProvider);
+    const streamingBuy = (regionData.buy || []).map(formatProvider);
+    const streamingFree = (regionData.free || regionData.ads || []).map(formatProvider);
+
     let watchProviders = [];
-    if (data['watch/providers'] && data['watch/providers'].results && data['watch/providers'].results.US) {
-      const usProviders = data['watch/providers'].results.US;
-      if (usProviders.flatrate) watchProviders.push(...usProviders.flatrate);
-      if (usProviders.rent) watchProviders.push(...usProviders.rent);
-      if (usProviders.buy) watchProviders.push(...usProviders.buy);
-      
-      // Deduplicate by provider_id
-      const seen = new Set();
-      watchProviders = watchProviders.filter(p => {
-        if (seen.has(p.provider_id)) return false;
-        seen.add(p.provider_id);
-        return true;
-      });
-    }
+    const seenProviders = new Set();
+    [...streamingFlatrate, ...streamingFree, ...streamingRent, ...streamingBuy].forEach(p => {
+      if (!seenProviders.has(p.provider_id)) {
+        seenProviders.add(p.provider_id);
+        watchProviders.push(p);
+      }
+    });
+
+    const availableRegions = Object.keys(allProvidersResults);
 
     // Parse cast members for the details card
     let cast = [];
@@ -797,21 +1029,118 @@ export class TMDB {
         order: c.order ?? 999
       }));
     }
+
+    const seasons = (data.seasons || []).map(s => ({
+      id: s.id,
+      name: s.name,
+      season_number: s.season_number,
+      episode_count: s.episode_count,
+      air_date: s.air_date,
+      poster: s.poster_path ? `${TMDB.IMAGE_BASE_URL}${s.poster_path}` : null,
+      overview: s.overview
+    }));
     
     return {
+      id: data.id,
+      mediaType: type,
+      title: data.title || data.name || options.fallbackTitle || '',
+      year: (data.release_date || data.first_air_date || options.fallbackYear || '').substring(0, 4),
+      releaseDate: data.release_date || data.first_air_date || '',
+      overview: data.overview || '',
+      genres: (data.genres || []).map(g => g.name),
       runtime: data.runtime || (data.episode_run_time && data.episode_run_time[0]) || 0,
       trailerKey,
       trailerKeys,
       watchProviders,
+      streamingDetails: {
+        region,
+        availableRegions,
+        flatrate: streamingFlatrate,
+        rent: streamingRent,
+        buy: streamingBuy,
+        free: streamingFree
+      },
+      poster: data.poster_path ? `${TMDB.IMAGE_BASE_URL}${data.poster_path}` : null,
       backdrop: data.backdrop_path ? `https://image.tmdb.org/t/p/original${data.backdrop_path}` : null,
       budget: data.budget,
       revenue: data.revenue,
       status: data.status,
-      seasons: data.seasons || [],
+      numberOfSeasons: data.number_of_seasons || seasons.filter(s => s.season_number > 0).length || 1,
+      numberOfEpisodes: data.number_of_episodes || 0,
+      nextEpisodeToAir: data.next_episode_to_air ? {
+        airDate: data.next_episode_to_air.air_date,
+        episodeNumber: data.next_episode_to_air.episode_number,
+        seasonNumber: data.next_episode_to_air.season_number,
+        name: data.next_episode_to_air.name,
+        overview: data.next_episode_to_air.overview
+      } : null,
+      lastEpisodeToAir: data.last_episode_to_air ? {
+        airDate: data.last_episode_to_air.air_date,
+        episodeNumber: data.last_episode_to_air.episode_number,
+        seasonNumber: data.last_episode_to_air.season_number,
+        name: data.last_episode_to_air.name
+      } : null,
+      seasons,
       cast,
-      title: data.title || data.name || options.fallbackTitle || '',
-      year: (data.release_date || data.first_air_date || options.fallbackYear || '').substring(0, 4)
+      rating: Math.round((data.vote_average || 0) * 10) / 10,
+      voteCount: data.vote_count || 0
     };
+  }
+
+  /**
+   * Rapid title entry search - returns high-speed auto-complete results with rich metadata.
+   */
+  static async rapidSearch(query, type = 'all', options = {}) {
+    const raw = (query || '').trim();
+    if (!raw) return [];
+
+    const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
+    if (!hasAuth) return [];
+
+    let endpoint = '/search/multi';
+    if (type === 'movie') endpoint = '/search/movie';
+    else if (type === 'tv') endpoint = '/search/tv';
+
+    const params = new URLSearchParams(queryParams);
+    params.set('query', raw);
+    params.set('page', '1');
+
+    const url = `${TMDB.BASE_URL}${endpoint}?${params.toString()}`;
+    try {
+      const res = await TMDB.fetchWithRetry(url, { headers });
+      if (!res || !res.ok) return [];
+      const data = await res.json();
+      const results = (data.results || []).filter(item => {
+        if (type === 'movie') return true;
+        if (type === 'tv') return true;
+        return item.media_type === 'movie' || item.media_type === 'tv';
+      });
+
+      return results.slice(0, 10).map(item => {
+        const itemType = item.media_type || type || (item.title ? 'movie' : 'tv');
+        const isTv = itemType === 'tv';
+        const genres = (item.genre_ids || []).map(id => isTv ? TMDB.TV_GENRE_MAP[id] : TMDB.MOVIE_GENRE_MAP[id]).filter(Boolean);
+        const relDate = item.release_date || item.first_air_date || '';
+        const year = relDate ? parseInt(relDate.slice(0, 4), 10) : '';
+
+        return {
+          id: item.id,
+          tmdbId: item.id,
+          mediaType: itemType,
+          title: item.title || item.name || item.original_title || item.original_name,
+          year,
+          releaseDate: relDate,
+          rating: Math.round((item.vote_average || 0) * 10) / 10,
+          voteCount: item.vote_count || 0,
+          genres,
+          overview: item.overview || '',
+          poster: item.poster_path ? `${TMDB.IMAGE_BASE_URL}${item.poster_path}` : 'images/hero.webp',
+          backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : null
+        };
+      });
+    } catch (e) {
+      return [];
+    }
   }
 
   /**

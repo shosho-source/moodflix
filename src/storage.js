@@ -150,19 +150,49 @@ export class Storage {
     return data.watchlist || [];
   }
 
-  static addToWatchlist(title) {
+  static addToWatchlist(item) {
     const data = Storage.read();
     if (!data.watchlist) data.watchlist = [];
-    if (!data.watchlist.includes(title)) {
-      data.watchlist.push(title);
+    const title = typeof item === 'string' ? item : (item.title || '');
+    if (!title) return data.watchlist;
+
+    const exists = data.watchlist.some(w => {
+      const existingTitle = typeof w === 'string' ? w : (w.title || '');
+      return existingTitle.toLowerCase() === title.toLowerCase();
+    });
+
+    if (!exists) {
+      const entry = typeof item === 'string' ? item : {
+        id: item.id || Date.now().toString(),
+        title: item.title,
+        year: item.year || '',
+        poster: item.poster || '',
+        rating: item.rating || 0,
+        mediaType: item.mediaType || 'movie',
+        synopsis: item.synopsis || '',
+        addedAt: new Date().toISOString()
+      };
+      data.watchlist.unshift(entry);
       Storage.write(data);
     }
     return data.watchlist;
   }
 
-  static removeFromWatchlist(title) {
+  static removeFromWatchlist(identifier) {
     const data = Storage.read();
-    data.watchlist = (data.watchlist || []).filter(t => t !== title);
+    const target = String(identifier || '').toLowerCase();
+    data.watchlist = (data.watchlist || []).filter(w => {
+      const itemTitle = typeof w === 'string' ? w : (w.title || '');
+      const itemId = typeof w === 'object' && w.id ? String(w.id) : '';
+      return itemTitle.toLowerCase() !== target && itemId !== target;
+    });
+    Storage.write(data);
+    return data.watchlist;
+  }
+
+  static clearWatchlist() {
+    const data = Storage.read();
+    data.watchlist = [];
     Storage.write(data);
     return data.watchlist;
   }

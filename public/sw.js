@@ -1,5 +1,5 @@
 // MoodFlix PWA Service Worker (Network-First Strategy with runtime caching)
-const CACHE_NAME = 'moodflix-v3';
+const CACHE_NAME = 'moodflix-v5-anime';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

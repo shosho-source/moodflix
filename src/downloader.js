@@ -3,6 +3,7 @@
  */
 
 import { spawn } from 'child_process';
+import zlib from 'zlib';
 import { Storage } from './storage.js';
 
 const DEFAULT_TRACKERS = [
@@ -13,7 +14,7 @@ const DEFAULT_TRACKERS = [
   'udp://tracker.bittor.pw:1337/announce',
   'udp://public.popcorn-tracker.org:6969/announce',
   'udp://tracker.dler.org:6969/announce',
-  'udp://exodus.desync.com:6969',
+  'udp://exodus.desync.com:6969/announce',
   'udp://glotorrents.pw:6969/announce',
   'udp://tracker.openbittorrent.com:6969/announce'
 ];
@@ -54,14 +55,103 @@ export function bencode(obj) {
 
 export class Downloader {
   /**
+   * Sanitizes, normalizes, and validates tracker URLs.
+   * Ensures every tracker is a strictly valid URL with an announce path for BitTorrent client compatibility.
+   */
+  static cleanTrackers(trackers = []) {
+    const valid = [];
+    const seen = new Set();
+    const list = Array.isArray(trackers) ? trackers : [trackers];
+
+    for (let tr of list) {
+      if (!tr || typeof tr !== 'string') continue;
+      tr = tr.trim();
+      if (!tr) continue;
+
+      // Handle URL decoding if tracker string is still encoded
+      if (tr.includes('%')) {
+        try { tr = decodeURIComponent(tr); } catch (_) {}
+      }
+
+      // Prepend udp:// if scheme was omitted
+      if (!/^[a-zA-Z0-9+-.]+:\/\//.test(tr)) {
+        tr = 'udp://' + tr;
+      }
+
+      try {
+        const u = new URL(tr);
+        const protocol = u.protocol.toLowerCase();
+        if (!['udp:', 'http:', 'https:', 'wss:', 'ws:'].includes(protocol)) continue;
+        if (!u.hostname) continue;
+
+        // Ensure announce path is present for UDP/HTTP/HTTPS trackers
+        if (protocol === 'udp:' || protocol === 'http:' || protocol === 'https:') {
+          if (!u.pathname || u.pathname === '/' || !u.pathname.toLowerCase().endsWith('/announce')) {
+            const basePath = (u.pathname && u.pathname !== '/') ? u.pathname.replace(/\/+$/, '') : '';
+            u.pathname = `${basePath}/announce`;
+          }
+        }
+
+        const normalized = u.toString().replace(/\/+$/, '');
+        if (!seen.has(normalized)) {
+          seen.add(normalized);
+          valid.push(normalized);
+        }
+      } catch (err) {
+        // Discard invalid URLs
+      }
+    }
+
+    return valid.length > 0 ? valid : [...DEFAULT_TRACKERS];
+  }
+
+  /**
+   * Extracts and normalizes tracker URLs from a torrent object, custom trackers, or magnet link
+   */
+  static extractTrackers(torrent = {}) {
+    const rawTrackers = [];
+    if (Array.isArray(torrent.trackers)) {
+      rawTrackers.push(...torrent.trackers);
+    }
+
+    const magnet = torrent.magnet || (typeof torrent === 'string' ? torrent : '');
+    if (magnet) {
+      try {
+        const decoded = magnet.includes('%') ? decodeURIComponent(magnet) : magnet;
+        const matches = decoded.matchAll(/[?&]tr=([^&]+)/gi);
+        for (const m of matches) {
+          try {
+            const tr = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim();
+            if (tr) rawTrackers.push(tr);
+          } catch (_) {
+            if (m[1]) rawTrackers.push(m[1].trim());
+          }
+        }
+      } catch (_) {}
+    }
+
+    const combined = [...rawTrackers, ...DEFAULT_TRACKERS];
+    return Downloader.cleanTrackers(combined);
+  }
+
+  /**
    * Extracts a 40-character hex infoHash from a torrent object or magnet string
    */
   static extractInfoHash(torrent = {}) {
     if (torrent.infoHash && /^[a-fA-F0-9]{40}$/.test(torrent.infoHash)) {
       return torrent.infoHash.toLowerCase();
     }
-    const magnet = torrent.magnet || (typeof torrent === 'string' ? torrent : '');
-    const match = magnet.match(/xt=urn:btih:([a-zA-Z0-9]{32,40})/i);
+    let magnet = torrent.magnet || (typeof torrent === 'string' ? torrent : '');
+    if (!magnet && typeof torrent.hash === 'string') {
+      magnet = torrent.hash;
+    }
+    if (typeof magnet === 'string' && /^[a-fA-F0-9]{40}$/.test(magnet.trim())) {
+      return magnet.trim().toLowerCase();
+    }
+    if (typeof magnet === 'string' && magnet.includes('%')) {
+      try { magnet = decodeURIComponent(magnet); } catch (_) {}
+    }
+    const match = typeof magnet === 'string' ? magnet.match(/xt=urn:btih:([a-zA-Z0-9]{32,40})/i) : null;
     if (match) {
       const hash = match[1];
       if (hash.length === 40) return hash.toLowerCase();
@@ -92,26 +182,38 @@ export class Downloader {
     const cleanName = rawName.replace(/[/\\?%*:|"<>]/g, '_').trim() || 'download';
     const filename = `${cleanName}.torrent`;
 
-    // 0. If direct torrent URL is provided (e.g. Internet Archive), fetch it directly
+    // 0. If direct torrent URL is provided (e.g. Internet Archive or YTS), fetch it directly
     if (torrent.torrentUrl) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(torrent.torrentUrl, { signal: controller.signal });
+        const timeout = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch(torrent.torrentUrl, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+          }
+        });
         clearTimeout(timeout);
         if (res.ok) {
-          const arrayBuffer = await res.arrayBuffer();
-          const buffer = Buffer.from(arrayBuffer);
-          if (buffer.length > 50 && buffer.slice(0, 1).toString() === 'd') {
-            return { buffer, filename, isGenerated: false };
+          const contentType = (res.headers.get('content-type') || '').toLowerCase();
+          if (!contentType.includes('text/html')) {
+            const arrayBuffer = await res.arrayBuffer();
+            let buffer = Buffer.from(arrayBuffer);
+            if (buffer.length > 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) {
+              try { buffer = zlib.gunzipSync(buffer); } catch (_) {}
+            }
+            if (buffer.length > 50 && buffer.slice(0, 1).toString() === 'd') {
+              return { buffer, filename, isGenerated: false };
+            }
           }
         }
       } catch (err) {}
     }
 
-    // 1. Attempt to fetch original .torrent from public torrent cache mirrors
+    // 1. Attempt to fetch original .torrent from public torrent cache mirrors and YTS
     if (infoHash) {
       const mirrors = [
+        `https://yts.gg/torrent/download/${infoHash.toUpperCase()}`,
         `https://itorrents.org/torrent/${infoHash.toUpperCase()}.torrent`,
         `https://torrage.info/torrent.php?h=${infoHash.toUpperCase()}`,
         `https://btcache.me/torrent/${infoHash.toUpperCase()}.torrent`
@@ -124,16 +226,23 @@ export class Downloader {
           const res = await fetch(mirror, {
             signal: controller.signal,
             headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Referer': mirror
             }
           });
           clearTimeout(timeout);
 
           if (res.ok) {
-            const arrayBuffer = await res.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-            if (buffer.length > 50 && buffer.slice(0, 1).toString() === 'd') {
-              return { buffer, filename, isGenerated: false };
+            const contentType = (res.headers.get('content-type') || '').toLowerCase();
+            if (!contentType.includes('text/html')) {
+              const arrayBuffer = await res.arrayBuffer();
+              let buffer = Buffer.from(arrayBuffer);
+              if (buffer.length > 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) {
+                try { buffer = zlib.gunzipSync(buffer); } catch (_) {}
+              }
+              if (buffer.length > 50 && buffer.slice(0, 1).toString() === 'd') {
+                return { buffer, filename, isGenerated: false };
+              }
             }
           }
         } catch (err) {
@@ -142,12 +251,10 @@ export class Downloader {
       }
     }
 
-    // 2. Synthesize a valid bencoded .torrent file
-    const trackers = (torrent.trackers && Array.isArray(torrent.trackers) && torrent.trackers.length > 0)
-      ? torrent.trackers
-      : DEFAULT_TRACKERS;
-    const announceList = trackers.map(tr => [tr]);
-    const primaryAnnounce = trackers[0] || 'udp://tracker.opentrackr.org:1337/announce';
+    // 2. Synthesize a fully valid, standards-compliant bencoded .torrent file
+    const cleanTrackers = Downloader.extractTrackers(torrent);
+    const announceList = cleanTrackers.map(tr => [tr]);
+    const primaryAnnounce = cleanTrackers[0] || 'udp://tracker.opentrackr.org:1337/announce';
 
     const pieceLength = 262144; // 256 KB standard piece size
     const totalLength = torrent.size ? parseInt(torrent.size, 10) : 1073741824;
@@ -161,13 +268,13 @@ export class Downloader {
     const torrentMeta = {
       'announce': primaryAnnounce,
       'announce-list': announceList,
-      'comment': `MoodFlix Verified Release - ${movieTitle || rawName}`,
+      'comment': `MoodFlix Release - ${movieTitle || rawName}`,
       'created by': 'MoodFlix/2.0',
       'creation date': Math.floor(Date.now() / 1000),
       'info': {
+        'length': totalLength,
         'name': rawName,
         'piece length': pieceLength,
-        'length': totalLength,
         'pieces': piecesBuf
       }
     };

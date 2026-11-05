@@ -21,10 +21,22 @@ export class CineBay {
     'udp://tracker.bittor.pw:1337/announce',
     'udp://public.popcorn-tracker.org:6969/announce',
     'udp://tracker.dler.org:6969/announce',
-    'udp://exodus.desync.com:6969',
+    'udp://exodus.desync.com:6969/announce',
     'udp://open.demonii.com:1337/announce',
     'udp://open.tracker.cl:1337/announce',
-    'udp://tracker.moeking.me:6969/announce'
+    'udp://tracker.moeking.me:6969/announce',
+    'udp://glotorrents.pw:6969/announce',
+    'udp://torrent.gresille.org:80/announce',
+    'udp://tracker.openbittorrent.com:80/announce',
+    'udp://tracker.coppersurfer.tk:6969/announce',
+    'udp://tracker.leechers-paradise.org:6969/announce',
+    'udp://p4p.arenabg.ch:1337/announce',
+    'udp://tracker.internetwarriors.net:1337/announce',
+    'https://tracker.moeblog.cn:443/announce',
+    'udp://open.dstud.io:6969/announce',
+    'udp://tracker.srv00.com:6969/announce',
+    'https://tracker.zhuqiy.com:443/announce',
+    'https://tracker.pmman.tech:443/announce'
   ];
 
   /**
@@ -48,17 +60,18 @@ export class CineBay {
     const category = options.category || '200'; // 200 = Video / Movies, 205 = TV
     const minSeeds = options.minSeeds || 0;
 
-    // 1. Run Torrentio + Apibay + Internet Archive queries in parallel
-    const [torrentioResults, apibayResults, archiveResults] = await Promise.all([
+    // 1. Run Torrentio + Apibay + YTS.GG + Internet Archive queries in parallel
+    const [torrentioResults, apibayResults, ytsResults, archiveResults] = await Promise.all([
       CineBay.queryTorrentio(rawQuery, options),
       CineBay.queryApibay(rawQuery, category),
+      CineBay.queryYts(rawQuery, options),
       CineBay.queryInternetArchive(rawQuery, category)
     ]);
 
     const seenHashes = new Set();
     let torrents = [];
 
-    for (const t of [...torrentioResults, ...apibayResults, ...archiveResults]) {
+    for (const t of [...ytsResults, ...torrentioResults, ...apibayResults, ...archiveResults]) {
       const hash = (t.infoHash || t.id || '').toLowerCase();
       if (hash && !seenHashes.has(hash)) {
         seenHashes.add(hash);
@@ -70,12 +83,13 @@ export class CineBay {
     if (torrents.length === 0) {
       const cleanTitle = NameCleaner.clean(rawQuery);
       if (cleanTitle && cleanTitle.toLowerCase() !== rawQuery.toLowerCase()) {
-        const [cleanTorrentio, cleanApibay, cleanArchive] = await Promise.all([
+        const [cleanTorrentio, cleanApibay, cleanYts, cleanArchive] = await Promise.all([
           CineBay.queryTorrentio(cleanTitle, options),
           CineBay.queryApibay(cleanTitle, category),
+          CineBay.queryYts(cleanTitle, options),
           CineBay.queryInternetArchive(cleanTitle, category)
         ]);
-        for (const t of [...cleanTorrentio, ...cleanApibay, ...cleanArchive]) {
+        for (const t of [...cleanYts, ...cleanTorrentio, ...cleanApibay, ...cleanArchive]) {
           const hash = (t.infoHash || t.id || '').toLowerCase();
           if (hash && !seenHashes.has(hash)) {
             seenHashes.add(hash);
@@ -89,12 +103,13 @@ export class CineBay {
     if (torrents.length === 0) {
       const simplified = rawQuery.replace(/[:\-–—]/g, ' ').replace(/\s+/g, ' ').trim();
       if (simplified && simplified.toLowerCase() !== rawQuery.toLowerCase()) {
-        const [simTorrentio, simApibay, simArchive] = await Promise.all([
+        const [simTorrentio, simApibay, simYts, simArchive] = await Promise.all([
           CineBay.queryTorrentio(simplified, options),
           CineBay.queryApibay(simplified, category),
+          CineBay.queryYts(simplified, options),
           CineBay.queryInternetArchive(simplified, category)
         ]);
-        for (const t of [...simTorrentio, ...simApibay, ...simArchive]) {
+        for (const t of [...simYts, ...simTorrentio, ...simApibay, ...simArchive]) {
           const hash = (t.infoHash || t.id || '').toLowerCase();
           if (hash && !seenHashes.has(hash)) {
             seenHashes.add(hash);
@@ -107,7 +122,7 @@ export class CineBay {
     // 3. Fallback: YTS API if still no results
     if (torrents.length === 0) {
       try {
-        const ytsTorrents = await CineBay.searchYtsFallback(rawQuery);
+        const ytsTorrents = await CineBay.queryYts(rawQuery, options);
         for (const t of ytsTorrents) {
           const hash = (t.infoHash || '').toLowerCase();
           if (hash && !seenHashes.has(hash)) {
@@ -123,12 +138,13 @@ export class CineBay {
       try {
         const corrected = await FuzzyMatcher.suggestCorrection(rawQuery);
         if (corrected && corrected.toLowerCase() !== rawQuery.toLowerCase()) {
-          const [typoTorrentio, typoApibay, typoArchive] = await Promise.all([
+          const [typoTorrentio, typoApibay, typoYts, typoArchive] = await Promise.all([
             CineBay.queryTorrentio(corrected, options),
             CineBay.queryApibay(corrected, category),
+            CineBay.queryYts(corrected, options),
             CineBay.queryInternetArchive(corrected, category)
           ]);
-          for (const t of [...typoTorrentio, ...typoApibay, ...typoArchive]) {
+          for (const t of [...typoYts, ...typoTorrentio, ...typoApibay, ...typoArchive]) {
             const hash = (t.infoHash || t.id || '').toLowerCase();
             if (hash && !seenHashes.has(hash)) {
               seenHashes.add(hash);
@@ -512,49 +528,201 @@ export class CineBay {
   }
 
   /**
+   * Search official YTS.GG API and mirror swarms (https://yts.gg/api)
+   * Official Base URL: https://movies-api.accel.li/api/v2/
+   * Mirrors: https://yts.gg/api/v2/, https://yts.mx/api/v2/, https://yts.lt/api/v2/
+   * Returns verified movie torrents with full metadata (resolution, codec, channels, size, seeders, magnet, direct .torrent)
+   */
+  static async queryYts(query, options = {}) {
+    try {
+      // YTS indexes movies; skip pure TV series requests
+      if (options.category === '205' || options.type === 'tv') {
+        return [];
+      }
+
+      const endpoints = [
+        'https://movies-api.accel.li/api/v2/list_movies.json',
+        'https://yts.gg/api/v2/list_movies.json',
+        'https://yts.mx/api/v2/list_movies.json',
+        'https://yts.lt/api/v2/list_movies.json'
+      ];
+
+      let imdbId = options.imdbId;
+      if (!imdbId && /^tt\d+$/i.test((query || '').trim())) {
+        imdbId = query.trim();
+      }
+
+      const searchTerms = [];
+      if (imdbId) {
+        searchTerms.push(imdbId);
+      }
+
+      const cleanQuery = (query || '')
+        .replace(/\b(1080p|720p|4k|2160p|bluray|web-dl|x264|x265|hevc|h264|h265)\b/gi, ' ')
+        .replace(/[:\-–—]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (cleanQuery && cleanQuery !== imdbId) {
+        searchTerms.push(cleanQuery);
+      }
+
+      if (searchTerms.length === 0) return [];
+
+      const seenTorHashes = new Set();
+      const results = [];
+
+      for (const term of searchTerms) {
+        for (const base of endpoints) {
+          try {
+            const url = `${base}?query_term=${encodeURIComponent(term)}&limit=20&with_rt_ratings=true`;
+            const res = await fetch(url, {
+              signal: AbortSignal.timeout(4000),
+              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) TheMovieCine/2.0' }
+            });
+
+            if (res.ok) {
+              const text = await res.text();
+              if (!text || text.trim().startsWith('<')) continue;
+              const json = JSON.parse(text);
+              const movies = json?.data?.movies;
+              if (Array.isArray(movies) && movies.length > 0) {
+                for (const movie of movies) {
+                  // If searching by imdbId, ensure movie matches
+                  if (imdbId && movie.imdb_code && movie.imdb_code !== imdbId && movies.length > 1) {
+                    continue;
+                  }
+
+                  const movieTorrents = movie.torrents || [];
+                  for (const tor of movieTorrents) {
+                    const hash = (tor.hash || '').toLowerCase();
+                    if (!hash || seenTorHashes.has(hash)) continue;
+                    seenTorHashes.add(hash);
+
+                    const quality = tor.quality || '1080p';
+                    const relType = tor.type || 'bluray';
+                    const videoCodec = (tor.video_codec || (quality.includes('x265') ? 'x265' : 'x264')).toLowerCase();
+                    const audioChannels = tor.audio_channels || (quality === '2160p' ? '5.1' : '2.0');
+                    const bitDepth = tor.bit_depth ? String(tor.bit_depth) : (quality === '2160p' ? '10' : '8');
+
+                    const name = `${movie.title} (${movie.year}) [${quality}] [${relType.toUpperCase()}] [${videoCodec.toUpperCase()}] [${audioChannels} Ch] [YTS.GG]`;
+                    const magnet = CineBay.buildMagnet(hash, name);
+                    const torrentUrl = tor.url || `https://yts.gg/torrent/download/${hash.toUpperCase()}`;
+                    const sizeBytes = parseInt(tor.size_bytes || 0, 10);
+                    const sizeFormatted = tor.size || Ranker.formatBytes(sizeBytes);
+                    const dateAdded = tor.date_uploaded || (tor.date_uploaded_unix ? new Date(tor.date_uploaded_unix * 1000).toISOString() : new Date().toISOString());
+
+                    results.push({
+                      id: hash,
+                      name,
+                      infoHash: hash,
+                      seeders: parseInt(tor.seeds || 0, 10),
+                      leechers: parseInt(tor.peers || 0, 10),
+                      size: sizeBytes,
+                      sizeFormatted,
+                      added: dateAdded,
+                      status: 'trusted',
+                      username: 'YTS.GG',
+                      category: '200',
+                      imdb: movie.imdb_code || imdbId || null,
+                      magnet,
+                      torrentUrl,
+                      source: 'YTS.GG',
+                      qualityBadge: quality,
+                      releaseType: relType.toLowerCase(),
+                      videoCodec,
+                      bitDepth,
+                      audioChannels,
+                      dateUploadedUnix: tor.date_uploaded_unix || 0
+                    });
+                  }
+                }
+                if (results.length > 0) return results;
+              }
+            }
+          } catch (e) {
+            // Failover to next mirror
+          }
+        }
+      }
+
+      if (results.length === 0 && imdbId) {
+        const detailBases = [
+          'https://movies-api.accel.li/api/v2/movie_details.json',
+          'https://yts.gg/api/v2/movie_details.json',
+          'https://yts.mx/api/v2/movie_details.json'
+        ];
+        for (const detailUrl of detailBases) {
+          try {
+            const res = await fetch(`${detailUrl}?imdb_id=${encodeURIComponent(imdbId)}&with_cast=true`, {
+              signal: AbortSignal.timeout(3500),
+              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) TheMovieCine/2.0' }
+            });
+            if (res.ok) {
+              const text = await res.text();
+              if (!text || text.trim().startsWith('<')) continue;
+              const json = JSON.parse(text);
+              const movie = json?.data?.movie;
+              if (movie && Array.isArray(movie.torrents)) {
+                for (const tor of movie.torrents) {
+                  const hash = (tor.hash || '').toLowerCase();
+                  if (!hash || seenTorHashes.has(hash)) continue;
+                  seenTorHashes.add(hash);
+
+                  const quality = tor.quality || '1080p';
+                  const relType = tor.type || 'bluray';
+                  const videoCodec = (tor.video_codec || (quality.includes('x265') ? 'x265' : 'x264')).toLowerCase();
+                  const audioChannels = tor.audio_channels || (quality === '2160p' ? '5.1' : '2.0');
+                  const bitDepth = tor.bit_depth ? String(tor.bit_depth) : (quality === '2160p' ? '10' : '8');
+
+                  const name = `${movie.title} (${movie.year}) [${quality}] [${relType.toUpperCase()}] [${videoCodec.toUpperCase()}] [${audioChannels} Ch] [YTS.GG]`;
+                  const magnet = CineBay.buildMagnet(hash, name);
+                  const torrentUrl = tor.url || `https://yts.gg/torrent/download/${hash.toUpperCase()}`;
+                  const sizeBytes = parseInt(tor.size_bytes || 0, 10);
+                  const sizeFormatted = tor.size || Ranker.formatBytes(sizeBytes);
+                  const dateAdded = tor.date_uploaded || (tor.date_uploaded_unix ? new Date(tor.date_uploaded_unix * 1000).toISOString() : new Date().toISOString());
+
+                  results.push({
+                    id: hash,
+                    name,
+                    infoHash: hash,
+                    seeders: parseInt(tor.seeds || 0, 10),
+                    leechers: parseInt(tor.peers || 0, 10),
+                    size: sizeBytes,
+                    sizeFormatted,
+                    added: dateAdded,
+                    status: 'trusted',
+                    username: 'YTS.GG',
+                    category: '200',
+                    imdb: movie.imdb_code || imdbId || null,
+                    magnet,
+                    torrentUrl,
+                    source: 'YTS.GG',
+                    qualityBadge: quality,
+                    releaseType: relType.toLowerCase(),
+                    videoCodec,
+                    bitDepth,
+                    audioChannels,
+                    dateUploadedUnix: tor.date_uploaded_unix || 0
+                  });
+                }
+                if (results.length > 0) return results;
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      return results;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /**
    * Fallback search querying YTS movie index
    */
-  static async searchYtsFallback(query) {
-    const mirrors = [
-      `https://yts.mx/api/v2/list_movies.json?query_term=${encodeURIComponent(query)}&limit=10`,
-      `https://yts.lt/api/v2/list_movies.json?query_term=${encodeURIComponent(query)}&limit=10`,
-      `https://yts.do/api/v2/list_movies.json?query_term=${encodeURIComponent(query)}&limit=10`
-    ];
-
-    for (const url of mirrors) {
-      try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(3500) });
-        if (res.ok) {
-          const text = await res.text();
-          if (!text || text.trim().startsWith('<')) continue;
-          const json = JSON.parse(text);
-          const movies = json?.data?.movies || [];
-          const results = [];
-
-          for (const movie of movies) {
-            const movieTorrents = movie.torrents || [];
-            for (const tor of movieTorrents) {
-              const name = `${movie.title} (${movie.year}) [${tor.quality}] [${tor.type || 'WEB'}] [YTS]`;
-              const magnet = `magnet:?xt=urn:btih:${tor.hash}&dn=${encodeURIComponent(name)}&tr=${CineBay.DEFAULT_TRACKERS.map(encodeURIComponent).join('&tr=')}`;
-              results.push({
-                id: tor.hash,
-                name,
-                infoHash: tor.hash,
-                seeders: parseInt(tor.seeds || 0, 10),
-                leechers: parseInt(tor.peers || 0, 10),
-                size: parseInt(tor.size_bytes || 0, 10),
-                added: tor.date_uploaded,
-                status: 'trusted',
-                username: 'YTS',
-                magnet,
-                source: 'YTS'
-              });
-            }
-          }
-          if (results.length > 0) return results;
-        }
-      } catch (e) {}
-    }
-    return [];
+  static async searchYtsFallback(query, options = {}) {
+    return CineBay.queryYts(query, options);
   }
 }

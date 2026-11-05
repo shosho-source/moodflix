@@ -67,4 +67,43 @@ describe('Downloader', () => {
       Downloader.openMagnetInClient('magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a&dn=The+Matrix+(1999)+[1080p]&tr=udp://tracker.opentrackr.org:1337/announce');
     });
   });
+
+  it('sanitizes and validates tracker URLs ensuring valid /announce paths without invalid URL errors', () => {
+    const rawTrackers = [
+      'udp://exodus.desync.com:6969', // missing path
+      'udp://tracker.opentrackr.org:1337/announce',
+      'http://tracker.example.com:80', // missing path
+      'https://tracker.tamersunion.org:443/announce',
+      'invalid://malformed url with spaces',
+      '',
+      null,
+      'udp://exodus.desync.com:6969/announce' // duplicate once normalized
+    ];
+
+    const cleaned = Downloader.cleanTrackers(rawTrackers);
+    assert.ok(cleaned.length > 0);
+    for (const tr of cleaned) {
+      assert.doesNotThrow(() => new URL(tr));
+      const u = new URL(tr);
+      assert.ok(['udp:', 'http:', 'https:', 'wss:', 'ws:'].includes(u.protocol));
+      assert.ok(u.pathname.endsWith('/announce'), `Tracker ${tr} must end with /announce`);
+    }
+  });
+
+  it('extracts trackers accurately from magnet links and ensures all URLs in .torrent are valid', async () => {
+    const magnetWithTrackers = 'magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a&dn=Gladiator&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fexodus.desync.com%3A6969';
+    const trackers = Downloader.extractTrackers({ magnet: magnetWithTrackers });
+    
+    assert.ok(trackers.some(t => t.includes('exodus.desync.com:6969/announce')));
+    assert.ok(trackers.some(t => t.includes('tracker.opentrackr.org:1337/announce')));
+
+    const res = await Downloader.fetchOrGenerateTorrentBuffer({ magnet: magnetWithTrackers, size: 1048576 }, 'Gladiator');
+    assert.ok(res.buffer);
+    assert.strictEqual(res.filename, 'Gladiator.torrent');
+    
+    // Parse announce entries in buffer to confirm none have missing path
+    const text = res.buffer.toString('binary');
+    const announceListMatch = text.match(/13:announce-listl(.*?)ee/s);
+    assert.ok(announceListMatch, 'Expected announce-list in torrent buffer');
+  });
 });

@@ -39,3 +39,4 @@ Thumbs.db
 *.sw?
 .gemini/
 .agents/
+skills-lock.json

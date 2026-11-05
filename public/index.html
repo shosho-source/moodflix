@@ -21,7 +21,7 @@
   <link rel="stylesheet"
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
 
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261105_streaming_modal_layout_fix">
 </head>
 
 <body>
@@ -58,24 +58,12 @@
         <div class="brand-logo" id="logo-btn" role="button" tabindex="0">
           <span class="logo-title scramble-text">MoodFlix</span>
         </div>
-        <!-- Header Actions: Mobile quick shortcuts & User Profile -->
+        <!-- Header Actions: Mobile quick shortcuts -->
         <div class="header-actions">
           <button id="header-tutorial-btn" class="header-icon-btn mobile-only-btn" title="How to Download & Watch"
             aria-label="Tutorial">
             <span class="material-symbols-outlined">school</span>
           </button>
-          <button id="header-settings-btn" class="header-icon-btn mobile-only-btn" title="System Configuration"
-            aria-label="Settings">
-            <span class="material-symbols-outlined">settings</span>
-          </button>
-          <!-- User Profile (Visible when Authenticated) -->
-          <div id="user-profile" class="user-profile hidden">
-            <span id="user-email" class="user-email"></span>
-            <button id="signout-btn" class="signout-btn" title="Sign Out" aria-label="Sign Out">
-              <span class="signout-text">LOGOUT</span>
-              <span class="material-symbols-outlined signout-icon">logout</span>
-            </button>
-          </div>
         </div>
       </div>
       <div class="header-divider"></div>
@@ -86,10 +74,10 @@
           <span class="material-symbols-outlined">psychology</span> <span class="scramble-text">Explore</span>
         </button>
         <button class="nav-tab" data-tab="movies-view">
-          <span class="material-symbols-outlined">movie</span> <span class="scramble-text">Movies Feed</span>
+          <span class="material-symbols-outlined">movie</span> <span class="scramble-text">Movies & TV</span>
         </button>
-        <button class="nav-tab" data-tab="tv-view">
-          <span class="material-symbols-outlined">tv</span> <span class="scramble-text">TV Series Feed</span>
+        <button class="nav-tab" data-tab="anime-view">
+          <span class="material-symbols-outlined">animation</span> <span class="scramble-text">Anime</span>
         </button>
         <button class="nav-tab" data-tab="search-view">
           <span class="material-symbols-outlined">person_search</span> <span class="scramble-text">Search by Artist</span>
@@ -97,83 +85,16 @@
         <button class="nav-tab" data-tab="tutorial-view">
           <span class="material-symbols-outlined">school</span> <span class="scramble-text">Tutorial</span>
         </button>
-        <button class="nav-tab" data-tab="settings-view">
-          <span class="material-symbols-outlined">settings</span> <span class="scramble-text">Settings</span>
+        <button class="nav-tab" data-tab="profile-view" id="nav-profile-tab">
+          <span class="material-symbols-outlined">account_circle</span> <span class="scramble-text">Profile / Watchlist</span>
         </button>
       </nav>
     </header>
 
     <main class="site-main">
 
-      <!-- VIEW: Google Log In View -->
-      <section id="auth-view" class="view-panel hidden">
-
-        <!-- Top Brand Header on Login View -->
-        <div class="auth-top-brand">
-          <span class="auth-brand-logo scramble-text">MOODFLIX</span>
-        </div>
-
-        <div class="auth-content-group">
-          <!-- Retro Hero Section -->
-          <section class="hero-section">
-            <!-- Non-Interactive VHS Cassette Centerpiece -->
-            <div class="cassette-wrapper non-interactive">
-              <div class="halftone-circle non-interactive"></div>
-              <div class="cassette-card non-interactive">
-                <img src="images/hero.webp" alt="Retro VHS Cassette Tape - Movie Night"
-                  class="cassette-img non-interactive" width="900" height="600" fetchpriority="high" decoding="async"
-                  loading="eager">
-              </div>
-            </div>
-          </section>
-
-          <section class="content-section">
-            <!-- Auth Headline -->
-            <h1 class="hero-headline scramble-text">
-              <span>MOODFLIX</span>
-            </h1>
-
-            <!-- Purpose Subtitle -->
-            <p class="hero-subtitle scramble-text">
-              DISCOVER FILMS TAILORED TO YOUR CURRENT MOOD.<br>SIGN IN WITH GOOGLE TO UNLOCK PERSONALIZED
-              RECOMMENDATIONS & SYNC YOUR WATCHLIST.
-            </p>
-          </section>
-
-          <!-- Sign In Actions -->
-          <section class="cta-section">
-            <button id="google-login-btn" class="google-login-btn">
-              <div class="google-icon-box">
-                <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20">
-                  <path fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
-                  <path fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z" />
-                  <path fill="#FBBC05"
-                    d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
-                  <path fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
-                </svg>
-              </div>
-              <div class="cta-divider"></div>
-              <div class="cta-text-box">
-                <span id="login-btn-text" class="cta-title scramble-text">CONTINUE WITH GOOGLE</span>
-              </div>
-            </button>
-
-          </section>
-
-          <!-- Auth Footer: Terms of Service & Privacy Policy -->
-          <footer class="auth-footer">
-            <a href="/terms" class="auth-footer-link" target="_blank" rel="noopener noreferrer">Terms of Service</a>
-            <span class="auth-footer-divider">•</span>
-            <a href="/privacy" class="auth-footer-link" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
-          </footer>
-        </div>
-      </section>
-
       <!-- VIEW: MoodFlix Diagnostic -->
-      <section id="diagnostic-view" class="view-panel hidden">
+      <section id="diagnostic-view" class="view-panel">
         <div class="diagnostic-landing">
 
 
@@ -259,21 +180,28 @@
         </div>
       </section>
 
-      <!-- VIEW: Movies Feed -->
+      <!-- VIEW: Movies & TV Feed -->
       <section id="movies-view" class="view-panel hidden">
         <div class="filter-bar retro-box">
           <div class="filter-group search-group">
             <span class="material-symbols-outlined">search</span>
-            <input type="text" id="movieSearchInput" placeholder="Search any movie..." autocomplete="off">
-            <button class="clear-input-btn retro-btn" id="btnClearMovieSearch">✕</button>
-            <button class="retro-btn" id="btnExecuteMovieSearch" style="margin-left: 8px;">SEARCH</button>
+            <input type="text" id="movieSearchInput" placeholder="Search movies & TV series..." autocomplete="off">
+            <button class="clear-input-btn retro-btn" id="btnClearMovieSearch" title="Clear search">✕</button>
+            <button class="retro-btn" id="btnExecuteMovieSearch">SEARCH</button>
           </div>
           <div class="filter-group select-group">
-            <select id="movieCategorySelect" class="styled-select">
-              <option value="all">Trending Movies</option>
+            <select id="movieTypeSelect" class="styled-select" aria-label="Media format">
+              <option value="all">All Formats</option>
+              <option value="movie">Movies Only</option>
+              <option value="tv">TV Series Only</option>
+            </select>
+          </div>
+          <div class="filter-group select-group">
+            <select id="movieCategorySelect" class="styled-select" aria-label="Media category">
+              <option value="all">Trending</option>
               <option value="top_rated">Top Rated</option>
               <option value="popular">Popular</option>
-              <option value="now_playing">In Theatres</option>
+              <option value="now_playing">In Theatres / On The Air</option>
             </select>
           </div>
         </div>
@@ -281,14 +209,43 @@
         <div class="movie-grid" id="movieGrid"></div>
       </section>
 
-      <!-- VIEW: TV Series Feed -->
-      <section id="tv-view" class="view-panel hidden">
+      <!-- VIEW: Dedicated Anime Feed -->
+      <section id="anime-view" class="view-panel hidden">
+        <div class="filter-bar retro-box">
+          <div class="filter-group search-group">
+            <span class="material-symbols-outlined">search</span>
+            <input type="text" id="animeSearchInput" placeholder="Search anime series & movies..." autocomplete="off">
+            <button class="clear-input-btn retro-btn" id="btnClearAnimeSearch" title="Clear search">✕</button>
+            <button class="retro-btn" id="btnExecuteAnimeSearch">SEARCH</button>
+          </div>
+          <div class="filter-group select-group">
+            <select id="animeTypeSelect" class="styled-select" aria-label="Anime format">
+              <option value="all">All Anime</option>
+              <option value="tv">Anime Series</option>
+              <option value="movie">Anime Movies</option>
+            </select>
+          </div>
+          <div class="filter-group select-group">
+            <select id="animeCategorySelect" class="styled-select" aria-label="Anime category">
+              <option value="all">Trending Anime</option>
+              <option value="top_rated">Top Rated</option>
+              <option value="popular">Popular</option>
+              <option value="airing">Currently Airing</option>
+            </select>
+          </div>
+        </div>
+        <div id="animeTypoBanner" class="typo-notice-banner retro-box hidden"></div>
+        <div class="movie-grid" id="animeGrid"></div>
+      </section>
+
+      <!-- VIEW: TV Series Feed (Preserved fallback container) -->
+      <section id="tv-view" class="view-panel hidden" style="display: none !important;">
         <div class="filter-bar retro-box">
           <div class="filter-group search-group">
             <span class="material-symbols-outlined">search</span>
             <input type="text" id="tvSearchInput" placeholder="Search TV series..." autocomplete="off">
-            <button class="clear-input-btn retro-btn" id="btnClearTvSearch">✕</button>
-            <button class="retro-btn" id="btnExecuteTvSearch" style="margin-left: 8px;">SEARCH</button>
+            <button class="clear-input-btn retro-btn" id="btnClearTvSearch" title="Clear search">✕</button>
+            <button class="retro-btn" id="btnExecuteTvSearch">SEARCH</button>
           </div>
           <div class="filter-group select-group">
             <select id="tvCategorySelect" class="styled-select">
@@ -449,6 +406,9 @@
             <div class="detail-actions">
               <button id="detailTorrentsBtn" class="retro-btn">TORRENTS</button>
               <button id="detailTrailerBtn" class="retro-btn">TRAILER</button>
+              <button id="detailWatchedBtn" class="retro-btn not-watched" data-legacy="NOT WATCHED" title="Unwatched (default) — click to mark as watched">UNWATCHED</button>
+              <button id="detailWatchlistBtn" class="retro-btn">+ WATCH LATER</button>
+              <button id="detailAddToListBtn" class="retro-btn">+ ADD TO LIST</button>
               <button id="detailShareBtn" class="retro-btn">SHARE</button>
               <button id="back-to-feed-btn" class="retro-btn">BACK TO FEED</button>
             </div>
@@ -469,46 +429,411 @@
         </div>
       </section>
 
+      <!-- VIEW: Profile & Watchlist View -->
+      <section id="profile-view" class="view-panel hidden">
+        <div class="profile-page-container">
 
+          <!-- User Profile & Google Auth Header Card -->
+          <div class="retro-box profile-hero-card">
+            
+            <!-- State 1: When user is NOT authenticated (Guest) -->
+            <div id="profileGuestCard" class="profile-auth-box">
+              <div class="profile-auth-intro">
+                <div class="profile-badge-row">
+                  <span class="retro-tag-pill guest-tag">
+                    <span class="status-dot"></span> GUEST SESSION (LOCAL STORAGE)
+                  </span>
+                </div>
+                <h2 class="profile-main-title scramble-text">ACCOUNT & WATCHLIST SYNC</h2>
+                <p class="profile-main-desc">
+                  Sign in with Google to sync your personal watchlist, ratings, and download history across all your devices. Guest bookmarks remain saved locally in this browser.
+                </p>
+              </div>
 
-      <!-- VIEW: Settings View -->
-      <section id="settings-view" class="view-panel hidden">
-        <div class="retro-box settings-container">
-          <div class="settings-header-row">
-            <h2 class="scramble-text settings-title">SYSTEM CONFIGURATION</h2>
-            <button type="button" id="btn-close-settings" class="retro-btn close-settings-btn" title="Close Settings">✕
-              CLOSE</button>
+              <div class="profile-login-wrapper">
+                <button id="google-login-btn" class="google-login-btn">
+                  <div class="google-icon-box">
+                    <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20">
+                      <path fill="#4285F4"
+                        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
+                      <path fill="#34A853"
+                        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z" />
+                      <path fill="#FBBC05"
+                        d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
+                      <path fill="#EA4335"
+                        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
+                    </svg>
+                  </div>
+                  <div class="cta-divider"></div>
+                  <div class="cta-text-box">
+                    <span id="login-btn-text" class="cta-title scramble-text">CONTINUE WITH GOOGLE</span>
+                  </div>
+                </button>
+
+                <div class="profile-legal-links">
+                  <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+                  <span class="auth-footer-divider">•</span>
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+                </div>
+              </div>
+            </div>
+
+            <!-- State 2: When user IS authenticated -->
+            <div id="profileUserCard" class="profile-user-box hidden">
+              <div class="profile-user-left">
+                <div class="profile-avatar-wrap" id="profileAvatarWrap">
+                  <span class="material-symbols-outlined profile-avatar-icon">account_circle</span>
+                </div>
+                <div class="profile-user-meta">
+                  <div class="profile-badge-row">
+                    <span class="retro-tag-pill verified-tag" id="profileAuthTag">
+                      <span class="status-dot green-dot"></span> <span id="profileAuthTagText">GOOGLE AUTHENTICATED</span>
+                    </span>
+                  </div>
+                  <h2 class="profile-user-name scramble-text" id="profileUserName">ARCHIVE OPERATOR</h2>
+                  <div class="profile-user-email" id="profileUserEmail">user@domain.com</div>
+                </div>
+              </div>
+              <div class="profile-user-right">
+                <button type="button" id="profileLogoutBtn" class="retro-btn profile-logout-btn">
+                  <span class="material-symbols-outlined" style="font-size: 16px;">logout</span>
+                  <span>SIGN OUT</span>
+                </button>
+              </div>
+            </div>
           </div>
-          <form id="settingsForm" class="settings-form" autocomplete="off">
-            <div class="form-group full-width">
-              <label for="tmdbApiKey" class="scramble-text">TMDB API KEY</label>
-              <input type="text" id="tmdbApiKey" name="tmdb_api_key_custom" class="styled-input"
-                placeholder="Enter v3 API Key" autocomplete="off" autocorrect="off" autocapitalize="off"
-                spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other">
+
+          <!-- Watchlist Section: Unified Studio -->
+          <div class="retro-box profile-watchlist-section">
+            <div class="watchlist-header-bar">
+              <div class="watchlist-heading-group">
+                <h2 class="scramble-text watchlist-title">
+                  <span class="material-symbols-outlined" style="font-size: 24px; vertical-align: middle;">bookmark</span>
+                  WATCHLIST STUDIO
+                </h2>
+                <span id="watchlistCountBadge" class="watchlist-badge">0 TITLES</span>
+              </div>
+              <div class="watchlist-header-actions">
+                <div class="wl-more-actions-wrap hidden" id="wlMoreActionsWrap">
+                  <button type="button" id="btnWatchlistMore" class="retro-btn wl-more-trigger" aria-haspopup="true" aria-expanded="false" title="Watchlist options" aria-label="Watchlist options">
+                    <span class="material-symbols-outlined">more_vert</span>
+                  </button>
+                  <div class="wl-more-dropdown hidden" id="wlMoreDropdown" role="menu">
+                    <button type="button" id="btnClearWatchlist" class="wl-more-item wl-danger-item" role="menuitem" title="Clear entire watchlist">
+                      <span class="material-symbols-outlined">delete_sweep</span>
+                      <span>CLEAR ALL</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="form-group full-width">
-              <label for="tmdbReadToken" class="scramble-text">TMDB READ TOKEN</label>
-              <input type="text" id="tmdbReadToken" name="tmdb_read_token_custom" class="styled-input"
-                placeholder="Enter v4 Read Token" autocomplete="off" autocorrect="off" autocapitalize="off"
-                spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other">
+
+            <!-- Watchlist Stats Ribbon (Split-Flap Board Display) -->
+            <div class="watchlist-stats-ribbon flip-board-display" id="watchlistStatsBoard">
+              <div class="stat-cell flip-stat-cell is-active-filter" data-filter-type="all" role="button" tabindex="0" title="Click to view all titles">
+                <div class="stat-value flip-digit-cluster" id="wlStatTotal" data-value="0">00</div>
+                <span class="stat-label">TOTAL TITLES</span>
+              </div>
+
+              <div class="stat-cell flip-stat-cell" data-filter-type="movie" role="button" tabindex="0" title="Click to filter movies">
+                <div class="stat-value flip-digit-cluster" id="wlStatMovies" data-value="0">00</div>
+                <span class="stat-label">MOVIES</span>
+              </div>
+
+              <div class="stat-cell flip-stat-cell" data-filter-type="tv" role="button" tabindex="0" title="Click to filter TV shows">
+                <div class="stat-value flip-digit-cluster" id="wlStatShows" data-value="0">00</div>
+                <span class="stat-label">TV SHOWS</span>
+              </div>
+
+              <div class="stat-cell flip-stat-cell" data-filter-type="completed" role="button" tabindex="0" title="Click to filter completed">
+                <div class="stat-value flip-digit-cluster" id="wlStatCompleted" data-value="0">00</div>
+                <span class="stat-label">COMPLETED</span>
+              </div>
+
+              <div class="stat-cell flip-stat-cell flip-cell-time" role="button" tabindex="0" title="Total estimated watch time">
+                <div class="stat-value flip-digit-cluster" id="wlStatTime" data-value="0h">00h</div>
+                <span class="stat-label">EST. WATCH TIME</span>
+              </div>
             </div>
-            <div class="form-group">
-              <label for="minRating" class="scramble-text">MINIMUM RATING</label>
-              <input type="number" id="minRating" class="styled-input" min="0" max="10" step="0.1" placeholder="7.0">
+
+            <!-- Rapid Title Entry with Live TMDB Dropdown -->
+            <div class="rapid-entry-container">
+              <div class="rapid-entry-input-wrap">
+                <span class="material-symbols-outlined rapid-search-icon">search</span>
+                <input type="text" id="rapidTitleInput" class="styled-input rapid-title-input" placeholder="⚡ Quick Add: Type movie or series title..." autocomplete="off" spellcheck="false">
+                <button type="button" id="btnClearRapidTitle" class="rapid-clear-btn hidden">&times;</button>
+                <div id="rapidSearchResults" class="rapid-search-dropdown hidden"></div>
+              </div>
+              <div class="rapid-entry-actions">
+                <button type="button" id="btnRapidAdd" class="retro-btn rapid-add-btn">
+                  <span class="material-symbols-outlined">add_circle</span>
+                  <span>QUICK ADD</span>
+                </button>
+              </div>
             </div>
-            <div class="form-group">
-              <label for="minSeeds" class="scramble-text">MINIMUM SEEDS</label>
-              <input type="number" id="minSeeds" class="styled-input" min="0" placeholder="5">
+
+            <!-- Watchlist Studio Sub-Navigation -->
+            <div class="watchlist-subnav">
+              <div class="wl-subnav-tabs">
+                <button type="button" class="wl-subnav-btn active" data-subtab="watchlist" title="Watchlist Library" aria-label="Watchlist">
+                  <span class="material-symbols-outlined">bookmark</span>
+                  <span class="wl-subnav-label">WATCHLIST</span>
+                </button>
+                <button type="button" class="wl-subnav-btn" data-subtab="diary" title="Personal Watch Diary" aria-label="Watch Diary">
+                  <span class="material-symbols-outlined">history_edu</span>
+                  <span class="wl-subnav-label">WATCH DIARY</span>
+                </button>
+                <button type="button" class="wl-subnav-btn" data-subtab="custom-lists" title="Curated Lists & Collections" aria-label="Custom Lists">
+                  <span class="material-symbols-outlined">folder_special</span>
+                  <span class="wl-subnav-label">CUSTOM LISTS</span>
+                </button>
+                <button type="button" class="wl-subnav-btn" data-subtab="alerts" title="Release & Airing Alerts" aria-label="Airing Alerts">
+                  <span class="material-symbols-outlined">notifications_active</span>
+                  <span class="wl-subnav-label">AIRING ALERTS</span>
+                </button>
+              </div>
             </div>
-            <div class="form-group checkbox-group full-width"
-              style="display: flex; align-items: center; gap: 15px; margin-top: 10px;">
-              <input type="checkbox" id="autoOpenMagnets" class="retro-toggle">
-              <label for="autoOpenMagnets" class="scramble-text" style="margin: 0; cursor: pointer;">AUTO-OPEN MAGNET
-                LINKS IN CLIENT</label>
+
+            <!-- SUB-TAB 1: Watchlist Grid View -->
+            <div id="wlTabContentWatchlist" class="wl-subtab-pane active">
+
+              <!-- Intuitive Watchlist Filter & Control Toolbar -->
+              <div class="wl-toolbar-container">
+                <div class="wl-toolbar-main">
+                  <!-- Quick Filter Pills -->
+                  <div class="wl-quick-pills">
+                    <button type="button" class="filter-pill active" data-filter-kind="type" data-filter-type="all">ALL</button>
+                    <button type="button" class="filter-pill" data-filter-kind="status" data-filter-status="plan_to_watch">UNWATCHED</button>
+                    <button type="button" class="filter-pill" data-filter-kind="status" data-filter-status="completed">WATCHED</button>
+                    <button type="button" class="filter-pill" data-filter-kind="type" data-filter-type="movie">MOVIES</button>
+                    <button type="button" class="filter-pill" data-filter-kind="type" data-filter-type="tv">TV SHOWS</button>
+                  </div>
+
+                  <!-- Toolbar Tools (Search, Sort, Filters Toggle, Import/Export) -->
+                  <div class="wl-toolbar-tools">
+                    <div class="wl-search-input-wrap">
+                      <span class="material-symbols-outlined wl-search-icon">search</span>
+                      <input type="text" id="wlSearchFilterInput" class="wl-search-input" placeholder="Search in list...">
+                    </div>
+
+                    <div class="wl-sort-wrap retro-select-container">
+                      <select id="wlSortSelect" class="wl-sort-select retro-hidden-select" tabindex="-1" aria-hidden="true">
+                        <option value="date_desc">NEWEST ADDED</option>
+                        <option value="date_asc">OLDEST ADDED</option>
+                        <option value="rating_desc">TOP RATED ★</option>
+                        <option value="year_desc">RELEASE YEAR</option>
+                        <option value="title_asc">TITLE A–Z</option>
+                      </select>
+
+                      <button type="button" class="retro-select-trigger" id="wlSortTrigger" aria-haspopup="listbox" aria-expanded="false" title="Sort watchlist">
+                        <span class="retro-select-label" id="wlSortLabel">NEWEST ADDED</span>
+                        <span class="retro-select-chevron">▼</span>
+                      </button>
+
+                      <div class="retro-select-menu hidden" id="wlSortMenu" role="listbox" aria-label="Sort options">
+                        <div class="retro-select-option active" data-value="date_desc" role="option" aria-selected="true">
+                          <span class="retro-option-text">NEWEST ADDED</span>
+                          <span class="retro-option-check">✓</span>
+                        </div>
+                        <div class="retro-select-option" data-value="date_asc" role="option" aria-selected="false">
+                          <span class="retro-option-text">OLDEST ADDED</span>
+                          <span class="retro-option-check">✓</span>
+                        </div>
+                        <div class="retro-select-option" data-value="rating_desc" role="option" aria-selected="false">
+                          <span class="retro-option-text">TOP RATED ★</span>
+                          <span class="retro-option-check">✓</span>
+                        </div>
+                        <div class="retro-select-option" data-value="year_desc" role="option" aria-selected="false">
+                          <span class="retro-option-text">RELEASE YEAR</span>
+                          <span class="retro-option-check">✓</span>
+                        </div>
+                        <div class="retro-select-option" data-value="title_asc" role="option" aria-selected="false">
+                          <span class="retro-option-text">TITLE A–Z</span>
+                          <span class="retro-option-check">✓</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="wl-toolbar-actions-row">
+                      <button type="button" id="btnToggleFilters" class="retro-btn wl-more-filters-btn" title="Toggle genre, rating, and runtime filters">
+                        <span class="material-symbols-outlined">tune</span>
+                        <span>MORE FILTERS</span>
+                        <span id="activeFilterBadge" class="filter-active-indicator hidden"></span>
+                      </button>
+
+                      <button type="button" id="btnImportExport" class="retro-btn wl-import-btn" title="Import / Export watchlist data">
+                        <span class="material-symbols-outlined">swap_vert</span>
+                        <span>IMPORT / EXPORT</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Advanced Filters Drawer (Inside Watchlist Tab, Directly Above Grid) -->
+                <div id="watchlistFilterDrawer" class="watchlist-filter-drawer hidden">
+                  <div class="filter-drawer-grid">
+                    <div class="filter-group retro-select-container">
+                      <label class="filter-label">GENRE</label>
+                      <select id="wlGenreSelect" class="filter-select">
+                        <option value="all">ALL GENRES</option>
+                        <option value="Action">Action</option>
+                        <option value="Adventure">Adventure</option>
+                        <option value="Animation">Animation</option>
+                        <option value="Comedy">Comedy</option>
+                        <option value="Crime">Crime</option>
+                        <option value="Documentary">Documentary</option>
+                        <option value="Drama">Drama</option>
+                        <option value="Family">Family</option>
+                        <option value="Fantasy">Fantasy</option>
+                        <option value="Horror">Horror</option>
+                        <option value="Mystery">Mystery</option>
+                        <option value="Romance">Romance</option>
+                        <option value="Sci-Fi">Sci-Fi</option>
+                        <option value="Thriller">Thriller</option>
+                        <option value="War">War</option>
+                        <option value="Western">Western</option>
+                      </select>
+                    </div>
+                    <div class="filter-group">
+                      <label class="filter-label">MINIMUM RATING: <span id="ratingSliderVal">0.0</span>+</label>
+                      <input type="range" id="wlRatingSlider" min="0" max="10" step="0.5" value="0" class="filter-range-slider">
+                    </div>
+                    <div class="filter-group retro-select-container">
+                      <label class="filter-label">RUNTIME</label>
+                      <select id="wlRuntimeSelect" class="filter-select">
+                        <option value="all">ANY RUNTIME</option>
+                        <option value="under_90">&lt; 90 MINUTES</option>
+                        <option value="under_120">&lt; 120 MINUTES</option>
+                        <option value="over_120">120+ MINUTES (EPIC)</option>
+                      </select>
+                    </div>
+                    <div class="filter-group retro-select-container">
+                      <label class="filter-label">STATUS</label>
+                      <select id="wlStatusSelect" class="filter-select">
+                        <option value="all">ALL STATUSES</option>
+                        <option value="plan_to_watch">UNWATCHED</option>
+                        <option value="watching">IN PROGRESS</option>
+                        <option value="completed">COMPLETED</option>
+                        <option value="dropped">DROPPED</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="filter-drawer-actions">
+                    <button type="button" id="btnResetFilters" class="retro-btn filter-reset-btn">
+                      <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">restart_alt</span>
+                      RESET FILTERS
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              <div id="watchlistGrid" class="watchlist-grid"></div>
+
+              <div id="watchlistEmptyState" class="watchlist-empty hidden">
+                <div class="watchlist-empty-icon">
+                  <span class="material-symbols-outlined" style="font-size: 48px;">bookmark_border</span>
+                </div>
+                <h3 class="watchlist-empty-title scramble-text">YOUR WATCHLIST IS EMPTY</h3>
+                <p class="watchlist-empty-text">
+                  Use the <strong>⚡ RAPID ENTRY</strong> bar above or browse movies and TV series to bookmark titles with rich metadata and streaming availability.
+                </p>
+                <div class="watchlist-empty-actions">
+                  <button type="button" id="btnBrowseFromWatchlist" class="retro-btn">EXPLORE MOVIES FEED</button>
+                </div>
+              </div>
             </div>
-            <button type="submit" class="retro-btn submit-settings-btn"
-              style="width: 100%; padding: 15px; font-size: 1.2rem;">SAVE CONFIGURATION</button>
-          </form>
+
+            <!-- SUB-TAB 2: Watch Diary View -->
+            <div id="wlTabContentDiary" class="wl-subtab-pane hidden">
+              <div class="diary-pane-header">
+                <div class="diary-heading-group">
+                  <div class="diary-heading-row">
+                    <h3 class="diary-title scramble-text">PERSONAL WATCH DIARY</h3>
+                    <span class="diary-count-badge" id="diaryCountBadge">0 ENTRIES</span>
+                  </div>
+                  <p class="diary-subtitle">Log screening dates, ratings, and thoughts for films and series you experience.</p>
+                </div>
+                <button type="button" id="btnAddDiaryEntryDirect" class="retro-btn diary-new-btn">
+                  <span class="material-symbols-outlined">add_circle</span> LOG NEW VIEWING
+                </button>
+              </div>
+              <div id="diaryList" class="diary-timeline-list"></div>
+              <div id="diaryEmptyState" class="watchlist-empty hidden">
+                <div class="watchlist-empty-icon">
+                  <span class="material-symbols-outlined" style="font-size: 48px;">history_edu</span>
+                </div>
+                <h3 class="watchlist-empty-title scramble-text">NO DIARY ENTRIES YET</h3>
+                <p class="watchlist-empty-text">
+                  Log watch dates and ratings directly from your watchlist cards or click <strong>LOG NEW VIEWING</strong>.
+                </p>
+              </div>
+            </div>
+
+            <!-- SUB-TAB 3: Curated Custom Lists View -->
+            <div id="wlTabContentCustomLists" class="wl-subtab-pane hidden">
+              <div class="custom-lists-pane-header">
+                <div class="custom-lists-heading-group">
+                  <h3 class="custom-lists-title scramble-text">CURATED LISTS</h3>
+                  <p class="custom-lists-subtitle">Organize your cinema queue into custom themed collections.</p>
+                </div>
+                <button type="button" id="btnCreateCustomList" class="retro-btn list-new-btn">
+                  <span class="material-symbols-outlined">playlist_add</span> CREATE NEW LIST
+                </button>
+              </div>
+
+              <!-- List Filter Pills -->
+              <div id="customListPills" class="custom-list-pills-bar">
+                <button type="button" class="custom-list-pill active" data-list-id="all">ALL COLLECTIONS</button>
+              </div>
+
+              <div id="customListsGrid" class="watchlist-grid"></div>
+              <div id="customListsEmptyState" class="watchlist-empty hidden">
+                <div class="watchlist-empty-icon">
+                  <span class="material-symbols-outlined" style="font-size: 48px;">folder_special</span>
+                </div>
+                <h3 class="watchlist-empty-title scramble-text">NO CUSTOM LISTS CREATED</h3>
+                <p class="watchlist-empty-text">
+                  Group movies and shows into collections like "Halloween Horrors", "Sci-Fi Mind Benders", or "Director Favorites".
+                </p>
+              </div>
+            </div>
+
+            <!-- SUB-TAB 4: Airing Alerts & Release Schedule View -->
+            <div id="wlTabContentAlerts" class="wl-subtab-pane hidden">
+              <div class="alerts-pane-header">
+                <div class="alerts-heading-group">
+                  <h3 class="alerts-title scramble-text">RELEASE & AIRING ALERTS</h3>
+                  <p class="alerts-subtitle">Live schedule for upcoming theater releases and new TV episodes from your watchlist.</p>
+                </div>
+              </div>
+              <div id="airingAlertsList" class="airing-alerts-grid"></div>
+              <div id="airingAlertsEmptyState" class="watchlist-empty hidden">
+                <div class="watchlist-empty-icon">
+                  <span class="material-symbols-outlined" style="font-size: 48px;">notifications_none</span>
+                </div>
+                <h3 class="watchlist-empty-title scramble-text">NO UPCOMING AIRINGS FOUND</h3>
+                <p class="watchlist-empty-text">
+                  Titles with upcoming air dates or releases will automatically appear here with countdown timers and airing notices.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Download History Section -->
+          <div class="retro-box profile-history-section">
+            <div class="history-header-bar">
+              <div class="watchlist-heading-group">
+                <h2 class="scramble-text history-title">
+                  <span class="material-symbols-outlined" style="font-size: 20px; vertical-align: middle;">download_done</span>
+                  RECENT DOWNLOADS
+                </h2>
+                <span id="historyCountBadge" class="history-badge">0 DOWNLOADS</span>
+              </div>
+            </div>
+            <div id="profileHistoryList" class="profile-history-list"></div>
+          </div>
+
         </div>
       </section>
 
@@ -809,23 +1134,27 @@
 
     </main>
 
-    <!-- Dedicated Mobile Bottom Navigation Bar (Visible only on mobile screens when authenticated) -->
-    <nav class="mobile-bottom-nav hidden" id="mobileBottomNav" aria-label="Mobile Navigation">
+    <!-- Dedicated Mobile Bottom Navigation Bar -->
+    <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Mobile Navigation">
       <button class="mobile-nav-item active" data-tab="diagnostic-view" aria-label="Explore Diagnostic">
         <span class="material-symbols-outlined mobile-nav-icon">psychology</span>
         <span class="mobile-nav-label scramble-text">Explore</span>
       </button>
-      <button class="mobile-nav-item" data-tab="movies-view" aria-label="Movies Feed">
+      <button class="mobile-nav-item" data-tab="movies-view" aria-label="Movies and TV Feed">
         <span class="material-symbols-outlined mobile-nav-icon">movie</span>
-        <span class="mobile-nav-label scramble-text">Movies</span>
+        <span class="mobile-nav-label scramble-text">Movies & TV</span>
       </button>
-      <button class="mobile-nav-item" data-tab="tv-view" aria-label="TV Series Feed">
-        <span class="material-symbols-outlined mobile-nav-icon">tv</span>
-        <span class="mobile-nav-label scramble-text">TV Shows</span>
+      <button class="mobile-nav-item" data-tab="anime-view" aria-label="Anime Feed">
+        <span class="material-symbols-outlined mobile-nav-icon">animation</span>
+        <span class="mobile-nav-label scramble-text">Anime</span>
       </button>
       <button class="mobile-nav-item" data-tab="search-view" aria-label="Search by Artist">
         <span class="material-symbols-outlined mobile-nav-icon">person_search</span>
         <span class="mobile-nav-label scramble-text">Artists</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="profile-view" aria-label="Profile and Watchlist">
+        <span class="material-symbols-outlined mobile-nav-icon">account_circle</span>
+        <span class="mobile-nav-label scramble-text">Profile</span>
       </button>
     </nav>
   </div>
@@ -875,6 +1204,7 @@
         <button id="btnCloseModal" class="modal-close-btn retro-btn">✕</button>
       </div>
       <div id="modalBodyContent" class="modal-body">
+        <div id="modalTorrentFilterBar" class="torrent-filter-bar hidden"></div>
         <div id="modalTorrentHeader" class="torrent-list-header">
           <span>Release</span>
           <span>Quality</span>
@@ -900,6 +1230,221 @@
     </div>
   </div>
 
+  <!-- WATCHLIST STUDIO MODALS -->
+  <!-- 1. TV Episode Tracker Modal -->
+  <div id="episodeModal" class="modal-overlay hidden">
+    <div class="modal-card retro-box episode-modal-card">
+      <div class="modal-header">
+        <span class="modal-title scramble-text" id="episodeModalTitle">SEASON & EPISODE TRACKER</span>
+        <button id="btnCloseEpisodeModal" class="modal-close-btn retro-btn">✕</button>
+      </div>
+      <div class="modal-body episode-modal-body">
+        <div class="episode-modal-top">
+          <div class="episode-season-select-wrap">
+            <label for="episodeSeasonSelect" class="episode-control-label">SELECT SEASON:</label>
+            <select id="episodeSeasonSelect" class="styled-input episode-season-select"></select>
+          </div>
+          <button type="button" id="btnMarkSeasonComplete" class="retro-btn mark-season-complete-btn">
+            ✓ MARK SEASON WATCHED
+          </button>
+        </div>
+        <div class="episode-progress-bar-wrap">
+          <div class="episode-progress-info">
+            <span id="episodeProgressText">0 / 0 EPISODES WATCHED (0%)</span>
+          </div>
+          <div class="episode-progress-track">
+            <div id="episodeProgressBar" class="episode-progress-fill" style="width: 0%;"></div>
+          </div>
+        </div>
+        <div id="episodeModalList" class="episode-items-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Watch Diary Log Modal -->
+  <div id="diaryModal" class="modal-overlay hidden">
+    <div class="modal-card retro-box diary-modal-card">
+      <div class="modal-header">
+        <span class="modal-title scramble-text" id="diaryModalTitle">LOG TO WATCH DIARY</span>
+        <button id="btnCloseDiaryModal" class="modal-close-btn retro-btn">✕</button>
+      </div>
+      <div class="modal-body diary-modal-body">
+        <div class="diary-modal-preview">
+          <img id="diaryModalPoster" src="images/hero.webp" alt="Poster" class="diary-modal-thumb">
+          <div class="diary-modal-meta">
+            <h3 id="diaryModalMediaTitle" class="diary-modal-title">TITLE</h3>
+            <span id="diaryModalMediaYear" class="diary-modal-year">2026</span>
+          </div>
+        </div>
+        <form id="diaryForm" class="diary-form" autocomplete="off">
+          <div class="form-group" id="diaryDirectTitleGroup" style="display: none;">
+            <label for="diaryMovieTitleInput" class="scramble-text">MOVIE / SHOW TITLE</label>
+            <input type="text" id="diaryMovieTitleInput" class="styled-input" placeholder="Type movie or show title...">
+          </div>
+          <div class="form-group">
+            <label for="diaryWatchDate" class="scramble-text">WATCH DATE</label>
+            <input type="date" id="diaryWatchDate" class="styled-input" required>
+          </div>
+          <div class="form-group">
+            <label for="diaryRatingSlider" class="scramble-text">YOUR RATING: <span id="diaryRatingDisplay">8.0</span> / 10 ★</label>
+            <input type="range" id="diaryRatingSlider" min="1" max="10" step="0.5" value="8" class="filter-range-slider">
+          </div>
+          <div class="form-group checkbox-group" style="display:flex; align-items:center; gap:10px;">
+            <input type="checkbox" id="diaryRewatchCheck" class="retro-toggle">
+            <label for="diaryRewatchCheck" class="scramble-text" style="margin:0; cursor:pointer;">THIS IS A REWATCH</label>
+          </div>
+          <div class="form-group">
+            <label for="diaryReviewText" class="scramble-text">PERSONAL THOUGHTS / REVIEW</label>
+            <textarea id="diaryReviewText" class="styled-input diary-textarea" rows="3" placeholder="Memorable scenes, cinema thoughts, emotional reaction..."></textarea>
+          </div>
+          <button type="submit" id="btnSaveDiaryEntry" class="retro-btn diary-submit-btn">
+            SAVE DIARY ENTRY
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Create Custom Curated List Modal -->
+  <div id="customListModal" class="modal-overlay hidden">
+    <div class="modal-card retro-box custom-list-modal-card">
+      <div class="modal-header">
+        <span class="modal-title scramble-text">NEW CURATED COLLECTION</span>
+        <button id="btnCloseCustomListModal" class="modal-close-btn retro-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="customListForm" autocomplete="off">
+          <div class="form-group">
+            <label for="customListNameInput" class="scramble-text">COLLECTION NAME</label>
+            <input type="text" id="customListNameInput" class="styled-input" placeholder="e.g. 90s Cyberpunk, Halloween Horrors..." required>
+          </div>
+          <div class="form-group">
+            <label for="customListDescInput" class="scramble-text">DESCRIPTION (OPTIONAL)</label>
+            <input type="text" id="customListDescInput" class="styled-input" placeholder="Short description of this curated list...">
+          </div>
+          <div class="form-group">
+            <label class="scramble-text">COLOR ACCENT</label>
+            <div class="color-picker-row">
+              <label class="color-pill-opt"><input type="radio" name="listColor" value="#ff2a5f" checked><span style="background:#ff2a5f;"></span></label>
+              <label class="color-pill-opt"><input type="radio" name="listColor" value="#00ffcc"><span style="background:#00ffcc;"></span></label>
+              <label class="color-pill-opt"><input type="radio" name="listColor" value="#ffcc00"><span style="background:#ffcc00;"></span></label>
+              <label class="color-pill-opt"><input type="radio" name="listColor" value="#9d4edd"><span style="background:#9d4edd;"></span></label>
+              <label class="color-pill-opt"><input type="radio" name="listColor" value="#00b4d8"><span style="background:#00b4d8;"></span></label>
+            </div>
+          </div>
+          <button type="submit" id="btnSubmitCustomList" class="retro-btn" style="width:100%; padding:12px; margin-top:10px;">
+            CREATE LIST
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Assign Title to Curated Lists Modal -->
+  <div id="assignToListModal" class="modal-overlay hidden">
+    <div class="modal-card retro-box assign-modal-card">
+      <div class="modal-header">
+        <span class="modal-title scramble-text" id="assignModalTitle">ADD TO CURATED LISTS</span>
+        <button id="btnCloseAssignModal" class="modal-close-btn retro-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="assignModalChecklist" class="assign-checklist"></div>
+        <button type="button" id="btnSaveAssignLists" class="retro-btn" style="width:100%; margin-top:14px; padding:12px;">
+          UPDATE COLLECTIONS
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Data Import & Export Modal (Letterboxd, Trakt, CSV) -->
+  <div id="importExportModal" class="modal-overlay hidden">
+    <div class="modal-card retro-box import-export-modal-card">
+      <div class="modal-header">
+        <span class="modal-title scramble-text">DATA IMPORT & EXPORT</span>
+        <button id="btnCloseImportExportModal" class="modal-close-btn retro-btn">✕</button>
+      </div>
+      <div class="modal-body import-export-body">
+        <div class="ie-section">
+          <h4 class="ie-heading scramble-text">EXPORT WATCHLIST DATA</h4>
+          <p class="ie-desc">Download your entire personal library formatted for standard spreadsheets or sync services.</p>
+          <div class="ie-export-buttons">
+            <button type="button" id="btnExportCSV" class="retro-btn ie-btn" title="Export as full CSV spreadsheet">
+              <span class="material-symbols-outlined">table_view</span>
+              <span>EXPORT CSV</span>
+            </button>
+            <button type="button" id="btnExportLetterboxd" class="retro-btn ie-btn" title="Export in Letterboxd CSV format">
+              <span class="material-symbols-outlined">movie_filter</span>
+              <span>LETTERBOXD CSV</span>
+            </button>
+            <button type="button" id="btnExportTrakt" class="retro-btn ie-btn" title="Export in Trakt JSON format">
+              <span class="material-symbols-outlined">sync_alt</span>
+              <span>TRAKT JSON</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="ie-section">
+          <h4 class="ie-heading scramble-text">IMPORT WATCHLIST (LETTERBOXD, TRAKT, CSV)</h4>
+          <p class="ie-desc">Upload a `.csv` or `.json` file from Letterboxd or Trakt. Titles will be parsed and enriched with live TMDB posters, ratings, and cloud synced into Supabase.</p>
+          
+          <div id="importDropzone" class="import-dropzone">
+            <span class="material-symbols-outlined import-icon">upload_file</span>
+            <span class="import-prompt">DRAG & DROP CSV FILE OR CLICK TO BROWSE</span>
+            <span class="import-subprompt">Supports Letterboxd & Trakt exports (.csv, .json)</span>
+            <input type="file" id="importFileInput" accept=".csv, .json, text/csv, application/json" class="hidden-file-input">
+          </div>
+
+          <div id="importPreviewWrap" class="import-preview-wrap hidden">
+            <div class="import-preview-header">
+              <div class="import-preview-count-wrap">
+                <span class="material-symbols-outlined" style="font-size:18px; color:#22c55e;">check_circle</span>
+                <span id="importPreviewCount">0 TITLES FOUND</span>
+              </div>
+              <div class="import-preview-actions">
+                <button type="button" id="btnClearImportPreview" class="retro-btn import-clear-btn" title="Discard this file">
+                  ✕ CANCEL
+                </button>
+                <button type="button" id="btnExecuteImport" class="retro-btn import-confirm-btn">
+                  ✓ IMPORT TO WATCHLIST
+                </button>
+              </div>
+            </div>
+            <div id="importPreviewList" class="import-preview-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Regional Streaming Availability Modal -->
+  <div id="streamingModal" class="modal-overlay hidden">
+    <div class="modal-card retro-box streaming-modal-card">
+      <div class="modal-header">
+        <span class="modal-title scramble-text" id="streamingModalTitle">WHERE TO STREAM</span>
+        <button id="btnCloseStreamingModal" class="modal-close-btn retro-btn">✕</button>
+      </div>
+      <div class="modal-body streaming-modal-body">
+        <div class="streaming-country-bar">
+          <label for="streamingRegionSelect" class="streaming-region-label">COUNTRY / REGION:</label>
+          <div class="streaming-select-wrap retro-select-container">
+            <select id="streamingRegionSelect" class="streaming-region-select">
+              <option value="US">🇺🇸 United States</option>
+              <option value="GB">🇬🇧 United Kingdom</option>
+              <option value="CA">🇨🇦 Canada</option>
+              <option value="IN">🇮🇳 India</option>
+              <option value="AU">🇦🇺 Australia</option>
+              <option value="DE">🇩🇪 Germany</option>
+              <option value="FR">🇫🇷 France</option>
+            </select>
+          </div>
+        </div>
+        <div id="streamingModalContent" class="streaming-services-container">
+          <div class="streaming-loading">Fetching live streaming providers...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Share URL copied toast -->
   <div id="toastContainer" class="toast-container"></div>
 
@@ -915,7 +1460,7 @@
       document.head.appendChild(s);
     }
   </script>
-  <script defer src="app.js"></script>
+  <script defer src="app.js?v=20261105_retro_select_popup_menu_fix"></script>
 </body>
 
 </html>
