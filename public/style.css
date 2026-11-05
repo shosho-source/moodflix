@@ -11418,18 +11418,3 @@ select option {
   text-align: center;
   line-height: 1.4;
 }
-  font-family: var(--font-mono, monospace);
-  font-size: 0.8rem;
-  background: #ffffff;
-  border: 2px dashed #000000;
-}
-
-.streaming-attribution {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.68rem;
-  color: #666666;
-  margin-top: 10px;
-  text-align: center;
-}
-
-
