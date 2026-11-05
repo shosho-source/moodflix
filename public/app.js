@@ -10,7 +10,7 @@ const state = {
   history: [],
   watchlist: [],
   watchlistFilter: 'all',
-  watchlistSubTab: 'watchlist', // 'watchlist' | 'diary' | 'custom-lists' | 'alerts'
+  watchlistSubTab: 'watchlist', // 'watchlist' | 'diary' | 'custom-lists'
   watchlistFilters: {
     type: 'all',
     status: 'all', // Default: all saved titles
@@ -23,7 +23,6 @@ const state = {
   customLists: [],
   activeCustomListId: 'all',
   diaryEntries: [],
-  airingAlerts: [],
   currentTvItemForEpisodes: null,
   currentDiaryItem: null,
   currentAssignItem: null,
@@ -507,7 +506,6 @@ function normalizeWatchlistItem(item = {}) {
     userRating: item.userRating || item.user_rating || null,
     diaryNotes: item.diaryNotes || item.diary_notes || '',
     watchedDate: item.watchedDate || item.watched_date || '',
-    alertEnabled: Boolean(item.alertEnabled || item.alert_enabled),
     nextAirDate: item.nextAirDate || item.next_air_date || '',
     streamingInfo: Array.isArray(item.streamingInfo || item.streaming_info) ? (item.streamingInfo || item.streaming_info) : [],
     customLists: Array.isArray(item.customLists || item.custom_lists) ? (item.customLists || item.custom_lists) : [],
@@ -730,7 +728,6 @@ async function loadWatchlist() {
 
   renderWatchlistStats();
   renderWatchlist();
-  renderAiringAlerts();
 }
 
 async function saveWatchlist() {
@@ -741,7 +738,6 @@ async function saveWatchlist() {
   } catch (e) {}
   renderWatchlistStats();
   renderWatchlist();
-  renderAiringAlerts();
 }
 
 function isItemInWatchlist(mediaOrTitle) {
@@ -823,7 +819,6 @@ async function toggleWatchlistItem(media, mediaType = 'movie') {
       totalSeasons: enriched.numberOfSeasons || (enriched.seasons ? enriched.seasons.length : 1),
       totalEpisodes: enriched.numberOfEpisodes || 0,
       progressPct: 0,
-      alertEnabled: false,
       nextAirDate: enriched.nextEpisodeToAir?.airDate || ''
     });
 
@@ -964,7 +959,6 @@ async function handleDetailWatched(media, mediaType = 'movie') {
       totalSeasons: enriched.numberOfSeasons || (enriched.seasons ? enriched.seasons.length : 1),
       totalEpisodes: totalEpisodes,
       progressPct: 100,
-      alertEnabled: false,
       nextAirDate: ''
     });
 
@@ -1188,7 +1182,6 @@ function renderWatchlist() {
     const isWatched = statusVal === 'completed';
     const watchedIcon = isWatched ? 'visibility' : 'visibility_off';
     const watchedTitle = isWatched ? 'Watched — click to mark as unwatched' : 'Unwatched — click to mark as watched';
-    const alertActive = item.alertEnabled ? 'active' : '';
 
     let statusClass = 'wl-status-plan';
     let statusLabel = 'UNWATCHED';
@@ -1230,9 +1223,6 @@ function renderWatchlist() {
             </div>
             <div class="wl-tags-right">
               <span class="watchlist-rating-badge">★ ${safeRating}</span>
-              <button type="button" class="wl-alert-btn ${alertActive} btn-wl-alert" title="${item.alertEnabled ? 'Release/airing alert active' : 'Click to enable release/airing alert'}">
-                <span class="material-symbols-outlined" style="font-size: 13px;">${item.alertEnabled ? 'notifications_active' : 'notifications'}</span>
-              </button>
             </div>
           </div>
           <img src="${safePoster}" alt="${safeTitle}" onerror="this.src='images/hero.webp'" loading="lazy" />
@@ -1296,7 +1286,6 @@ function renderWatchlist() {
     if (!item) return;
     const isTv = (item.mediaType || 'movie').toLowerCase() === 'tv';
     card.querySelector('.watchlist-poster-wrap')?.addEventListener('click', (e) => {
-      if (e.target.closest('.btn-wl-alert')) return;
       openDetailView(item, item.mediaType || 'movie');
     });
     card.querySelector('.watchlist-item-title')?.addEventListener('click', () => {
@@ -1329,11 +1318,6 @@ function renderWatchlist() {
       openEpisodeModal(item);
     });
 
-    // Alert Bell
-    card.querySelector('.btn-wl-alert')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleItemAlert(item);
-    });
 
     // Streaming Providers
     card.querySelector('.btn-wl-stream')?.addEventListener('click', (e) => {
@@ -1392,102 +1376,6 @@ function renderWatchlist() {
     });
   });
 }
-// ==========================================================================
-// Watchlist Studio: Release & Episode Airing Alerts
-// ==========================================================================
-async function toggleItemAlert(item) {
-  if (!item) return;
-  item.alertEnabled = !item.alertEnabled;
-  const userId = state.user ? state.user.id : 'guest';
-  if (item.alertEnabled) {
-    showToast(`🔔 Airing alerts enabled for "${item.title}"`, 'success');
-  } else {
-    showToast(`🔕 Airing alerts disabled for "${item.title}"`, 'info');
-  }
-  await saveWatchlist();
-  fetch(`/api/user/watchlist/${item.id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, updates: { alert_enabled: item.alertEnabled } })
-  }).catch(() => {});
-}
-
-function renderAiringAlerts() {
-  const container = document.getElementById('airingAlertsList');
-  const emptyState = document.getElementById('airingAlertsEmptyState');
-  if (!container || !emptyState) return;
-
-  const alertItems = state.watchlist.filter(item => {
-    return item.alertEnabled || item.nextAirDate || (item.mediaType === 'tv' && item.status !== 'completed');
-  });
-
-  if (alertItems.length === 0) {
-    container.innerHTML = '';
-    emptyState.classList.remove('hidden');
-    return;
-  }
-
-  emptyState.classList.add('hidden');
-  container.innerHTML = alertItems.map(item => {
-    const safeTitle = escapeHtml(item.title);
-    const safePoster = escapeHtml(item.poster || 'images/hero.webp');
-    const airDateStr = item.nextAirDate || 'Schedule Updating';
-    const isTv = (item.mediaType || 'movie').toLowerCase() === 'tv';
-    let daysRemaining = null;
-    let badgeText = 'SCHEDULED';
-    let badgeClass = 'badge-upcoming';
-
-    if (item.nextAirDate) {
-      const airDate = new Date(item.nextAirDate);
-      const today = new Date();
-      const diffTime = airDate.getTime() - today.getTime();
-      daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      if (daysRemaining < 0) {
-        badgeText = 'RECENTLY AIRED';
-        badgeClass = 'badge-aired';
-      } else if (daysRemaining === 0) {
-        badgeText = 'AIRS TODAY!';
-        badgeClass = 'badge-today';
-      } else {
-        badgeText = `IN ${daysRemaining} DAY${daysRemaining === 1 ? '' : 'S'}`;
-      }
-    }
-
-    return `
-      <div class="airing-alert-card" data-id="${item.id}">
-        <img src="${safePoster}" alt="${safeTitle}" class="airing-alert-poster" onerror="this.src='images/hero.webp'" loading="lazy">
-        <div class="airing-alert-info">
-          <div class="airing-alert-meta-top">
-            <span class="retro-tag-pill ${badgeClass}">${badgeText}</span>
-            <span class="airing-alert-type">${isTv ? 'NEXT EPISODE' : 'THEATRICAL / VOD'}</span>
-          </div>
-          <h4 class="airing-alert-title">${safeTitle}</h4>
-          <div class="airing-alert-date">
-            <span class="material-symbols-outlined" style="font-size: 15px;">calendar_today</span>
-            ${airDateStr}
-          </div>
-          <div class="airing-alert-actions">
-            <button type="button" class="retro-btn btn-alert-stream" title="Check where to stream">STREAM</button>
-            <button type="button" class="retro-btn btn-alert-torrent" title="Find releases">TORRENTS</button>
-            <button type="button" class="retro-btn btn-alert-toggle ${item.alertEnabled ? 'active-bell' : ''}" title="Toggle notifications">
-              <span class="material-symbols-outlined" style="font-size: 14px;">${item.alertEnabled ? 'notifications_active' : 'notifications'}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  // Wire buttons in alert cards
-  container.querySelectorAll('.airing-alert-card').forEach((card, i) => {
-    const item = alertItems[i];
-    card.querySelector('.btn-alert-stream')?.addEventListener('click', () => openStreamingModal(item));
-    card.querySelector('.btn-alert-torrent')?.addEventListener('click', () => openTorrentModal(item, item.mediaType || 'movie', false));
-    card.querySelector('.btn-alert-toggle')?.addEventListener('click', () => toggleItemAlert(item));
-    card.querySelector('.airing-alert-poster')?.addEventListener('click', () => openDetailView(item, item.mediaType || 'movie'));
-  });
-}
-
 // ==========================================================================
 // Watchlist Studio: TV Season & Episode Checklist Tracker
 // ==========================================================================
@@ -2484,17 +2372,12 @@ function switchWatchlistSubTab(subTab) {
   const paneWatchlist = document.getElementById('wlTabContentWatchlist');
   const paneDiary = document.getElementById('wlTabContentDiary');
   const paneCustom = document.getElementById('wlTabContentCustomLists');
-  const paneAlerts = document.getElementById('wlTabContentAlerts');
-
   if (paneWatchlist) paneWatchlist.classList.toggle('hidden', subTab !== 'watchlist');
   if (paneDiary) paneDiary.classList.toggle('hidden', subTab !== 'diary');
   if (paneCustom) paneCustom.classList.toggle('hidden', subTab !== 'custom-lists');
-  if (paneAlerts) paneAlerts.classList.toggle('hidden', subTab !== 'alerts');
-
   if (subTab === 'watchlist') renderWatchlist();
   else if (subTab === 'diary') renderDiaryEntries();
   else if (subTab === 'custom-lists') renderCustomLists();
-  else if (subTab === 'alerts') renderAiringAlerts();
 }
 
 function updateActiveFilterIndicator() {

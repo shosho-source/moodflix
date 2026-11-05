@@ -3942,15 +3942,6 @@ iframe {
     box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4) !important;
   }
 
-  .wl-alert-btn {
-    width: 18px !important;
-    height: 18px !important;
-    box-shadow: 1px 1px 0 #000 !important;
-  }
-
-  .wl-alert-btn .material-symbols-outlined {
-    font-size: 11px !important;
-  }
 
   /* Card Body Mobile */
   .watchlist-item-info {
@@ -4150,9 +4141,8 @@ iframe {
     height: 105px !important;
   }
 
-  /* Custom Lists & Airing Alerts Mobile */
-  .custom-lists-pane-header,
-  .alerts-pane-header {
+  /* Custom Lists Mobile */
+  .custom-lists-pane-header {
     flex-direction: column !important;
     align-items: flex-start !important;
     gap: 10px !important;
@@ -4163,10 +4153,6 @@ iframe {
     justify-content: center !important;
   }
 
-  .airing-alerts-grid {
-    grid-template-columns: 1fr !important;
-    gap: 10px !important;
-  }
 
   /* Diagnostic Landing (Explore View on Mobile - Balanced Viewport Distribution) */
   .site-main:has(#diagnostic-view:not(.hidden)) {
@@ -9672,31 +9658,6 @@ select option {
   color: #ffffff;
 }
 
-.wl-alert-btn {
-  width: 22px;
-  height: 22px;
-  background: var(--retro-surface, #ffffff);
-  border: 1px solid #000000;
-  padding: 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 1.5px 1.5px 0 #000000;
-  transition: transform 0.1s ease, background 0.1s ease;
-  color: #181818;
-}
-
-.wl-alert-btn:hover {
-  background: #000000;
-  color: #ffffff;
-  transform: scale(1.05);
-}
-
-.wl-alert-btn.active {
-  background: #ff2a5f !important;
-  color: #ffffff !important;
-}
 
 /* TV Episode Progress Bar & Buttons */
 .wl-tv-progress-box {
@@ -9934,8 +9895,7 @@ select option {
   padding-bottom: 12px;
 }
 
-.custom-lists-pane-header,
-.alerts-pane-header {
+.custom-lists-pane-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -9966,8 +9926,7 @@ select option {
   letter-spacing: -0.01em;
 }
 
-.custom-lists-title,
-.alerts-title {
+.custom-lists-title {
   font-size: 1.1rem;
   font-weight: 900;
   margin: 0;
@@ -9992,8 +9951,7 @@ select option {
   font-family: var(--font-mono, monospace);
 }
 
-.custom-lists-subtitle,
-.alerts-subtitle {
+.custom-lists-subtitle {
   font-size: 0.78rem;
   opacity: 0.7;
   margin: 2px 0 0;
@@ -10297,9 +10255,8 @@ select option {
   box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.4);
 }
 
-/* Curated Lists and Airing Alerts Cards */
-.custom-list-card,
-.airing-alert-card {
+/* Curated Lists Cards */
+.custom-list-card {
   background: #ffffff;
   border: 2px solid var(--retro-border, #000000);
   box-shadow: 4px 4px 0px 0px var(--retro-border, #000000);
@@ -10329,8 +10286,7 @@ select option {
   border: 1px solid #000;
 }
 
-.custom-list-card-title,
-.airing-alert-title {
+.custom-list-card-title {
   color: var(--retro-fg, #181818);
   font-weight: 800;
   font-size: 1.05rem;
@@ -10344,39 +10300,6 @@ select option {
   margin: 4px 0;
 }
 
-.airing-alert-poster {
-  width: 60px;
-  height: 90px;
-  object-fit: cover;
-  border: 1.5px solid #000000;
-  flex-shrink: 0;
-}
-
-.airing-alert-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.airing-alert-meta-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
-}
-
-.airing-alert-date {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #555555;
-}
 
 .custom-list-thumbs-row {
   display: flex;
@@ -10391,11 +10314,6 @@ select option {
   border: 1px solid #000000;
 }
 
-.airing-alerts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
-}
 
 /* ==========================================================================
    Watchlist Studio: Modals & Popups
