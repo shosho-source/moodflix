@@ -3709,7 +3709,7 @@ iframe {
 
   .wl-subnav-tabs {
     display: grid !important;
-    grid-template-columns: repeat(4, 1fr) !important;
+    grid-template-columns: repeat(3, 1fr) !important;
     gap: 8px !important;
     width: 100% !important;
     box-sizing: border-box !important;
@@ -8980,12 +8980,13 @@ iframe {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
   font-family: var(--font-mono, monospace);
   font-size: 0.8rem;
   font-weight: 800;
+  letter-spacing: 0.04em;
   background: var(--retro-surface, #ffffff);
   color: var(--retro-fg, #181818);
   border: 2px solid var(--retro-border, #000000);
@@ -8993,6 +8994,7 @@ iframe {
   cursor: pointer;
   transition: all 0.12s ease;
   position: relative;
+  white-space: nowrap;
 }
 
 .wl-subnav-btn:hover {
@@ -9015,13 +9017,18 @@ iframe {
 }
 
 .wl-subnav-btn .material-symbols-outlined {
-  font-size: 22px;
+  font-size: 18px;
   margin: 0;
   line-height: 1;
 }
 
 .wl-subnav-label {
-  display: none;
+  display: inline-block;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
 }
 
 /* Watchlist Toolbar & Filter Placement */
