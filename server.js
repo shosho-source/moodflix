@@ -672,9 +672,14 @@ app.post('/api/user/watchlist', async (req, res) => {
       updated_at: new Date().toISOString()
     };
 
-    // Save to Supabase
+    if (item.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(item.id))) {
+      payload.id = String(item.id);
+    }
+
+    // Save to Supabase with on_conflict resolution matching database constraint watchlist_user_tmdb_unique
     let savedItem = payload;
-    const sbRes = await supabaseFetch('watchlist_items', {
+    const isConflictQuery = payload.tmdb_id ? '?on_conflict=user_id,tmdb_id,media_type' : '';
+    const sbRes = await supabaseFetch(`watchlist_items${isConflictQuery}`, {
       method: 'POST',
       headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
       body: JSON.stringify(payload)
@@ -696,6 +701,33 @@ app.post('/api/user/watchlist', async (req, res) => {
   }
 });
 
+// Helper to map frontend camelCase properties to Supabase snake_case columns
+const mapWatchlistUpdatesToDb = (updates = {}) => {
+  const mapping = {
+    currentEpisode: 'current_episode',
+    currentSeason: 'current_season',
+    totalEpisodes: 'total_episodes',
+    totalSeasons: 'total_seasons',
+    progressPct: 'progress_pct',
+    userRating: 'user_rating',
+    watchedDate: 'watched_date',
+    diaryNotes: 'diary_notes',
+    alertEnabled: 'alert_enabled',
+    customLists: 'custom_lists',
+    mediaType: 'media_type',
+    tmdbId: 'tmdb_id',
+    voteCount: 'vote_count',
+    nextAirDate: 'next_air_date',
+    streamingInfo: 'streaming_info'
+  };
+  const result = {};
+  for (const [key, val] of Object.entries(updates)) {
+    const dbKey = mapping[key] || key;
+    result[dbKey] = val;
+  }
+  return result;
+};
+
 // PATCH User Watchlist Item (Progress, Rating, Status, Diary)
 app.patch('/api/user/watchlist/:id', async (req, res) => {
   try {
@@ -703,8 +735,18 @@ app.patch('/api/user/watchlist/:id', async (req, res) => {
     const { userId, updates } = req.body;
     const targetUserId = userId || 'guest';
 
-    const fields = { ...updates, updated_at: new Date().toISOString() };
-    const sbRes = await supabaseFetch(`watchlist_items?id=eq.${id}&user_id=eq.${encodeURIComponent(targetUserId)}`, {
+    const dbFields = mapWatchlistUpdatesToDb(updates);
+    const fields = { ...dbFields, updated_at: new Date().toISOString() };
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
+    let queryFilter = isUuid
+      ? `id=eq.${encodeURIComponent(id)}`
+      : (/^\d+$/.test(String(id))
+          ? `tmdb_id=eq.${encodeURIComponent(id)}`
+          : `title=eq.${encodeURIComponent(id)}`);
+    queryFilter += `&user_id=eq.${encodeURIComponent(targetUserId)}`;
+
+    const sbRes = await supabaseFetch(`watchlist_items?${queryFilter}`, {
       method: 'PATCH',
       headers: { 'Prefer': 'return=representation' },
       body: JSON.stringify(fields)
@@ -725,16 +767,38 @@ app.patch('/api/user/watchlist/:id', async (req, res) => {
 app.delete('/api/user/watchlist/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.query.userId || 'guest';
+    const userId = req.query.userId || req.query.user_id || 'guest';
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
+    let queryFilter = isUuid
+      ? `id=eq.${encodeURIComponent(id)}`
+      : (/^\d+$/.test(String(id))
+          ? `tmdb_id=eq.${encodeURIComponent(id)}`
+          : `title=eq.${encodeURIComponent(id)}`);
+    queryFilter += `&user_id=eq.${encodeURIComponent(userId)}`;
 
     // Delete from Supabase
-    await supabaseFetch(`watchlist_items?id=eq.${id}&user_id=eq.${encodeURIComponent(userId)}`, {
+    await supabaseFetch(`watchlist_items?${queryFilter}`, {
       method: 'DELETE'
     });
 
     // Also remove from local storage
     Storage.removeFromWatchlist(id);
     res.json({ success: true, message: 'Item deleted from watchlist' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE User Watchlist (Clear Entire Watchlist for User)
+app.delete('/api/user/watchlist', async (req, res) => {
+  try {
+    const userId = req.query.userId || req.query.user_id || 'guest';
+    await supabaseFetch(`watchlist_items?user_id=eq.${encodeURIComponent(userId)}`, {
+      method: 'DELETE'
+    });
+    Storage.clearWatchlist();
+    res.json({ success: true, count: 0, watchlist: [], message: 'Watchlist cleared successfully' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -814,9 +878,29 @@ app.post('/api/user/diary', async (req, res) => {
     const targetUserId = entry.userId || entry.user_id || 'guest';
     if (!entry.title) return res.status(400).json({ success: false, error: 'Title is required for diary entry' });
 
+    const rawItemId = entry.watchlistItemId || entry.watchlist_item_id || null;
+    let resolvedWatchlistItemId = rawItemId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(rawItemId))
+      ? String(rawItemId)
+      : null;
+
+    if (!resolvedWatchlistItemId && (entry.tmdbId || rawItemId)) {
+      const queryTmdb = entry.tmdbId || (/^\d+$/.test(String(rawItemId)) ? rawItemId : null);
+      if (queryTmdb) {
+        try {
+          const matchRes = await supabaseFetch(`watchlist_items?tmdb_id=eq.${queryTmdb}&user_id=eq.${encodeURIComponent(targetUserId)}&select=id&limit=1`);
+          if (matchRes && matchRes.ok) {
+            const matchData = await matchRes.json();
+            if (matchData && matchData[0]?.id) {
+              resolvedWatchlistItemId = matchData[0].id;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
     const payload = {
       user_id: targetUserId,
-      watchlist_item_id: entry.watchlistItemId || entry.watchlist_item_id || null,
+      watchlist_item_id: resolvedWatchlistItemId,
       tmdb_id: entry.tmdbId ? parseInt(entry.tmdbId, 10) : null,
       title: entry.title,
       media_type: entry.mediaType || 'movie',
@@ -912,7 +996,7 @@ app.post('/api/user/import', async (req, res) => {
     }
 
     if (records.length > 0) {
-      await supabaseFetch('watchlist_items', {
+      await supabaseFetch('watchlist_items?on_conflict=user_id,tmdb_id,media_type', {
         method: 'POST',
         headers: { 'Prefer': 'resolution=merge-duplicates' },
         body: JSON.stringify(records)

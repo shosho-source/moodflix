@@ -834,7 +834,15 @@ async function toggleWatchlistItem(media, mediaType = 'movie') {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ item: entry, userId })
-    }).catch(() => {});
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && data.item?.id) {
+          entry.id = data.item.id;
+          saveWatchlist();
+        }
+      })
+      .catch(() => {});
 
     fetch('/api/watchlist', {
       method: 'POST',
@@ -967,7 +975,15 @@ async function handleDetailWatched(media, mediaType = 'movie') {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ item: target, userId })
-    }).catch(() => {});
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && data.item?.id) {
+          target.id = data.item.id;
+          saveWatchlist();
+        }
+      })
+      .catch(() => {});
   } else {
     const isCurrentlyWatched = target.status === 'completed';
     const newStatus = isCurrentlyWatched ? 'plan_to_watch' : 'completed';
@@ -985,7 +1001,14 @@ async function handleDetailWatched(media, mediaType = 'movie') {
     fetch(`/api/user/watchlist/${target.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, updates: { status: newStatus, currentEpisode: target.currentEpisode, progressPct: target.progressPct } })
+      body: JSON.stringify({
+        userId,
+        updates: {
+          status: newStatus,
+          current_episode: target.currentEpisode,
+          progress_pct: target.progressPct
+        }
+      })
     }).catch(() => {});
     showToast(newStatus === 'completed' ? `Marked "${target.title}" as Watched` : `Marked "${target.title}" as Unwatched`, 'info');
   }
@@ -1353,7 +1376,14 @@ function renderWatchlist() {
       fetch(`/api/user/watchlist/${item.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, updates: { status: newStatus, currentEpisode: item.currentEpisode, progressPct: item.progressPct } })
+        body: JSON.stringify({
+          userId,
+          updates: {
+            status: newStatus,
+            current_episode: item.currentEpisode,
+            progress_pct: item.progressPct
+          }
+        })
       }).catch(() => {});
 
       const itemTitle = item.title || 'Title';
@@ -3652,6 +3682,8 @@ function setupEventListeners() {
     if (confirm('Are you sure you want to clear your entire watchlist?')) {
       state.watchlist = [];
       await saveWatchlist();
+      const userId = state.user ? state.user.id : 'guest';
+      fetch(`/api/user/watchlist?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' }).catch(() => {});
       fetch('/api/watchlist', { method: 'DELETE' }).catch(() => {});
       showToast('Watchlist cleared', 'info');
     }

@@ -124,4 +124,76 @@ describe('Profile & Watchlist with Google Login Integration', () => {
     // Clean up
     Storage.clearWatchlist();
   });
+
+  it('connects watchlist accurately to Supabase cloud database', async () => {
+    const testUserId = `test_suite_user_${Date.now()}`;
+    const testMovie = {
+      tmdbId: 603,
+      title: 'The Matrix (Suite)',
+      year: 1999,
+      poster: 'https://example.com/matrix.jpg',
+      rating: 8.7,
+      mediaType: 'movie',
+      status: 'plan_to_watch'
+    };
+
+    // 1. POST item to /api/user/watchlist
+    const postRes = await fetch(`${baseUrl}/api/user/watchlist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item: testMovie, userId: testUserId })
+    });
+    assert.strictEqual(postRes.status, 200);
+    const postData = await postRes.json();
+    assert.strictEqual(postData.success, true);
+    assert.ok(postData.item?.id, 'Supabase returned stored item with primary key id');
+    const assignedId = postData.item.id;
+
+    // 2. GET from /api/user/watchlist
+    const getRes = await fetch(`${baseUrl}/api/user/watchlist?userId=${encodeURIComponent(testUserId)}`);
+    assert.strictEqual(getRes.status, 200);
+    const getData = await getRes.json();
+    assert.strictEqual(getData.success, true);
+    assert.strictEqual(getData.source, 'supabase', 'Watchlist is fetched directly from Supabase');
+    assert.ok(getData.watchlist.some(w => w.tmdb_id === 603 || w.tmdbId === 603));
+
+    // 3. Re-add / upsert same title (must not throw 409 unique constraint error)
+    const upsertRes = await fetch(`${baseUrl}/api/user/watchlist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        item: { ...testMovie, status: 'completed' },
+        userId: testUserId
+      })
+    });
+    assert.strictEqual(upsertRes.status, 200);
+    const upsertData = await upsertRes.json();
+    assert.strictEqual(upsertData.success, true);
+
+    // 4. PATCH using numeric tmdbId
+    const patchRes = await fetch(`${baseUrl}/api/user/watchlist/603`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: testUserId,
+        updates: { currentEpisode: 1, status: 'watching' }
+      })
+    });
+    assert.strictEqual(patchRes.status, 200);
+    const patchData = await patchRes.json();
+    assert.strictEqual(patchData.success, true);
+
+    // 5. DELETE using assignedId
+    const delRes = await fetch(`${baseUrl}/api/user/watchlist/${assignedId}?userId=${encodeURIComponent(testUserId)}`, {
+      method: 'DELETE'
+    });
+    assert.strictEqual(delRes.status, 200);
+    const delData = await delRes.json();
+    assert.strictEqual(delData.success, true);
+
+    // 6. Confirm deleted in Supabase
+    const confirmRes = await fetch(`${baseUrl}/api/user/watchlist?userId=${encodeURIComponent(testUserId)}`);
+    const confirmData = await confirmRes.json();
+    assert.strictEqual(confirmData.watchlist.length, 0, 'Item successfully removed from Supabase');
+  });
 });
