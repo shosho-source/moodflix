@@ -119,9 +119,8 @@ describe('Whole Season 1-Torrent Download Suite (TV & Anime)', () => {
     assert.strictEqual(buf.slice(0, 1).toString(), 'd', 'valid bencoded dictionary start');
   });
 
-  it('HTML includes detailSeasonPackBtn in Detail View actions', () => {
-    assert.ok(indexHtml.includes('id="detailSeasonPackBtn"'), 'detailSeasonPackBtn exists in HTML');
-    assert.ok(indexHtml.includes('WHOLE SEASON (.TORRENT)'), 'detailSeasonPackBtn displays Whole Season label');
+  it('Detail View does not include redundant standalone button; season pack is inside torrents tab', () => {
+    assert.ok(!indexHtml.includes('id="detailSeasonPackBtn"'), 'detailSeasonPackBtn removed from HTML');
   });
 
   it('JavaScript defines loadSeasonPackTorrents and binds accordion whole-season controls', () => {
@@ -129,13 +128,11 @@ describe('Whole Season 1-Torrent Download Suite (TV & Anime)', () => {
     assert.ok(appJs.includes('btn-season-pack-quick'), 'quick season pack button is handled');
     assert.ok(appJs.includes('btn-load-season-pack'), 'season pack load CTA is bound');
     assert.ok(appJs.includes('season-pack-results'), 'season pack results container is rendered');
-    assert.ok(appJs.includes('detailSeasonPackBtn'), 'detail view season pack button is bound');
   });
 
   it('CSS defines comprehensive styles for season pack banner, quick button, and results', () => {
     assert.ok(styleCss.includes('.btn-season-pack-quick'), '.btn-season-pack-quick styles defined');
     assert.ok(styleCss.includes('.season-pack-banner'), '.season-pack-banner styles defined');
     assert.ok(styleCss.includes('.season-pack-results-area'), '.season-pack-results-area styles defined');
-    assert.ok(styleCss.includes('.detail-season-pack-btn'), '.detail-season-pack-btn styles defined');
   });
 });

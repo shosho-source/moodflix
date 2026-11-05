@@ -5041,16 +5041,6 @@ function openDetailView(m, type, isDiagnostic = false) {
   elements.detailTrailerBtn.onclick = () => playTrailer(m.id, effectiveType, m.title, m.year);
   elements.detailShareBtn.onclick = () => openTorrentModal(m, effectiveType, true);
 
-  const detailSeasonPackBtn = document.getElementById('detailSeasonPackBtn');
-  if (detailSeasonPackBtn) {
-    if (effectiveType === 'tv') {
-      detailSeasonPackBtn.classList.remove('hidden');
-      detailSeasonPackBtn.onclick = () => openTorrentModal(m, 'tv', false, 1);
-    } else {
-      detailSeasonPackBtn.classList.add('hidden');
-    }
-  }
-
   // Detail Actions: Watched, Watch Later, Add to List
   updateDetailButtons(m);
   const detailWatchedBtn = document.getElementById('detailWatchedBtn');
