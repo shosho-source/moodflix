@@ -637,8 +637,9 @@ export class CineBay {
           if (text && !text.trim().startsWith('<')) {
             const fbData = JSON.parse(text);
             if (Array.isArray(fbData) && fbData.length > 0 && fbData[0].id !== '0' && fbData[0].name !== 'No results returned') {
-              return fbData.map(item => {
+              const mapped = fbData.map(item => {
                 const magnet = CineBay.buildMagnet(item.info_hash, item.name);
+                const isPack = isSeasonPackQuery || CineBay.isSeasonPackName(item.name, targetSeason);
                 return {
                   id: item.id,
                   name: item.name,
@@ -652,9 +653,16 @@ export class CineBay {
                   category: item.category,
                   imdb: item.imdb || null,
                   magnet,
-                  source: 'ThePirateBay'
+                  source: 'ThePirateBay',
+                  isSeasonPack: isPack,
+                  season: isPack ? targetSeason : undefined
                 };
               });
+
+              if (isSeasonPackQuery) {
+                return mapped.filter(r => CineBay.isSeasonPackName(r.name, targetSeason));
+              }
+              return mapped;
             }
           }
         }

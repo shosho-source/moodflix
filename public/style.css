@@ -11355,11 +11355,17 @@ select option {
   transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
 }
 
-.streaming-provider-badge:hover {
+.streaming-provider-badge:hover,
+.streaming-badge:hover {
   background: #000000;
   color: #ffffff;
   transform: translate(-1px, -1px);
   box-shadow: 2.5px 2.5px 0 #000000;
+}
+
+.streaming-provider-badge:hover .provider-name,
+.streaming-badge:hover .provider-name {
+  color: #ffffff;
 }
 
 .provider-logo-img,
@@ -11374,7 +11380,7 @@ select option {
 }
 
 .provider-name {
-  color: #000000;
+  color: inherit;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

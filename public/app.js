@@ -5591,7 +5591,7 @@ async function loadTVSeasonsAccordion(m, isShareMode = false, autoLoadSeasonPack
         const epCountBadge = s.episode_count ? `<span class="season-ep-count">[${s.episode_count} EPS]</span>` : '';
         return `
           <div class="accordion-item" id="season-acc-${s.season_number}">
-            <button class="accordion-btn" type="button" id="btn-season-${s.season_number}" data-season="${s.season_number}">
+            <div class="accordion-btn" role="button" tabindex="0" id="btn-season-${s.season_number}" data-season="${s.season_number}">
               <div class="season-btn-left">
                 <span class="season-pill">S${String(s.season_number).padStart(2, '0')}</span>
                 <span class="season-title">${seasonTitle}</span>
@@ -5605,7 +5605,7 @@ async function loadTVSeasonsAccordion(m, isShareMode = false, autoLoadSeasonPack
                 <span class="season-btn-status" id="season-status-${s.season_number}"></span>
                 <span class="accordion-arrow">▼</span>
               </div>
-            </button>
+            </div>
             <div class="accordion-content" id="season-content-${s.season_number}"></div>
           </div>
         `;
@@ -5621,6 +5621,13 @@ async function loadTVSeasonsAccordion(m, isShareMode = false, autoLoadSeasonPack
             if (e.target.closest('.btn-season-pack-quick')) return;
             e.preventDefault();
             toggleSeasonAccordion(seasonNum, m, btn);
+          });
+          btn.addEventListener('keydown', (e) => {
+            if (e.target.closest('.btn-season-pack-quick')) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleSeasonAccordion(seasonNum, m, btn);
+            }
           });
         }
         if (quickBtn) {

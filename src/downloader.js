@@ -326,8 +326,8 @@ export class Downloader {
   static openMagnetInClient(magnetUrl) {
     if (!magnetUrl || typeof magnetUrl !== 'string') return;
     const trimmed = magnetUrl.trim();
-    // Validate magnet URL format strictly to prevent command injection attacks while permitting valid query characters (+, /, (, ), etc.)
-    if (!/^magnet:\?xt=urn:btih:[a-zA-Z0-9]{32,40}(?:&[a-zA-Z0-9_=\-.:%+/(~)[\]]+)*$/i.test(trimmed)) {
+    // Validate magnet URL format strictly to prevent command injection attacks while permitting valid query characters (+, /, (, ), comma, etc.)
+    if (!/^magnet:\?xt=urn:btih:[a-zA-Z0-9]{32,40}(?:&[a-zA-Z0-9_=\-.:%+/(~)[\\],@]+)*$/i.test(trimmed)) {
       console.warn('[Downloader] Invalid or unsafe magnet link rejected:', trimmed.slice(0, 50));
       return;
     }

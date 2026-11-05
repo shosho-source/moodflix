@@ -62,9 +62,10 @@ describe('Downloader', () => {
     assert.ok(res.buffer.includes(Buffer.from(`6:pieces${expectedPieces}:`)), 'Pieces buffer must match piece count * 20');
   });
 
-  it('permits valid magnet links with spaces, plus signs, brackets, and tracker slashes', () => {
+  it('permits valid magnet links with spaces, plus signs, brackets, commas, and tracker slashes', () => {
     assert.doesNotThrow(() => {
       Downloader.openMagnetInClient('magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a&dn=The+Matrix+(1999)+[1080p]&tr=udp://tracker.opentrackr.org:1337/announce');
+      Downloader.openMagnetInClient('magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a&dn=Movie,+The+(2020),+Special&tr=udp://tracker.opentrackr.org:1337/announce');
     });
   });
 
