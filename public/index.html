@@ -21,7 +21,7 @@
   <link rel="stylesheet"
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
 
-  <link rel="stylesheet" href="style.css?v=20261105_streaming_modal_layout_fix">
+  <link rel="stylesheet" href="style.css?v=20261109_trailers_update">
 </head>
 
 <body>
@@ -58,11 +58,11 @@
         <div class="brand-logo" id="logo-btn" role="button" tabindex="0">
           <span class="logo-title scramble-text">MoodFlix</span>
         </div>
-        <!-- Header Actions: Mobile quick shortcuts -->
+        <!-- Header Actions: Top Right Action Button -->
         <div class="header-actions">
-          <button id="header-tutorial-btn" class="header-icon-btn mobile-only-btn" title="How to Download & Watch"
-            aria-label="Tutorial">
-            <span class="material-symbols-outlined">school</span>
+          <button id="header-tutorial-btn" class="retro-btn header-tutorial-btn" title="How to Download &amp; Watch" aria-label="Tutorial">
+            <span class="material-symbols-outlined header-tutorial-icon">school</span>
+            <span class="header-tutorial-text scramble-text">Tutorial</span>
           </button>
         </div>
       </div>
@@ -81,9 +81,6 @@
         </button>
         <button class="nav-tab" data-tab="search-view">
           <span class="material-symbols-outlined">person_search</span> <span class="scramble-text">Search by Artist</span>
-        </button>
-        <button class="nav-tab" data-tab="tutorial-view">
-          <span class="material-symbols-outlined">school</span> <span class="scramble-text">Tutorial</span>
         </button>
         <button class="nav-tab" data-tab="profile-view" id="nav-profile-tab">
           <span class="material-symbols-outlined">bookmark</span> <span class="scramble-text">Watchlist</span>
@@ -140,6 +137,13 @@
                   <strong class="mood-title">DATE NIGHT</strong>
                 </div>
                 <span class="mood-desc">Romance, Drama & Comedy</span>
+              </div>
+              <div class="mood-card" data-mood="horror" role="button" tabindex="0">
+                <div class="mood-card-header">
+                  <span class="material-symbols-outlined mood-icon">skull</span>
+                  <strong class="mood-title">HORROR</strong>
+                </div>
+                <span class="mood-desc">Supernatural, Slashers & Chills</span>
               </div>
               <div class="mood-card" data-mood="mind" role="button" tabindex="0">
                 <div class="mood-card-header">
@@ -204,6 +208,24 @@
               <option value="now_playing">In Theatres / On The Air</option>
             </select>
           </div>
+          <div class="filter-group select-group">
+            <select id="movieYearSelect" class="styled-select" aria-label="Release year">
+              <option value="all">All Years</option>
+              <option value="2026">2026</option>
+              <option value="2025">2025</option>
+              <option value="2024">2024</option>
+              <option value="2023">2023</option>
+              <option value="2022">2022</option>
+              <option value="2021">2021</option>
+              <option value="2020">2020</option>
+              <option value="2010s">2010s</option>
+              <option value="2000s">2000s</option>
+              <option value="1990s">1990s</option>
+              <option value="1980s">1980s</option>
+              <option value="1970s">1970s</option>
+              <option value="classic">Pre-1970</option>
+            </select>
+          </div>
         </div>
         <div id="movieTypoBanner" class="typo-notice-banner retro-box hidden"></div>
         <div class="movie-grid" id="movieGrid"></div>
@@ -231,6 +253,23 @@
               <option value="top_rated">Top Rated</option>
               <option value="popular">Popular</option>
               <option value="airing">Currently Airing</option>
+            </select>
+          </div>
+          <div class="filter-group select-group">
+            <select id="animeYearSelect" class="styled-select" aria-label="Release year">
+              <option value="all">All Years</option>
+              <option value="2026">2026</option>
+              <option value="2025">2025</option>
+              <option value="2024">2024</option>
+              <option value="2023">2023</option>
+              <option value="2022">2022</option>
+              <option value="2021">2021</option>
+              <option value="2020">2020</option>
+              <option value="2010s">2010s</option>
+              <option value="2000s">2000s</option>
+              <option value="1990s">1990s</option>
+              <option value="1980s">1980s</option>
+              <option value="pre_1980">Pre-1980</option>
             </select>
           </div>
         </div>
@@ -396,7 +435,8 @@
               <div class="detail-cast-header-row">
                 <div class="detail-cast-heading">
                   <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">group</span>
-                  <span>TOP CAST</span>
+                  <span id="detailCastHeadingText">ALL CAST</span>
+                  <span id="detailCastCount" class="detail-cast-count-badge"></span>
                 </div>
                 <div class="detail-cast-nav" id="detailCastNav">
                   <button type="button" class="retro-btn btn-cast-nav" id="btnCastLeft" title="Scroll left" aria-label="Scroll cast left">&lt;</button>
@@ -409,14 +449,19 @@
             <div class="detail-actions">
               <button id="detailTorrentsBtn" class="retro-btn">TORRENTS</button>
               <button id="detailTrailerBtn" class="retro-btn">TRAILER</button>
+              <button id="detailGalleryBtn" class="retro-btn"><span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 2px;">photo_library</span>GALLERY</button>
               <button id="detailWatchedBtn" class="retro-btn not-watched" data-legacy="NOT WATCHED" title="Unwatched (default) — click to mark as watched">UNWATCHED</button>
               <button id="detailWatchlistBtn" class="retro-btn">+ WATCH LATER</button>
+              <button id="detailSeparateSeasonsBtn" class="retro-btn" style="display: none;" title="Add each season of this show as a separate watchlist card">
+                <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 2px;">view_agenda</span>ADD ALL SEASONS
+              </button>
               <button id="detailAddToListBtn" class="retro-btn">+ ADD TO LIST</button>
               <button id="detailShareBtn" class="retro-btn">SHARE</button>
               <button id="back-to-feed-btn" class="retro-btn">BACK TO FEED</button>
             </div>
           </div>
         </div>
+
 
         <!-- Similar Media -->
         <div class="similar-section retro-box" id="similarSection"
@@ -533,28 +578,28 @@
 
             <!-- Watchlist Stats Ribbon (Split-Flap Board Display) -->
             <div class="watchlist-stats-ribbon flip-board-display" id="watchlistStatsBoard">
-              <div class="stat-cell flip-stat-cell is-active-filter" data-filter-type="all" role="button" tabindex="0" title="Click to view all titles">
-                <div class="stat-value flip-digit-cluster" id="wlStatTotal" data-value="0">00</div>
+              <div class="stat-cell flip-stat-cell is-active-filter" data-filter-type="all" data-digits="2" role="button" tabindex="0" title="Click to view all titles">
+                <div class="stat-value flip-digit-cluster digits-2" id="wlStatTotal" data-value="0" data-digits="2">00</div>
                 <span class="stat-label">TOTAL TITLES</span>
               </div>
 
-              <div class="stat-cell flip-stat-cell" data-filter-type="movie" role="button" tabindex="0" title="Click to filter movies">
-                <div class="stat-value flip-digit-cluster" id="wlStatMovies" data-value="0">00</div>
+              <div class="stat-cell flip-stat-cell" data-filter-type="movie" data-digits="2" role="button" tabindex="0" title="Click to filter movies">
+                <div class="stat-value flip-digit-cluster digits-2" id="wlStatMovies" data-value="0" data-digits="2">00</div>
                 <span class="stat-label">MOVIES</span>
               </div>
 
-              <div class="stat-cell flip-stat-cell" data-filter-type="tv" role="button" tabindex="0" title="Click to filter TV shows">
-                <div class="stat-value flip-digit-cluster" id="wlStatShows" data-value="0">00</div>
+              <div class="stat-cell flip-stat-cell" data-filter-type="tv" data-digits="2" role="button" tabindex="0" title="Click to filter TV shows">
+                <div class="stat-value flip-digit-cluster digits-2" id="wlStatShows" data-value="0" data-digits="2">00</div>
                 <span class="stat-label">TV SHOWS</span>
               </div>
 
-              <div class="stat-cell flip-stat-cell" data-filter-type="completed" role="button" tabindex="0" title="Click to filter completed">
-                <div class="stat-value flip-digit-cluster" id="wlStatCompleted" data-value="0">00</div>
+              <div class="stat-cell flip-stat-cell" data-filter-type="completed" data-digits="2" role="button" tabindex="0" title="Click to filter completed">
+                <div class="stat-value flip-digit-cluster digits-2" id="wlStatCompleted" data-value="0" data-digits="2">00</div>
                 <span class="stat-label">COMPLETED</span>
               </div>
 
-              <div class="stat-cell flip-stat-cell flip-cell-time" role="button" tabindex="0" title="Total estimated watch time">
-                <div class="stat-value flip-digit-cluster" id="wlStatTime" data-value="0h">00h</div>
+              <div class="stat-cell flip-stat-cell flip-cell-time" data-digits="3" role="button" tabindex="0" title="Total estimated watch time">
+                <div class="stat-value flip-digit-cluster digits-3" id="wlStatTime" data-value="0h" data-digits="3">00h</div>
                 <span class="stat-label">EST. WATCH TIME</span>
               </div>
             </div>
@@ -691,6 +736,25 @@
                         <option value="Thriller">Thriller</option>
                         <option value="War">War</option>
                         <option value="Western">Western</option>
+                      </select>
+                    </div>
+                    <div class="filter-group retro-select-container">
+                      <label class="filter-label">RELEASE YEAR</label>
+                      <select id="wlYearSelect" class="filter-select">
+                        <option value="all">ALL YEARS</option>
+                        <option value="2026">2026</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                        <option value="2022">2022</option>
+                        <option value="2021">2021</option>
+                        <option value="2020">2020</option>
+                        <option value="2010s">2010s</option>
+                        <option value="2000s">2000s</option>
+                        <option value="1990s">1990s</option>
+                        <option value="1980s">1980s</option>
+                        <option value="1970s">1970s</option>
+                        <option value="classic">PRE-1970</option>
                       </select>
                     </div>
                     <div class="filter-group">
@@ -1156,14 +1220,14 @@
         style="position: relative; min-height: 250px; display: flex; align-items: center; justify-content: center;">
         <div id="trailer-loader" class="hidden"
           style="position: absolute; font-family: var(--font-mono); font-weight: bold; font-size: 1.2rem; z-index: 0;">
-          LOADING TRAILER...
+          SEARCHING TRAILERS...
         </div>
         <iframe id="trailer-iframe" src="" allowfullscreen
           style="width: 100%; height: 400px; z-index: 1; position: relative;"></iframe>
       </div>
       <div class="modal-footer" id="trailer-modal-footer"
         style="padding: 10px 16px; border-top: 2px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 11px;">
-        <span id="trailer-status-text" style="color: var(--text-muted); font-family: var(--font-mono); font-weight: 600;">OFFICIAL TRAILER</span>
+        <span id="trailer-status-text" class="trailer-disclaimer" style="color: var(--text-muted); font-family: var(--font-mono); font-weight: 600; font-size: 11px; letter-spacing: 0.02em;">Trailers may not match</span>
         <div style="display: flex; gap: 8px; align-items: center;">
           <button id="trailer-alt-btn" type="button" class="retro-btn" style="font-size: 11px; padding: 4px 10px; display: none;">
             ⟳ ALT TRAILER
@@ -1425,6 +1489,45 @@
     </div>
   </div>
 
+  <!-- High-Resolution Scene Frame Lightbox Modal -->
+  <div id="frameLightboxModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="High-resolution frame viewer">
+    <div class="modal-card retro-box lightbox-modal-card">
+      <div class="lightbox-header">
+        <div class="lightbox-title-area">
+          <span class="material-symbols-outlined" style="font-size: 20px;">photo</span>
+          <span class="lightbox-counter scramble-text" id="lightboxCounter">FRAME 1 OF 1</span>
+        </div>
+        <div class="lightbox-actions">
+          <a id="lightboxDownloadBtn" href="#" target="_blank" rel="noopener noreferrer" class="retro-btn lightbox-action-btn" title="Open full resolution in new tab">
+            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">open_in_new</span>
+            <span>ORIGINAL RES</span>
+          </a>
+          <button type="button" id="btnCloseLightbox" class="retro-btn modal-close-btn" aria-label="Close frame viewer">✕</button>
+        </div>
+      </div>
+      <div class="lightbox-stage">
+        <button type="button" class="retro-btn lightbox-nav-btn lightbox-prev" id="btnLightboxPrev" title="Previous frame (Left Arrow)" aria-label="Previous frame">&lt;</button>
+        <div class="lightbox-image-wrap">
+          <img id="lightboxImage" src="" alt="Scene frame" class="lightbox-image" />
+          <div class="lightbox-spinner hidden" id="lightboxSpinner">
+            <span class="material-symbols-outlined spin-icon">sync</span>
+          </div>
+        </div>
+        <button type="button" class="retro-btn lightbox-nav-btn lightbox-next" id="btnLightboxNext" title="Next frame (Right Arrow)" aria-label="Next frame">&gt;</button>
+      </div>
+      <div class="lightbox-footer">
+        <div class="lightbox-caption" id="lightboxCaption">
+          <strong id="lightboxMediaTitle">Movie Title</strong>
+          <span class="lightbox-sep">•</span>
+          <span id="lightboxResolution" class="lightbox-res-badge">1920×1080</span>
+        </div>
+        <div class="lightbox-hint">
+          <span>Use &lt; &gt; arrow keys or buttons to navigate • ESC to close</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Share URL copied toast -->
   <div id="toastContainer" class="toast-container"></div>
 
@@ -1440,7 +1543,7 @@
       document.head.appendChild(s);
     }
   </script>
-  <script defer src="app.js?v=20261105_retro_select_popup_menu_fix"></script>
+  <script defer src="app.js?v=20261109_trailers_update"></script>
 </body>
 
 </html>

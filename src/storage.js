@@ -24,7 +24,9 @@ export class Storage {
       autoOpenMagnets: false
     },
     downloads: [],
-    watchlist: []
+    watchlist: [],
+    customLists: [],
+    watchDiary: []
   };
 
   static ensureDataFile() {
@@ -157,20 +159,17 @@ export class Storage {
     if (!title) return data.watchlist;
 
     const exists = data.watchlist.some(w => {
+      if (typeof w === 'object' && typeof item === 'object' && w.id && item.id && String(w.id) === String(item.id)) return true;
       const existingTitle = typeof w === 'string' ? w : (w.title || '');
       return existingTitle.toLowerCase() === title.toLowerCase();
     });
 
     if (!exists) {
       const entry = typeof item === 'string' ? item : {
+        ...item,
         id: item.id || Date.now().toString(),
         title: item.title,
-        year: item.year || '',
-        poster: item.poster || '',
-        rating: item.rating || 0,
-        mediaType: item.mediaType || 'movie',
-        synopsis: item.synopsis || '',
-        addedAt: new Date().toISOString()
+        addedAt: item.addedAt || new Date().toISOString()
       };
       data.watchlist.unshift(entry);
       Storage.write(data);
@@ -178,13 +177,17 @@ export class Storage {
     return data.watchlist;
   }
 
-  static removeFromWatchlist(identifier) {
+  static removeFromWatchlist(identifier, fallbackTitle = null) {
     const data = Storage.read();
     const target = String(identifier || '').toLowerCase();
+    const targetTitle = String(fallbackTitle || '').toLowerCase();
     data.watchlist = (data.watchlist || []).filter(w => {
       const itemTitle = typeof w === 'string' ? w : (w.title || '');
       const itemId = typeof w === 'object' && w.id ? String(w.id) : '';
-      return itemTitle.toLowerCase() !== target && itemId !== target;
+      if (itemId && target && itemId.toLowerCase() === target) return false;
+      if (itemTitle && target && itemTitle.toLowerCase() === target) return false;
+      if (itemTitle && targetTitle && itemTitle.toLowerCase() === targetTitle) return false;
+      return true;
     });
     Storage.write(data);
     return data.watchlist;
@@ -196,4 +199,102 @@ export class Storage {
     Storage.write(data);
     return data.watchlist;
   }
+  static getCustomLists(userId = 'guest') {
+    const data = Storage.read();
+    const lists = Array.isArray(data.customLists) ? data.customLists : [];
+    if (!userId || userId === 'all') return lists;
+    return lists.filter(l => (l.user_id || l.userId || 'guest') === userId);
+  }
+
+  static saveCustomList(userId, list) {
+    const data = Storage.read();
+    if (!Array.isArray(data.customLists)) data.customLists = [];
+    const targetUserId = userId || list.user_id || list.userId || 'guest';
+    const listId = list.id || crypto.randomUUID();
+
+    const entry = {
+      id: listId,
+      user_id: targetUserId,
+      name: list.name,
+      description: list.description || '',
+      color: list.color || '#ff2a5f',
+      icon: list.icon || 'bookmark',
+      created_at: list.created_at || new Date().toISOString()
+    };
+
+    const existingIdx = data.customLists.findIndex(l => l.id === listId);
+    if (existingIdx !== -1) {
+      data.customLists[existingIdx] = { ...data.customLists[existingIdx], ...entry };
+    } else {
+      data.customLists.unshift(entry);
+    }
+    Storage.write(data);
+    return entry;
+  }
+
+  static deleteCustomList(userId, listId) {
+    const data = Storage.read();
+    if (!Array.isArray(data.customLists)) return [];
+    data.customLists = data.customLists.filter(l => {
+      const matchId = l.id === listId;
+      const matchUser = !userId || (l.user_id || l.userId || 'guest') === userId;
+      return !(matchId && matchUser);
+    });
+    Storage.write(data);
+    return data.customLists;
+  }
+
+  static getDiaryEntries(userId = 'guest') {
+    const data = Storage.read();
+    const entries = Array.isArray(data.watchDiary) ? data.watchDiary : [];
+    if (!userId || userId === 'all') return entries;
+    return entries.filter(e => (e.user_id || e.userId || 'guest') === userId);
+  }
+
+  static saveDiaryEntry(userId, entry) {
+    const data = Storage.read();
+    if (!Array.isArray(data.watchDiary)) data.watchDiary = [];
+    const targetUserId = userId || entry.user_id || entry.userId || 'guest';
+    const entryId = entry.id || crypto.randomUUID();
+
+    const record = {
+      id: entryId,
+      user_id: targetUserId,
+      watchlist_item_id: entry.watchlist_item_id || entry.watchlistItemId || null,
+      tmdb_id: (entry.tmdb_id || entry.tmdbId) ? parseInt(entry.tmdb_id || entry.tmdbId, 10) : null,
+      title: entry.title,
+      media_type: entry.media_type || entry.mediaType || 'movie',
+      poster: entry.poster || null,
+      year: entry.year ? parseInt(entry.year, 10) : null,
+      watch_date: entry.watch_date || entry.watched_date || entry.watchDate || new Date().toISOString().slice(0, 10),
+      rating: (entry.rating !== undefined && entry.rating !== null && entry.rating !== '') ? parseFloat(entry.rating) : null,
+      review: entry.review || entry.notes || entry.diaryNotes || entry.diary_notes || '',
+      season: entry.season ? parseInt(entry.season, 10) : null,
+      episode: entry.episode ? parseInt(entry.episode, 10) : null,
+      rewatch: Boolean(entry.rewatch),
+      created_at: entry.created_at || new Date().toISOString()
+    };
+
+    const existingIdx = data.watchDiary.findIndex(e => e.id === entryId);
+    if (existingIdx !== -1) {
+      data.watchDiary[existingIdx] = { ...data.watchDiary[existingIdx], ...record };
+    } else {
+      data.watchDiary.unshift(record);
+    }
+    Storage.write(data);
+    return record;
+  }
+
+  static deleteDiaryEntry(userId, entryId) {
+    const data = Storage.read();
+    if (!Array.isArray(data.watchDiary)) return [];
+    data.watchDiary = data.watchDiary.filter(e => {
+      const matchId = String(e.id) === String(entryId);
+      const matchUser = !userId || (e.user_id || e.userId || 'guest') === userId;
+      return !(matchId && matchUser);
+    });
+    Storage.write(data);
+    return data.watchDiary;
+  }
+
 }

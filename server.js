@@ -6,6 +6,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { TMDB } from './src/tmdb.js';
 import { CineBay } from './src/cineBay.js';
@@ -133,8 +134,9 @@ app.get('/api/movies', async (req, res) => {
     const search = req.query.search || '';
     const category = req.query.category || 'all';
     const type = req.query.type || 'all'; // 'all' | 'movie' | 'tv'
+    const year = req.query.year || 'all';
 
-    const cacheKey = `movies:${type}:${search}:${category}`;
+    const cacheKey = `movies:${type}:${search}:${category}:${year}`;
     const cached = getCached(cacheKey);
     if (cached) {
       const annotatedCached = cached.map(m => ({
@@ -146,11 +148,11 @@ app.get('/api/movies', async (req, res) => {
 
     let movies;
     if (type === 'movie') {
-      movies = await TMDB.getMovies({ search, category });
+      movies = await TMDB.getMovies({ search, category, year });
     } else if (type === 'tv') {
-      movies = await TMDB.getTVShows({ search, category });
+      movies = await TMDB.getTVShows({ search, category, year });
     } else {
-      movies = await TMDB.getCombinedMedia({ search, category, type: 'all' });
+      movies = await TMDB.getCombinedMedia({ search, category, type: 'all', year });
     }
 
     const annotated = movies.map(m => ({
@@ -171,8 +173,9 @@ app.get('/api/tv', async (req, res) => {
   try {
     const search = req.query.search || '';
     const category = req.query.category || 'all';
+    const year = req.query.year || 'all';
 
-    const cacheKey = `tv:${search}:${category}`;
+    const cacheKey = `tv:${search}:${category}:${year}`;
     const cached = getCached(cacheKey);
     if (cached) {
       const annotatedCached = cached.map(s => ({
@@ -182,7 +185,7 @@ app.get('/api/tv', async (req, res) => {
       return res.json({ success: true, count: annotatedCached.length, shows: annotatedCached, cached: true });
     }
 
-    const shows = await TMDB.getTVShows({ search, category });
+    const shows = await TMDB.getTVShows({ search, category, year });
     const annotated = shows.map(s => ({
       ...s,
       isDownloaded: Storage.hasDownloaded(s.title)
@@ -202,8 +205,9 @@ app.get('/api/media', async (req, res) => {
     const type = req.query.type || 'all';
     const search = req.query.search || '';
     const category = req.query.category || 'all';
+    const year = req.query.year || 'all';
 
-    const cacheKey = `media:${type}:${search}:${category}`;
+    const cacheKey = `media:${type}:${search}:${category}:${year}`;
     const cached = getCached(cacheKey);
     if (cached) {
       const annotatedCached = cached.map(item => ({
@@ -215,9 +219,9 @@ app.get('/api/media', async (req, res) => {
 
     let items;
     if (type === 'all') {
-      items = await TMDB.getCombinedMedia({ search, category, type: 'all' });
+      items = await TMDB.getCombinedMedia({ search, category, type: 'all', year });
     } else {
-      items = await TMDB.getMedia({ type, search, category });
+      items = await TMDB.getMedia({ type, search, category, year });
     }
 
     const annotated = items.map(item => ({
@@ -239,8 +243,9 @@ app.get('/api/anime', async (req, res) => {
     const search = req.query.search || '';
     const category = req.query.category || 'all';
     const type = req.query.type || 'all'; // 'all' | 'tv' | 'movie'
+    const year = req.query.year || 'all';
 
-    const cacheKey = `anime:${type}:${search}:${category}`;
+    const cacheKey = `anime:${type}:${search}:${category}:${year}`;
     const cached = getCached(cacheKey);
     if (cached) {
       const annotatedCached = cached.map(item => ({
@@ -250,7 +255,7 @@ app.get('/api/anime', async (req, res) => {
       return res.json({ success: true, count: annotatedCached.length, anime: annotatedCached, cached: true });
     }
 
-    const items = await TMDB.getAnime({ search, category, type });
+    const items = await TMDB.getAnime({ search, category, type, year });
     const annotated = items.map(item => ({
       ...item,
       isDownloaded: Storage.hasDownloaded(item.title)
@@ -275,6 +280,25 @@ app.get('/api/media/:id/similar', async (req, res) => {
       isDownloaded: Storage.hasDownloaded(item.title)
     }));
     res.json({ success: true, count: annotated.length, items: annotated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3.6. Get scene frames and stills gallery (movies, TV shows, and anime)
+app.get('/api/media/:id/frames', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const type = req.query.type || 'movie';
+    const cacheKey = `frames:${id}:${type}`;
+    const cached = getCached(cacheKey);
+    if (cached) {
+      return res.json({ success: true, count: cached.length, frames: cached, cached: true });
+    }
+
+    const frames = await TMDB.getFrames(id, type);
+    setCached(cacheKey, frames);
+    res.json({ success: true, count: frames.length, frames });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -596,7 +620,8 @@ app.post('/api/watchlist', (req, res) => {
 app.delete('/api/watchlist/:id', (req, res) => {
   try {
     const id = decodeURIComponent(req.params.id);
-    const watchlist = Storage.removeFromWatchlist(id);
+    const fallbackTitle = req.query.title ? decodeURIComponent(req.query.title) : null;
+    const watchlist = Storage.removeFromWatchlist(id, fallbackTitle);
     res.json({ success: true, count: watchlist.length, watchlist });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -643,9 +668,15 @@ app.post('/api/user/watchlist', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Valid title or item object required' });
     }
 
+    let resolvedTmdbId = item.tmdbId || item.id ? parseInt(item.tmdbId || item.id, 10) : null;
+    if (resolvedTmdbId && (item.isSeason || item.is_season) && (item.seasonNumber != null || item.season_number != null)) {
+      const sNum = item.seasonNumber != null ? item.seasonNumber : item.season_number;
+      resolvedTmdbId = parseInt(`${resolvedTmdbId}${String(sNum).padStart(2, '0')}`, 10);
+    }
+
     const payload = {
       user_id: String(targetUserId),
-      tmdb_id: item.tmdbId || item.id ? parseInt(item.tmdbId || item.id, 10) : null,
+      tmdb_id: resolvedTmdbId,
       media_type: item.mediaType || 'movie',
       title: item.title,
       year: item.year ? parseInt(item.year, 10) : null,
@@ -657,7 +688,7 @@ app.post('/api/user/watchlist', async (req, res) => {
       genres: Array.isArray(item.genres) ? item.genres : [],
       runtime: item.runtime ? parseInt(item.runtime, 10) : 0,
       status: item.status || 'plan_to_watch',
-      current_season: item.currentSeason || item.current_season || 1,
+      current_season: item.seasonNumber != null ? parseInt(item.seasonNumber, 10) : (item.currentSeason || item.current_season || 1),
       current_episode: item.currentEpisode || item.current_episode || 0,
       total_seasons: item.totalSeasons || item.total_seasons || 1,
       total_episodes: item.totalEpisodes || item.total_episodes || 0,
@@ -768,13 +799,16 @@ app.delete('/api/user/watchlist/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.query.userId || req.query.user_id || 'guest';
+    const fallbackTitle = req.query.title ? decodeURIComponent(req.query.title) : null;
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
     let queryFilter = isUuid
       ? `id=eq.${encodeURIComponent(id)}`
-      : (/^\d+$/.test(String(id))
-          ? `tmdb_id=eq.${encodeURIComponent(id)}`
-          : `title=eq.${encodeURIComponent(id)}`);
+      : (fallbackTitle
+          ? `title=eq.${encodeURIComponent(fallbackTitle)}`
+          : (/^\d+$/.test(String(id))
+              ? `tmdb_id=eq.${encodeURIComponent(id)}`
+              : `title=eq.${encodeURIComponent(id)}`));
     queryFilter += `&user_id=eq.${encodeURIComponent(userId)}`;
 
     // Delete from Supabase
@@ -783,7 +817,7 @@ app.delete('/api/user/watchlist/:id', async (req, res) => {
     });
 
     // Also remove from local storage
-    Storage.removeFromWatchlist(id);
+    Storage.removeFromWatchlist(id, fallbackTitle);
     res.json({ success: true, message: 'Item deleted from watchlist' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -806,42 +840,66 @@ app.delete('/api/user/watchlist', async (req, res) => {
 
 // Custom Curated Lists Endpoints
 app.get('/api/user/custom-lists', async (req, res) => {
-  const userId = req.query.userId || 'guest';
+  const userId = req.query.userId || req.query.user_id || 'guest';
   try {
     const sbRes = await supabaseFetch(`custom_lists?user_id=eq.${encodeURIComponent(userId)}&order=created_at.asc`);
     if (sbRes && sbRes.ok) {
       const lists = await sbRes.json();
-      return res.json({ success: true, lists });
+      return res.json({ success: true, count: lists.length, lists, source: 'supabase' });
     }
-  } catch (e) {}
-  res.json({ success: true, lists: [] });
+  } catch (e) {
+    console.warn('[Supabase custom_lists fetch error]:', e.message);
+  }
+
+  // Graceful fallback to persistent local Storage
+  const localLists = Storage.getCustomLists(userId);
+  res.json({ success: true, count: localLists.length, lists: localLists, source: 'local' });
 });
 
 app.post('/api/user/custom-lists', async (req, res) => {
   try {
-    const { userId, name, description, color, icon } = req.body;
-    const targetUserId = userId || 'guest';
-    if (!name || !name.trim()) return res.status(400).json({ success: false, error: 'List name is required' });
+    const listData = req.body.list || req.body;
+    const name = (listData.name || '').trim();
+    const description = (listData.description || '').trim();
+    const color = listData.color || '#ff2a5f';
+    const icon = listData.icon || 'bookmark';
+    const targetUserId = req.body.userId || listData.userId || req.body.user_id || 'guest';
+
+    if (!name) return res.status(400).json({ success: false, error: 'List name is required' });
+
+    // Ensure valid UUID for Supabase uuid column type
+    const isUuid = listData.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(listData.id));
+    const listId = isUuid ? String(listData.id) : crypto.randomUUID();
 
     const payload = {
+      id: listId,
       user_id: targetUserId,
-      name: name.trim(),
-      description: description || '',
-      color: color || '#e02424',
-      icon: icon || 'bookmark'
+      name,
+      description,
+      color,
+      icon,
+      created_at: listData.created_at || new Date().toISOString()
     };
 
+    let saved = payload;
     const sbRes = await supabaseFetch('custom_lists', {
       method: 'POST',
       headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
       body: JSON.stringify(payload)
     });
 
-    let saved = payload;
     if (sbRes && sbRes.ok) {
       const data = await sbRes.json();
-      if (data && data[0]) saved = data[0];
+      if (Array.isArray(data) && data[0]) {
+        saved = data[0];
+      }
+    } else if (sbRes) {
+      console.warn('[Supabase custom_lists POST warning]:', await sbRes.text());
     }
+
+    // Mirror into local Storage
+    Storage.saveCustomList(targetUserId, saved);
+
     res.json({ success: true, list: saved });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -851,40 +909,58 @@ app.post('/api/user/custom-lists', async (req, res) => {
 app.delete('/api/user/custom-lists/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.query.userId || 'guest';
-    await supabaseFetch(`custom_lists?id=eq.${id}&user_id=eq.${encodeURIComponent(userId)}`, { method: 'DELETE' });
+    const userId = req.query.userId || req.query.user_id || 'guest';
+
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))) {
+      await supabaseFetch(`custom_lists?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(userId)}`, { method: 'DELETE' });
+    }
+
+    // Remove from local Storage
+    Storage.deleteCustomList(userId, id);
+
     res.json({ success: true, message: 'Custom list deleted' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Watch Diary Endpoints
+// Watch Diary Endpoints (Supabase Cloud Database + Persistent Local Mirror)
 app.get('/api/user/diary', async (req, res) => {
-  const userId = req.query.userId || 'guest';
+  const userId = req.query.userId || req.query.user_id || 'guest';
   try {
     const sbRes = await supabaseFetch(`watch_diary?user_id=eq.${encodeURIComponent(userId)}&order=watch_date.desc,created_at.desc`);
     if (sbRes && sbRes.ok) {
       const diary = await sbRes.json();
-      return res.json({ success: true, diary });
+      return res.json({ success: true, count: diary.length, diary, source: 'supabase' });
     }
-  } catch (e) {}
-  res.json({ success: true, diary: [] });
+  } catch (e) {
+    console.warn('[Supabase watch_diary fetch error]:', e.message);
+  }
+
+  // Graceful fallback to persistent local Storage
+  const localDiary = Storage.getDiaryEntries(userId);
+  res.json({ success: true, count: localDiary.length, diary: localDiary, source: 'local' });
 });
 
 app.post('/api/user/diary', async (req, res) => {
   try {
-    const entry = req.body;
-    const targetUserId = entry.userId || entry.user_id || 'guest';
-    if (!entry.title) return res.status(400).json({ success: false, error: 'Title is required for diary entry' });
+    const entryData = req.body.entry || req.body.diary || req.body;
+    const targetUserId = req.body.userId || entryData.userId || req.body.user_id || entryData.user_id || 'guest';
+    const title = (entryData.title || entryData.movie_title || '').trim();
+    if (!title) return res.status(400).json({ success: false, error: 'Title is required for diary entry' });
 
-    const rawItemId = entry.watchlistItemId || entry.watchlist_item_id || null;
+    // Validate or generate UUID for database compatibility
+    const entryId = (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(entryData.id || '')))
+      ? entryData.id
+      : crypto.randomUUID();
+
+    const rawItemId = entryData.watchlistItemId || entryData.watchlist_item_id || null;
     let resolvedWatchlistItemId = rawItemId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(rawItemId))
       ? String(rawItemId)
       : null;
 
-    if (!resolvedWatchlistItemId && (entry.tmdbId || rawItemId)) {
-      const queryTmdb = entry.tmdbId || (/^\d+$/.test(String(rawItemId)) ? rawItemId : null);
+    if (!resolvedWatchlistItemId && (entryData.tmdbId || entryData.tmdb_id || rawItemId)) {
+      const queryTmdb = entryData.tmdbId || entryData.tmdb_id || (/^\d+$/.test(String(rawItemId)) ? rawItemId : null);
       if (queryTmdb) {
         try {
           const matchRes = await supabaseFetch(`watchlist_items?tmdb_id=eq.${queryTmdb}&user_id=eq.${encodeURIComponent(targetUserId)}&select=id&limit=1`);
@@ -898,33 +974,47 @@ app.post('/api/user/diary', async (req, res) => {
       }
     }
 
+    const watchDate = entryData.watch_date || entryData.watched_date || entryData.watchDate || new Date().toISOString().slice(0, 10);
+    const rating = (entryData.rating !== undefined && entryData.rating !== null && entryData.rating !== '') ? parseFloat(entryData.rating) : null;
+    const review = entryData.review || entryData.notes || entryData.diaryNotes || entryData.diary_notes || '';
+
     const payload = {
+      id: entryId,
       user_id: targetUserId,
       watchlist_item_id: resolvedWatchlistItemId,
-      tmdb_id: entry.tmdbId ? parseInt(entry.tmdbId, 10) : null,
-      title: entry.title,
-      media_type: entry.mediaType || 'movie',
-      poster: entry.poster || null,
-      year: entry.year ? parseInt(entry.year, 10) : null,
-      watch_date: entry.watchDate || new Date().toISOString().slice(0, 10),
-      rating: entry.rating ? parseFloat(entry.rating) : null,
-      review: entry.review || entry.notes || '',
-      season: entry.season ? parseInt(entry.season, 10) : null,
-      episode: entry.episode ? parseInt(entry.episode, 10) : null,
-      rewatch: Boolean(entry.rewatch)
+      tmdb_id: (entryData.tmdb_id || entryData.tmdbId) ? parseInt(entryData.tmdb_id || entryData.tmdbId, 10) : null,
+      title: title,
+      media_type: entryData.media_type || entryData.mediaType || 'movie',
+      poster: entryData.poster || entryData.poster_path || null,
+      year: entryData.year ? parseInt(entryData.year, 10) : null,
+      watch_date: watchDate,
+      rating: rating,
+      review: review,
+      season: entryData.season ? parseInt(entryData.season, 10) : null,
+      episode: entryData.episode ? parseInt(entryData.episode, 10) : null,
+      rewatch: Boolean(entryData.rewatch),
+      created_at: entryData.created_at || new Date().toISOString()
     };
 
-    const sbRes = await supabaseFetch('watch_diary', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=representation' },
-      body: JSON.stringify(payload)
-    });
-
     let saved = payload;
-    if (sbRes && sbRes.ok) {
-      const data = await sbRes.json();
-      if (data && data[0]) saved = data[0];
+    try {
+      const sbRes = await supabaseFetch('watch_diary', {
+        method: 'POST',
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+        body: JSON.stringify(payload)
+      });
+
+      if (sbRes && sbRes.ok) {
+        const data = await sbRes.json();
+        if (data && data[0]) saved = data[0];
+      }
+    } catch (sbErr) {
+      console.warn('[Supabase watch_diary save error]:', sbErr.message);
     }
+
+    // Mirror to persistent local Storage
+    Storage.saveDiaryEntry(targetUserId, saved);
+
     res.json({ success: true, entry: saved });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -934,8 +1024,15 @@ app.post('/api/user/diary', async (req, res) => {
 app.delete('/api/user/diary/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.query.userId || 'guest';
-    await supabaseFetch(`watch_diary?id=eq.${id}&user_id=eq.${encodeURIComponent(userId)}`, { method: 'DELETE' });
+    const userId = req.query.userId || req.query.user_id || 'guest';
+
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))) {
+      await supabaseFetch(`watch_diary?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(userId)}`, { method: 'DELETE' });
+    }
+
+    // Remove from local Storage
+    Storage.deleteDiaryEntry(userId, id);
+
     res.json({ success: true, message: 'Diary entry deleted' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

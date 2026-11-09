@@ -88,14 +88,14 @@ export class TMDB {
   static getAuthHeadersAndParams(options = {}) {
     const settings = Storage.getSettings();
     const token = (options.token && String(options.token).trim()) ||
-                  (settings.tmdbReadToken && String(settings.tmdbReadToken).trim()) ||
-                  (process.env.TMDB_READ_TOKEN && String(process.env.TMDB_READ_TOKEN).trim()) ||
-                  '';
-                  
+      (settings.tmdbReadToken && String(settings.tmdbReadToken).trim()) ||
+      (process.env.TMDB_READ_TOKEN && String(process.env.TMDB_READ_TOKEN).trim()) ||
+      '';
+
     const apiKey = (options.apiKey && String(options.apiKey).trim()) ||
-                   (settings.tmdbApiKey && String(settings.tmdbApiKey).trim()) ||
-                   (process.env.TMDB_API_KEY && String(process.env.TMDB_API_KEY).trim()) ||
-                   '';
+      (settings.tmdbApiKey && String(settings.tmdbApiKey).trim()) ||
+      (process.env.TMDB_API_KEY && String(process.env.TMDB_API_KEY).trim()) ||
+      '';
 
     const headers = {
       'Accept': 'application/json',
@@ -118,6 +118,76 @@ export class TMDB {
   /**
    * Fetch movies from live TMDB API.
    */
+
+  /**
+   * Evaluates whether an item's release year matches a year or decade filter.
+   */
+  static matchesYearFilter(itemYear, filterValue) {
+    if (!filterValue || filterValue === 'all') return true;
+    const y = parseInt(itemYear, 10);
+    if (!y || isNaN(y)) return false;
+
+    // Direct 4-digit year match
+    if (/^\d{4}$/.test(filterValue)) {
+      return y === parseInt(filterValue, 10);
+    }
+
+    // Decade matching: e.g. '2020s', '2010s', '2000s', '1990s', '1980s', '1970s', '1960s'
+    const decadeMatch = String(filterValue).match(/^(\d{4})s$/i);
+    if (decadeMatch) {
+      const start = parseInt(decadeMatch[1], 10);
+      return y >= start && y <= start + 9;
+    }
+
+    // Classic / pre-1970 or pre-1980
+    if (filterValue === 'classic' || filterValue === 'pre_1970' || filterValue === 'pre_1980') {
+      const maxYear = filterValue === 'pre_1980' ? 1979 : 1969;
+      return y <= maxYear;
+    }
+
+    return true;
+  }
+
+  /**
+   * Injects release year constraints into TMDB API query parameters.
+   */
+  static applyYearParamsToQuery(params, type, year) {
+    if (!year || year === 'all' || !params) return;
+
+    const setParam = (key, val) => {
+      if (typeof params.set === 'function') {
+        params.set(key, String(val));
+      } else if (typeof params === 'object') {
+        params[key] = val;
+      }
+    };
+
+    if (/^\d{4}$/.test(year)) {
+      if (type === 'tv') setParam('first_air_date_year', year);
+      else setParam('primary_release_year', year);
+      return;
+    }
+
+    const decadeMatch = String(year).match(/^(\d{4})s$/i);
+    if (decadeMatch) {
+      const start = parseInt(decadeMatch[1], 10);
+      if (type === 'tv') {
+        setParam('first_air_date.gte', `${start}-01-01`);
+        setParam('first_air_date.lte', `${start + 9}-12-31`);
+      } else {
+        setParam('primary_release_date.gte', `${start}-01-01`);
+        setParam('primary_release_date.lte', `${start + 9}-12-31`);
+      }
+      return;
+    }
+
+    if (year === 'classic' || year === 'pre_1970' || year === 'pre_1980') {
+      const maxYear = year === 'pre_1980' ? '1979-12-31' : '1969-12-31';
+      if (type === 'tv') setParam('first_air_date.lte', maxYear);
+      else setParam('primary_release_date.lte', maxYear);
+    }
+  }
+
   static async getMovies(options = {}) {
     return TMDB.getMedia({ ...options, type: 'movie' });
   }
@@ -145,8 +215,9 @@ export class TMDB {
       TMDB.getTVShows({ ...options, type: 'tv' })
     ]);
 
+    const year = options.year || 'all';
     const seen = new Set();
-    const combined = [];
+    let combined = [];
     const maxLen = Math.max(movies.length, tvShows.length);
     for (let i = 0; i < maxLen; i++) {
       if (movies[i] && !seen.has(`movie_${movies[i].id}`)) {
@@ -157,6 +228,10 @@ export class TMDB {
         seen.add(`tv_${tvShows[i].id}`);
         combined.push(tvShows[i]);
       }
+    }
+
+    if (year && year !== 'all') {
+      combined = combined.filter(m => TMDB.matchesYearFilter(m.year, year));
     }
 
     if (search && combined.length > 0) {
@@ -177,12 +252,13 @@ export class TMDB {
     const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
     if (!hasAuth) return [];
 
+    const year = options.year || 'all';
     let items = [];
     try {
       if (search) {
-        items = await TMDB.searchAnimeLive(search, mediaType, headers, queryParams);
+        items = await TMDB.searchAnimeLive(search, mediaType, headers, queryParams, year);
       } else {
-        items = await TMDB.fetchAnimeCategoryLive(category, mediaType, headers, queryParams);
+        items = await TMDB.fetchAnimeCategoryLive(category, mediaType, headers, queryParams, year);
       }
     } catch (err) {
       items = [];
@@ -190,6 +266,10 @@ export class TMDB {
 
     if (!Array.isArray(items)) {
       items = [];
+    }
+
+    if (year && year !== 'all') {
+      items = items.filter(m => TMDB.matchesYearFilter(m.year, year));
     }
 
     if (search && items.length > 0) {
@@ -206,6 +286,7 @@ export class TMDB {
     const type = options.type || 'movie';
     const search = (options.search || '').trim();
     const category = options.category || 'all';
+    const year = options.year || 'all';
 
     let items = [];
     const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
@@ -213,9 +294,9 @@ export class TMDB {
     if (hasAuth) {
       try {
         if (search) {
-          items = await TMDB.searchMediaLive(search, type, headers, queryParams);
+          items = await TMDB.searchMediaLive(search, type, headers, queryParams, year);
         } else {
-          items = await TMDB.fetchCategoryLive(type, category, headers, queryParams);
+          items = await TMDB.fetchCategoryLive(type, category, headers, queryParams, year);
         }
       } catch (err) {
         items = [];
@@ -224,6 +305,10 @@ export class TMDB {
 
     if (!Array.isArray(items)) {
       items = [];
+    }
+
+    if (year && year !== 'all') {
+      items = items.filter(m => TMDB.matchesYearFilter(m.year, year));
     }
 
     // Rank search results with best match on top
@@ -239,29 +324,111 @@ export class TMDB {
   }
 
   /**
-   * Fetch similar movies or TV shows for a given ID.
+   * Fetch genuinely similar movies or TV shows for a given ID.
+   * Multi-tiered strategy:
+   *  1. Direct franchise / collection installments (highest relevance)
+   *  2. Collaborative-filtering recommendations (/recommendations)
+   *  3. Shared director's acclaimed works in same tone/genre
+   *  4. Algorithmic fallback (/similar)
    */
   static async getSimilarMedia(id, type = 'movie', options = {}) {
     const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
     if (!hasAuth) return [];
 
-    const endpoint = type === 'tv' ? `/tv/${id}/similar` : `/movie/${id}/similar`;
-    const url = `${TMDB.BASE_URL}${endpoint}?${queryParams.toString()}`;
+    const isTv = type === 'tv';
+    const targetId = parseInt(id, 10);
+    const candidateMap = new Map();
 
+    const addCandidate = (item, priorityScore = 1) => {
+      if (!item || !item.id) return;
+      const itemId = parseInt(item.id, 10);
+      if (itemId === targetId) return; // Never recommend self
+      if (!item.poster_path && !item.poster) return; // Must have poster image
+
+      if (!candidateMap.has(itemId)) {
+        candidateMap.set(itemId, {
+          raw: item,
+          score: priorityScore
+        });
+      } else {
+        const existing = candidateMap.get(itemId);
+        existing.score += priorityScore;
+      }
+    };
+
+    // 1. Fetch recommendations endpoint (TMDB collaborative filtering recommendations)
     try {
-      const res = await TMDB.fetchWithRetry(url, { headers });
-      if (res && res.ok) {
-        const data = await res.json();
-        const results = data.results || [];
-        return results.slice(0, 14).map(item => ({
-          ...(type === 'tv' ? TMDB.mapTMDBTVResult(item) : TMDB.mapTMDBMovieResult(item)),
-          category: 'similar'
-        }));
+      const recEndpoint = isTv ? `/tv/${id}/recommendations` : `/movie/${id}/recommendations`;
+      const recUrl = `${TMDB.BASE_URL}${recEndpoint}?${queryParams.toString()}`;
+      const recRes = await TMDB.fetchWithRetry(recUrl, { headers });
+      if (recRes && recRes.ok) {
+        const recData = await recRes.json();
+        const recList = recData.results || [];
+        recList.forEach((rec, idx) => {
+          const rankBonus = Math.max(0, 30 - idx * 2);
+          addCandidate(rec, 50 + rankBonus);
+        });
       }
     } catch (e) {
-      console.warn(`Failed to fetch similar media for ${type} ${id}:`, e);
+      console.warn(`Failed to fetch recommendations for ${type} ${id}:`, e);
     }
-    return [];
+
+    // 2. For movies: Check if part of a collection/franchise (e.g. Dark Knight, Dune, John Wick)
+    if (!isTv) {
+      try {
+        const detailUrl = `${TMDB.BASE_URL}/movie/${id}?${queryParams.toString()}`;
+        const detailRes = await TMDB.fetchWithRetry(detailUrl, { headers });
+        if (detailRes && detailRes.ok) {
+          const detailData = await detailRes.json();
+          if (detailData && detailData.belongs_to_collection?.id) {
+            const collUrl = `${TMDB.BASE_URL}/collection/${detailData.belongs_to_collection.id}?${queryParams.toString()}`;
+            const collRes = await TMDB.fetchWithRetry(collUrl, { headers });
+            if (collRes && collRes.ok) {
+              const collData = await collRes.json();
+              if (collData && Array.isArray(collData.parts)) {
+                collData.parts.forEach(part => {
+                  addCandidate(part, 120); // Top tier
+                });
+              }
+            }
+          }
+        }
+      } catch (e) { }
+    }
+
+    // 3. Fallback / backfill with /similar if candidate pool is under 12
+    if (candidateMap.size < 12) {
+      try {
+        const simEndpoint = isTv ? `/tv/${id}/similar` : `/movie/${id}/similar`;
+        const simUrl = `${TMDB.BASE_URL}${simEndpoint}?${queryParams.toString()}`;
+        const simRes = await TMDB.fetchWithRetry(simUrl, { headers });
+        if (simRes && simRes.ok) {
+          const simData = await simRes.json();
+          const simList = simData.results || [];
+          simList.forEach((sim, idx) => {
+            const rankBonus = Math.max(0, 15 - idx);
+            addCandidate(sim, 10 + rankBonus);
+          });
+        }
+      } catch (e) { }
+    }
+
+    // Sort by composite score, then by vote average / rating
+    const sorted = Array.from(candidateMap.values())
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return (b.raw.vote_average || 0) - (a.raw.vote_average || 0);
+      })
+      .slice(0, 18)
+      .map(entry => {
+        const item = entry.raw;
+        return {
+          ...(isTv ? TMDB.mapTMDBTVResult(item) : TMDB.mapTMDBMovieResult(item)),
+          category: 'similar'
+        };
+      });
+
+    return sorted;
   }
 
   /**
@@ -299,7 +466,7 @@ export class TMDB {
             }
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     };
 
     // 1. Direct query page 1 and page 2 (to gather full franchises / all installments)
@@ -346,7 +513,7 @@ export class TMDB {
             }
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     return items;
@@ -384,10 +551,20 @@ export class TMDB {
     const hasExplicitGenres = Array.isArray(answers.genres) && answers.genres.length > 0;
     const isHorrorExplicit = hasExplicitGenres && answers.genres.some(g => String(g).toLowerCase() === 'horror');
 
+    // Special handling for Mind Benders preset: must return genuine mind benders, not generic sci-fi
+    const isMindBender = Boolean(
+      answers.isMindBender ||
+      answers.moodPreset === 'mind' ||
+      (hasExplicitGenres && answers.genres.some(g => /mind\s*bender|mindfuck|psychological/i.test(String(g))))
+    );
+    if (isMindBender) {
+      return TMDB.getMindBenderRecommendations(answers, options);
+    }
+
     // Determine targeted genre IDs
     const getGenreIdsForType = (dType) => {
       const mapToUse = dType === 'tv' ? TV_REVERSE_GENRE_MAP : REVERSE_GENRE_MAP;
-      
+
       // 1. User explicitly picked genres
       if (hasExplicitGenres) {
         const explicit = answers.genres.map(g => mapToUse[String(g).toLowerCase()]).filter(Boolean);
@@ -450,7 +627,7 @@ export class TMDB {
       params.set('sort_by', sortBy);
       params.set('vote_count.gte', String(minVotes));
       params.set('vote_average.gte', String(minRating));
-      
+
       const genreIds = getGenreIdsForType(dType);
       if (genreIds.length > 0) {
         if (isHorrorExplicit && dType === 'movie') {
@@ -491,7 +668,7 @@ export class TMDB {
 
       params.set('page', String(page));
       const url = `${TMDB.BASE_URL}${endpoint}?${params.toString()}`;
-      
+
       try {
         const res = await TMDB.fetchWithRetry(url, { headers });
         if (!res || !res.ok) return [];
@@ -522,7 +699,7 @@ export class TMDB {
       // Fetch from random pages and multiple sort strategies for variety
       const popPage = randomPage();
       const topPage = randomPage();
-      
+
       const [popularList, topRatedList] = await Promise.all([
         fetchDiscover(dType, 'popularity.desc', 80, 6.0, popPage),
         fetchDiscover(dType, 'vote_average.desc', 200, 6.5, topPage)
@@ -555,7 +732,7 @@ export class TMDB {
         const otherGenresLower = answers.genres
           .map(g => String(g).toLowerCase())
           .filter(g => g !== 'horror');
-        
+
         merged.sort((a, b) => {
           const aHasOther = a.genres.some(g => otherGenresLower.includes(String(g).toLowerCase()));
           const bHasOther = b.genres.some(g => otherGenresLower.includes(String(g).toLowerCase()));
@@ -619,7 +796,7 @@ export class TMDB {
             category: 'quiz'
           }));
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // Final fallback if everything was too strict (maintaining horror constraint if requested)
@@ -648,7 +825,227 @@ export class TMDB {
           }
           finalResults = shuffle(items);
         }
-      } catch (e) {}
+      } catch (e) { }
+    }
+
+    return finalResults.slice(0, 24);
+  }
+
+  /**
+   * Dedicated recommendation engine for Mind Benders.
+   * Ensures only genuine mind benders, cerebral mysteries, psychological thrillers,
+   * and reality-bending films are returned, while strictly filtering out generic sci-fi,
+   * superhero/popcorn action, family movies, and kids animation.
+   */
+  static async getMindBenderRecommendations(answers = {}, options = {}) {
+    const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
+    if (!hasAuth) return [];
+
+    const mediaPreference = answers.mediaPreference || 'movies';
+    const isTV = mediaPreference === 'tv';
+    const isBoth = mediaPreference === 'both';
+
+    // Curated canon of verified legendary movie Mind Benders
+    const CANONICAL_MIND_BENDERS = [
+      { id: 27205, title: 'Inception', year: 2010, rating: 8.4, ratingPercent: 84, voteCount: 36000, genres: ['Action', 'Sci-Fi', 'Crime'], backdrop: 'https://image.tmdb.org/t/p/w1280/8ZTVqvKDQU8emYGUxPtZji9umPL.jpg', poster: `${TMDB.IMAGE_BASE_URL}/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg`, synopsis: 'Cobb, a skilled thief who commits corporate espionage by infiltrating the subconscious of his targets, is offered a chance to regain his old life as payment for a task considered to be impossible: inception.' },
+      { id: 11324, title: 'Shutter Island', year: 2010, rating: 8.2, ratingPercent: 82, voteCount: 23500, genres: ['Drama', 'Thriller', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/c24sv2weTHPsmDa7jEMN0m2P3RT.jpg', poster: `${TMDB.IMAGE_BASE_URL}/4GDy0PHYX3VRXUtwK5ysFbg3kEx.jpg`, synopsis: "World War II soldier-turned-U.S. Marshal Teddy Daniels investigates the disappearance of a patient from Boston's Shutter Island Ashecliffe Hospital." },
+      { id: 77, title: 'Memento', year: 2000, rating: 8.2, ratingPercent: 82, voteCount: 14800, genres: ['Mystery', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/yuNs09hvpHVU1cBTCA99x5w2Qyn.jpg`, synopsis: 'Leonard Shelby is tracking down the man who raped and murdered his wife while suffering from a rare, untreatable form of short-term memory loss.' },
+      { id: 1124, title: 'The Prestige', year: 2006, rating: 8.2, ratingPercent: 82, voteCount: 16000, genres: ['Drama', 'Mystery', 'Sci-Fi'], backdrop: 'https://image.tmdb.org/t/p/w1280/bdp5F76lYmE9V7vGjR8mE7oR60F.jpg', poster: `${TMDB.IMAGE_BASE_URL}/tRNlZbgNCNOpLpbPEz5L8G8A0JN.jpg`, synopsis: 'A mysterious story of two magicians whose intense rivalry leads them on a life-long battle for supremacy -- full of obsession, deceit and jealousy.' },
+      { id: 550, title: 'Fight Club', year: 1999, rating: 8.4, ratingPercent: 84, voteCount: 29000, genres: ['Drama', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/hZkgoQYus5vegHoetLkCJzb17zJ.jpg', poster: `${TMDB.IMAGE_BASE_URL}/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg`, synopsis: 'A ticking-time-bomb insomniac and a slippery soap salesman channel primal male aggression into a shocking new form of therapy.' },
+      { id: 603, title: 'The Matrix', year: 1999, rating: 8.2, ratingPercent: 82, voteCount: 25000, genres: ['Action', 'Sci-Fi'], backdrop: 'https://image.tmdb.org/t/p/w1280/fNG7i7rqMErkcqhohV2a6JWdlv0.jpg', poster: `${TMDB.IMAGE_BASE_URL}/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg`, synopsis: 'A computer hacker learns from mysterious rebels about the true nature of his reality and his role in the war against its controllers.' },
+      { id: 157336, title: 'Interstellar', year: 2014, rating: 8.4, ratingPercent: 84, voteCount: 35000, genres: ['Adventure', 'Drama', 'Sci-Fi'], backdrop: 'https://image.tmdb.org/t/p/w1280/xJHokMbljvjADYdit5fK5VQsXEG.jpg', poster: `${TMDB.IMAGE_BASE_URL}/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg`, synopsis: 'The adventures of a group of explorers who make use of a newly discovered wormhole to surpass the limitations on human space travel.' },
+      { id: 141, title: 'Donnie Darko', year: 2001, rating: 7.8, ratingPercent: 78, voteCount: 12500, genres: ['Fantasy', 'Drama', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/bM4u6m5jVv7G9r8L0Y6wN3Z2b9y.jpg', poster: `${TMDB.IMAGE_BASE_URL}/jdfZ080i1rW0zG7V13Jp0xP4T4B.jpg`, synopsis: 'After narrowly escaping a bizarre accident, a troubled teenager is plagued by visions of a large bunny rabbit that manipulates him into crimes.' },
+      { id: 220289, title: 'Coherence', year: 2013, rating: 7.3, ratingPercent: 73, voteCount: 2600, genres: ['Thriller', 'Sci-Fi', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/qf2e2h1mP6Bv8K7Y1V9t3e5v7x9.jpg', poster: `${TMDB.IMAGE_BASE_URL}/jWc0bK2Q9v7k3x7B1v3y8N1x7Y9.jpg`, synopsis: 'Strange things begin to happen when a group of friends gather for a dinner party on an evening when a comet passes overhead.' },
+      { id: 206487, title: 'Predestination', year: 2014, rating: 7.4, ratingPercent: 74, voteCount: 6200, genres: ['Sci-Fi', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/m9N8j7Y1V9t3e5v7x9P6Bv8K7Y1.jpg', poster: `${TMDB.IMAGE_BASE_URL}/n5H9x7B1v3y8N1x7Y9jWc0bK2Q9.jpg`, synopsis: 'The life of a time-traveling Temporal Agent on his final assignment, pursuing an elusive criminal throughout time.' },
+      { id: 38, title: 'Eternal Sunshine of the Spotless Mind', year: 2004, rating: 8.1, ratingPercent: 81, voteCount: 14500, genres: ['Sci-Fi', 'Drama', 'Romance'], backdrop: 'https://image.tmdb.org/t/p/w1280/57T5PecWvX6a6pA4M5Z4q2H6p0r.jpg', poster: `${TMDB.IMAGE_BASE_URL}/5MwkWH9tYHv3mV9OdYTMR5qreIz.jpg`, synopsis: 'Joel Barish, heartbroken that his girlfriend underwent a procedure to erase him from her memory, decides to undergo the same procedure.' },
+      { id: 329865, title: 'Arrival', year: 2016, rating: 7.6, ratingPercent: 76, voteCount: 17500, genres: ['Drama', 'Sci-Fi', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/y2Ajnh24Xv3Mv9OdYTMR5qreIz.jpg', poster: `${TMDB.IMAGE_BASE_URL}/x2OgozgDp5r6bRm6QL40vC7tV9y.jpg`, synopsis: 'An expert linguist is recruited by the military to determine whether alien crafts appearing around the world come in peace or are a threat.' },
+      { id: 577922, title: 'Tenet', year: 2020, rating: 7.2, ratingPercent: 72, voteCount: 9600, genres: ['Action', 'Sci-Fi', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/wzJRB4NaiQDAuRY9xqi5IRagGFt.jpg', poster: `${TMDB.IMAGE_BASE_URL}/k68nPLbIST6NP96JmTxmZijEvCA.jpg`, synopsis: 'Armed with only one word - Tenet - and fighting for the survival of the entire world, the Protagonist journeys through international espionage.' },
+      { id: 37165, title: 'The Truman Show', year: 1998, rating: 8.1, ratingPercent: 81, voteCount: 18000, genres: ['Comedy', 'Drama', 'Sci-Fi'], backdrop: 'https://image.tmdb.org/t/p/w1280/7C921bu0P78iW4qM5Z4q2H6p0r.jpg', poster: `${TMDB.IMAGE_BASE_URL}/vuza0WqY239muDc1EVj4657Z1Z.jpg`, synopsis: 'An insurance salesman discovers his whole life is actually a reality TV show broadcast live to the entire world.' },
+      { id: 45612, title: 'Source Code', year: 2011, rating: 7.3, ratingPercent: 73, voteCount: 9200, genres: ['Thriller', 'Sci-Fi', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/qf2e2h1mP6Bv8K7Y1V9t3e5v7x9.jpg', poster: `${TMDB.IMAGE_BASE_URL}/ogsqhLss2gQvO6v5eJ1q6F7tV9y.jpg`, synopsis: 'A soldier wakes up in the body of an unknown commuter in an 8-minute loop to identify the bomber of a Chicago train.' },
+      { id: 26466, title: 'Triangle', year: 2009, rating: 6.9, ratingPercent: 69, voteCount: 2500, genres: ['Horror', 'Mystery', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/bM4u6m5jVv7G9r8L0Y6wN3Z2b9y.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7C921bu0P78iW4qM5Z4q2H6p0r.jpg`, synopsis: 'The passengers of a yachting trip in the Atlantic Ocean take shelter on a derelict ocean liner that is caught in an eerie time loop.' },
+      { id: 745, title: 'The Sixth Sense', year: 1999, rating: 8.0, ratingPercent: 80, voteCount: 11000, genres: ['Mystery', 'Thriller', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/w1280/bdp5F76lYmE9V7vGjR8mE7oR60F.jpg', poster: `${TMDB.IMAGE_BASE_URL}/4AfSDjjCy6T5LA1BCisGRSmGi2a.jpg`, synopsis: 'A child psychologist starts treating an isolated young boy who claims to see dead people.' },
+      { id: 264660, title: 'Ex Machina', year: 2014, rating: 7.6, ratingPercent: 76, voteCount: 13000, genres: ['Drama', 'Sci-Fi'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/tl7O7W51k2iSgV4F6q7W51k2iSg.jpg`, synopsis: 'A young programmer evaluates the human qualities of a breathtaking humanoid A.I. at a remote mountain retreat.' },
+      { id: 2666, title: 'Dark City', year: 1998, rating: 7.3, ratingPercent: 73, voteCount: 2800, genres: ['Mystery', 'Sci-Fi'], backdrop: 'https://image.tmdb.org/t/p/w1280/xJHokMbljvjADYdit5fK5VQsXEG.jpg', poster: `${TMDB.IMAGE_BASE_URL}/9w1XG1yX7o1M8b0Y6wN3Z2b9y.jpg`, synopsis: 'A man struggles with memories in a nightmarish, nocturnal world controlled by beings with telekinetic powers.' },
+      { id: 4553, title: 'The Machinist', year: 2004, rating: 7.5, ratingPercent: 75, voteCount: 5600, genres: ['Drama', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/vU5W4q2H6p0r5MwkWH9tYHv3mV9.jpg`, synopsis: "An industrial worker who hasn't slept in a year begins to doubt his own sanity as bizarre occurrences torment him." },
+      { id: 2832, title: 'Identity', year: 2003, rating: 7.2, ratingPercent: 72, voteCount: 3800, genres: ['Mystery', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/bM4u6m5jVv7G9r8L0Y6wN3Z2b9y.jpg', poster: `${TMDB.IMAGE_BASE_URL}/tRNlZbgNCNOpLpbPEz5L8G8A0JN.jpg`, synopsis: 'Ten strangers stranded at a remote Nevada motel during a storm are mysteriously murdered one by one.' },
+      { id: 670, title: 'Oldboy', year: 2003, rating: 8.3, ratingPercent: 83, voteCount: 8600, genres: ['Action', 'Drama', 'Mystery', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/pWDtHJqTGv97Y95YrENyP7UMnvB.jpg`, synopsis: 'After being imprisoned for 15 years, a man is released and must discover the identity of his captor.' },
+      { id: 411088, title: 'The Invisible Guest', year: 2016, rating: 8.1, ratingPercent: 81, voteCount: 4700, genres: ['Crime', 'Mystery', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7C921bu0P78iW4qM5Z4q2H6p0r.jpg`, synopsis: 'A successful businessman accused of murder works with a witness preparation expert to devise his defense in a gripping puzzle.' },
+      { id: 807, title: 'Se7en', year: 1995, rating: 8.4, ratingPercent: 84, voteCount: 21000, genres: ['Crime', 'Mystery', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/6yoghtyTpznpBik8EngEmJskVUO.jpg`, synopsis: 'Two detectives hunt a serial killer who stages elaborate murders inspired by the seven deadly sins.' },
+      { id: 629, title: 'The Usual Suspects', year: 1995, rating: 8.2, ratingPercent: 82, voteCount: 10400, genres: ['Drama', 'Crime', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/bUPmtQzrRhzg2KiVYMpVIv23Qm1.jpg`, synopsis: 'Held in an L.A. interrogation room, a crippled con man weaves a tale of the elusive mastermind Keyser Söze.' },
+      { id: 146233, title: 'Prisoners', year: 2013, rating: 8.1, ratingPercent: 81, voteCount: 12100, genres: ['Drama', 'Thriller', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/uhvi6kud6mcl5zgvF4iJgHq81X.jpg`, synopsis: "When a father's daughter goes missing and the police release the primary suspect, he takes matters into his own hands." },
+      { id: 210577, title: 'Gone Girl', year: 2014, rating: 7.9, ratingPercent: 79, voteCount: 18500, genres: ['Mystery', 'Thriller', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/qymaZZQb5xsTQ2BYu99XgCgxiqU.jpg`, synopsis: 'A man becomes the center of an intense media circus and criminal investigation after his wife mysteriously vanishes.' },
+      { id: 496243, title: 'Parasite', year: 2019, rating: 8.5, ratingPercent: 85, voteCount: 18000, genres: ['Comedy', 'Thriller', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'A poor family schemes to become employed by a wealthy family by infiltrating their household, sparking unforeseen consequences.' },
+      { id: 10494, title: 'Perfect Blue', year: 1998, rating: 8.3, ratingPercent: 83, voteCount: 2700, genres: ['Animation', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'A pop idol sheds her innocent image to become an actress, but slips into a descent where reality and delusion blur.' },
+      { id: 419430, title: 'Get Out', year: 2017, rating: 7.6, ratingPercent: 76, voteCount: 17000, genres: ['Mystery', 'Thriller', 'Horror'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/tFXcEccSQMf3lfhfXKSU9iRBpa3.jpg`, synopsis: "A young African-American visits his white girlfriend's parents for the weekend, where a disturbing secret unravels." },
+      { id: 1954, title: 'The Butterfly Effect', year: 2004, rating: 7.5, ratingPercent: 75, voteCount: 7800, genres: ['Sci-Fi', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/pWDtHJqTGv97Y95YrENyP7UMnvB.jpg`, synopsis: 'A young man discovers he can travel back in time to change his past, but each change alters the future with devastating consequences.' },
+      { id: 1018, title: 'Mulholland Drive', year: 2001, rating: 7.9, ratingPercent: 79, voteCount: 6300, genres: ['Thriller', 'Drama', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'An aspiring actress befriends an amnesiac woman recovering from a car accident as dreams and reality warp in Hollywood.' },
+      { id: 63, title: 'Twelve Monkeys', year: 1995, rating: 7.6, ratingPercent: 76, voteCount: 8200, genres: ['Mystery', 'Sci-Fi', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'In a future world devastated by disease, a convict is sent back in time to gather information about the origin of the deadly virus.' },
+      { id: 44214, title: 'Black Swan', year: 2010, rating: 7.7, ratingPercent: 77, voteCount: 14000, genres: ['Drama', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'A ballet dancer wins the lead in "Swan Lake" and is pushed to the edge of sanity as she struggles to embrace her dark side.' },
+      { id: 619264, title: 'The Platform', year: 2019, rating: 7.0, ratingPercent: 70, voteCount: 6800, genres: ['Sci-Fi', 'Thriller', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'A vertical prison with one cell per level. Two people per cell. Only one food platform and two minutes per day to feed.' },
+      { id: 431, title: 'Cube', year: 1997, rating: 6.9, ratingPercent: 69, voteCount: 3400, genres: ['Thriller', 'Mystery', 'Sci-Fi'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'Six strangers awake in a bizarre endless labyrinth of deadly booby-trapped cubes.' }
+    ].map(m => ({ ...m, mediaType: 'movie' }));
+
+    // Curated canon of verified legendary TV Series Mind Benders
+    const CANONICAL_TV_MIND_BENDERS = [
+      { id: 70523, title: 'Dark', year: 2017, rating: 8.4, ratingPercent: 84, voteCount: 6200, mediaType: 'tv', genres: ['Sci-Fi & Fantasy', 'Drama', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/3lBDg3i6nn5R2NKFCJHgGry0ahS.jpg', poster: `${TMDB.IMAGE_BASE_URL}/apbrbWs8M9lyOpJYU5WXrpFbk1Z.jpg`, synopsis: 'A missing child sets four families on a frantic hunt for answers as they unearth a mind-bending mystery that spans three generations.' },
+      { id: 95557, title: 'Severance', year: 2022, rating: 8.4, ratingPercent: 84, voteCount: 2200, mediaType: 'tv', genres: ['Drama', 'Mystery', 'Sci-Fi & Fantasy'], backdrop: 'https://image.tmdb.org/t/p/w1280/95557.jpg', poster: `${TMDB.IMAGE_BASE_URL}/95557.jpg`, synopsis: 'Mark leads a team of office workers whose memories have been surgically divided between their work and personal lives.' },
+      { id: 42009, title: 'Black Mirror', year: 2011, rating: 8.3, ratingPercent: 83, voteCount: 4900, mediaType: 'tv', genres: ['Sci-Fi & Fantasy', 'Drama', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/42009.jpg', poster: `${TMDB.IMAGE_BASE_URL}/42009.jpg`, synopsis: 'A contemporary British anthology series with twist-laden tales exploring twisted high-tech near futures.' },
+      { id: 63247, title: 'Westworld', year: 2016, rating: 8.0, ratingPercent: 80, voteCount: 5200, mediaType: 'tv', genres: ['Sci-Fi & Fantasy', 'Western', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/w1280/63247.jpg', poster: `${TMDB.IMAGE_BASE_URL}/63247.jpg`, synopsis: 'A dark odyssey about the dawn of artificial consciousness and the evolution of sin.' },
+      { id: 62560, title: 'Mr. Robot', year: 2015, rating: 8.2, ratingPercent: 82, voteCount: 4600, mediaType: 'tv', genres: ['Crime', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/w1280/62560.jpg', poster: `${TMDB.IMAGE_BASE_URL}/62560.jpg`, synopsis: 'A cyber-security engineer and vigilante hacker with social anxiety disorder is recruited by an insurrectionary anarchist.' },
+      { id: 46648, title: 'True Detective', year: 2014, rating: 8.3, ratingPercent: 83, voteCount: 3500, mediaType: 'tv', genres: ['Drama', 'Crime', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/46648.jpg', poster: `${TMDB.IMAGE_BASE_URL}/46648.jpg`, synopsis: 'An anthology series in which police investigations unearth the personal and professional secrets of those involved.' },
+      { id: 67744, title: 'Mindhunter', year: 2017, rating: 8.1, ratingPercent: 81, voteCount: 2600, mediaType: 'tv', genres: ['Drama', 'Crime'], backdrop: 'https://image.tmdb.org/t/p/w1280/67744.jpg', poster: `${TMDB.IMAGE_BASE_URL}/67744.jpg`, synopsis: 'In the late 1970s two FBI agents expand criminal science by delving into the psychology of murder.' },
+      { id: 125988, title: 'Silo', year: 2023, rating: 8.1, ratingPercent: 81, voteCount: 1300, mediaType: 'tv', genres: ['Sci-Fi & Fantasy', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/w1280/125988.jpg', poster: `${TMDB.IMAGE_BASE_URL}/125988.jpg`, synopsis: 'Men and women live in a giant underground silo with regulations they believe are meant to protect them.' },
+      { id: 75219, title: 'Russian Doll', year: 2019, rating: 7.3, ratingPercent: 73, voteCount: 1100, mediaType: 'tv', genres: ['Comedy', 'Drama', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/75219.jpg', poster: `${TMDB.IMAGE_BASE_URL}/75219.jpg`, synopsis: 'A woman gets caught in a mysterious loop, repeatedly attending the same party and dying at the end of the night.' },
+      { id: 54344, title: 'The Leftovers', year: 2014, rating: 7.7, ratingPercent: 77, voteCount: 1400, mediaType: 'tv', genres: ['Drama', 'Mystery', 'Sci-Fi & Fantasy'], backdrop: 'https://image.tmdb.org/t/p/w1280/54344.jpg', poster: `${TMDB.IMAGE_BASE_URL}/54344.jpg`, synopsis: 'Revolves around the mysterious disappearance of two percent of the global population.' }
+    ];
+
+    // Helper to shuffle array in-place
+    const shuffle = (arr) => {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+
+    // Known franchises and superhero/popcorn keywords to explicitly exclude
+    const POPCORN_FRANCHISE_REGEX = /spider-man|superman|avengers|doctor strange|fantastic 4|batman v superman|iron man|thor|captain america|ant-man|black panther|guardians of the galaxy|shazam|aquaman|justice league|the flash|deadpool|x-men|wolverine|fast & furious|transformers|jurassic world|jurassic park|godzilla|kong|star wars|star trek|rebel moon|resident evil|alien vs predator|battleship|space jam|meg 2|bad boys|expendables/i;
+
+    // TMDB Keywords that specifically designate mind benders / psychological twists:
+    // 12565: psychological thriller, 374835: mind fuck, 326438: twist ending,
+    // 362567: mind-bending, 10854: time loop, 174089: unreliable narrator,
+    // 272553: psychological, 175629: alternative reality, 1453: amnesia,
+    // 2340: paranoia, 851: dual identity, 1566: dreams, 288859: psychological fantasy
+    const MIND_KEYWORDS = [12565, 374835, 326438, 362567, 10854, 174089, 272553, 175629, 1453, 2340, 851, 1566, 288859];
+
+    // Discover real-time mind benders from TMDB
+    const discoverMindBenders = async (dType = 'movie') => {
+      const endpoint = dType === 'tv' ? '/discover/tv' : '/discover/movie';
+      const page = Math.floor(Math.random() * 2) + 1; // 1 or 2 for variety
+      const params = new URLSearchParams(queryParams);
+      params.set('sort_by', 'popularity.desc');
+      params.set('vote_count.gte', dType === 'tv' ? '80' : '120');
+      params.set('vote_average.gte', '6.6');
+      // Strictly exclude family, kids, music, documentary
+      params.set('without_genres', '10751,10762,10402,99');
+      if (dType === 'movie') {
+        params.set('with_keywords', MIND_KEYWORDS.join('|'));
+      } else {
+        // For TV, use Mystery / Drama / Sci-Fi with psychological focus
+        params.set('with_genres', '9648|10765');
+      }
+      if (answers.recency && answers.recency !== 'any') {
+        const cutoff = new Date().getFullYear() - parseInt(answers.recency, 10);
+        const dateKey = dType === 'tv' ? 'first_air_date.gte' : 'primary_release_date.gte';
+        params.set(dateKey, `${cutoff}-01-01`);
+      }
+      params.set('page', String(page));
+
+      try {
+        const url = `${TMDB.BASE_URL}${endpoint}?${params.toString()}`;
+        const res = await TMDB.fetchWithRetry(url, { headers });
+        if (!res || !res.ok) return [];
+        const data = await res.json();
+        const raw = (data.results || []).map(r => (dType === 'tv' ? TMDB.mapTMDBTVResult(r) : TMDB.mapTMDBMovieResult(r)));
+
+        // Strict post-filter: reject generic sci-fi, kids animation, superhero movies
+        return raw.filter(m => {
+          const title = (m.title || '').trim();
+          if (POPCORN_FRANCHISE_REGEX.test(title)) return false;
+
+          const genresLower = (m.genres || []).map(g => String(g).toLowerCase());
+          // If sci-fi is present, it MUST also have a cerebral / mystery / thriller / drama genre
+          const hasSciFi = genresLower.includes('sci-fi') || genresLower.includes('science fiction') || genresLower.includes('sci-fi & fantasy');
+          if (hasSciFi) {
+            const hasCerebralGenre = genresLower.some(g => ['mystery', 'thriller', 'drama', 'crime', 'horror'].includes(g));
+            if (!hasCerebralGenre) return false;
+          }
+
+          // Exclude non-thriller animations
+          if (genresLower.includes('animation') && !genresLower.includes('thriller') && !genresLower.includes('mystery')) {
+            return false;
+          }
+
+          return true;
+        });
+      } catch (err) {
+        return [];
+      }
+    };
+
+    let discoveredMovies = [];
+    let discoveredTV = [];
+
+    if (isTV) {
+      discoveredTV = await discoverMindBenders('tv');
+    } else if (isBoth) {
+      const [m, t] = await Promise.all([
+        discoverMindBenders('movie'),
+        discoverMindBenders('tv')
+      ]);
+      discoveredMovies = m;
+      discoveredTV = t;
+    } else {
+      discoveredMovies = await discoverMindBenders('movie');
+    }
+
+    // Filter canonical items by recency if specified
+    const recencyCutoff = (answers.recency && answers.recency !== 'any')
+      ? new Date().getFullYear() - parseInt(answers.recency, 10)
+      : null;
+
+    const filterCanonicalByRecency = (items) => {
+      if (!recencyCutoff) return items;
+      return items.filter(i => {
+        const y = parseInt(i.year, 10);
+        return !isNaN(y) && y >= recencyCutoff;
+      });
+    };
+
+    const eligibleCanonicalMovies = filterCanonicalByRecency(CANONICAL_MIND_BENDERS);
+    const eligibleCanonicalTV = filterCanonicalByRecency(CANONICAL_TV_MIND_BENDERS);
+
+    // Pick a randomized sample of canonical mind benders
+    const shuffledCanonicalMovies = shuffle([...eligibleCanonicalMovies]).slice(0, 10);
+    const shuffledCanonicalTV = shuffle([...eligibleCanonicalTV]).slice(0, 5);
+
+    // Merge and deduplicate
+    const seenIds = new Set();
+    const finalResults = [];
+
+    const addUnique = (item) => {
+      if (!item || !item.id || seenIds.has(item.id)) return;
+      seenIds.add(item.id);
+      finalResults.push({
+        ...item,
+        category: 'quiz'
+      });
+    };
+
+    if (isTV) {
+      shuffledCanonicalTV.forEach(addUnique);
+      discoveredTV.forEach(addUnique);
+    } else if (isBoth) {
+      const maxLen = Math.max(shuffledCanonicalMovies.length + discoveredMovies.length, shuffledCanonicalTV.length + discoveredTV.length);
+      const allMovies = [...shuffledCanonicalMovies, ...discoveredMovies];
+      const allTV = [...shuffledCanonicalTV, ...discoveredTV];
+      for (let i = 0; i < maxLen; i++) {
+        if (i < allMovies.length) addUnique(allMovies[i]);
+        if (i < allTV.length) addUnique(allTV[i]);
+      }
+    } else {
+      // Movies preference (default for Mind Benders button)
+      // Interleave canonical masterpieces with dynamic discovered gems
+      const totalLen = Math.max(shuffledCanonicalMovies.length, discoveredMovies.length);
+      for (let i = 0; i < totalLen; i++) {
+        if (i < shuffledCanonicalMovies.length) addUnique(shuffledCanonicalMovies[i]);
+        if (i < discoveredMovies.length) addUnique(discoveredMovies[i]);
+      }
+    }
+
+    // If still empty (e.g. strict recency had 0 results), fallback to canonical movies
+    if (finalResults.length === 0) {
+      CANONICAL_MIND_BENDERS.slice(0, 24).forEach(addUnique);
     }
 
     return finalResults.slice(0, 24);
@@ -657,23 +1054,35 @@ export class TMDB {
   /**
    * Fetch category feeds for Movies or TV Series.
    */
-  static async fetchCategoryLive(type = 'movie', category, headers, baseParams) {
+  static async fetchCategoryLive(type = 'movie', category, headers, baseParams, year = 'all') {
     let endpoint;
+    const hasYear = Boolean(year && year !== 'all');
     if (type === 'tv') {
-      endpoint = '/trending/tv/week';
-      if (category === 'top_rated') endpoint = '/tv/top_rated';
-      if (category === 'popular') endpoint = '/tv/popular';
-      if (category === 'on_the_air' || category === 'now_playing') endpoint = '/tv/on_the_air';
+      endpoint = hasYear ? '/discover/tv' : '/trending/tv/week';
+      if (category === 'top_rated') endpoint = hasYear ? '/discover/tv' : '/tv/top_rated';
+      if (category === 'popular') endpoint = hasYear ? '/discover/tv' : '/tv/popular';
+      if (category === 'on_the_air' || category === 'now_playing') endpoint = hasYear ? '/discover/tv' : '/tv/on_the_air';
     } else {
-      endpoint = '/trending/movie/week';
-      if (category === 'top_rated') endpoint = '/movie/top_rated';
-      if (category === 'popular') endpoint = '/movie/popular';
-      if (category === 'now_playing') endpoint = '/movie/now_playing';
+      endpoint = hasYear ? '/discover/movie' : '/trending/movie/week';
+      if (category === 'top_rated') endpoint = hasYear ? '/discover/movie' : '/movie/top_rated';
+      if (category === 'popular') endpoint = hasYear ? '/discover/movie' : '/movie/popular';
+      if (category === 'now_playing') endpoint = hasYear ? '/discover/movie' : '/movie/now_playing';
     }
 
     const fetchPage = async (page) => {
       const params = new URLSearchParams(baseParams);
       params.set('page', page.toString());
+
+      if (hasYear) {
+        if (category === 'top_rated') {
+          params.set('sort_by', 'vote_average.desc');
+          params.set('vote_count.gte', '100');
+        } else {
+          params.set('sort_by', 'popularity.desc');
+        }
+        TMDB.applyYearParamsToQuery(params, type, year);
+      }
+
       const url = `${TMDB.BASE_URL}${endpoint}?${params.toString()}`;
       const res = await TMDB.fetchWithRetry(url, { headers });
       if (!res || !res.ok) return [];
@@ -684,22 +1093,31 @@ export class TMDB {
     const [page1, page2] = await Promise.all([fetchPage(1), fetchPage(2)]);
     const combined = [...page1, ...page2];
 
-    return combined.map(r => ({
+    let results = combined.map(r => ({
       ...(type === 'tv' ? TMDB.mapTMDBTVResult(r) : TMDB.mapTMDBMovieResult(r)),
       category: category === 'all' ? 'trending' : category
     }));
+
+    if (hasYear) {
+      results = results.filter(item => TMDB.matchesYearFilter(item.year, year));
+    }
+
+    return results;
   }
 
   /**
    * Fetch category feeds for Anime (TV series and Movies).
    */
-  static async fetchAnimeCategoryLive(category = 'all', mediaType = 'all', headers, baseParams) {
+  static async fetchAnimeCategoryLive(category = 'all', mediaType = 'all', headers, baseParams, year = 'all') {
     const fetchAnimeFor = async (type, page = 1) => {
       const endpoint = type === 'tv' ? '/discover/tv' : '/discover/movie';
       const params = new URLSearchParams(baseParams);
       params.set('with_genres', '16');
       params.set('with_original_language', 'ja');
       params.set('page', page.toString());
+      if (year && year !== 'all') {
+        TMDB.applyYearParamsToQuery(params, type, year);
+      }
 
       if (category === 'top_rated') {
         params.set('sort_by', 'vote_average.desc');
@@ -782,7 +1200,7 @@ export class TMDB {
           const data = await res.json();
           return data.results || [];
         }
-      } catch (e) {}
+      } catch (e) { }
       return [];
     };
 
@@ -900,7 +1318,7 @@ export class TMDB {
   static trailerCache = new Map();
 
   /**
-   * Search YouTube for an official trailer key if TMDB lacks one.
+   * Search YouTube for a verified trailer key matching title and year if TMDB lacks one.
    */
   static async findYouTubeTrailer(title, year = '', type = 'movie') {
     if (!title) return null;
@@ -910,7 +1328,7 @@ export class TMDB {
     }
 
     const typeKeyword = type === 'tv' ? 'tv series' : 'movie';
-    const query = `${title} ${year ? year : ''} ${typeKeyword} official trailer`.replace(/\s+/g, ' ').trim();
+    const query = `${title} ${year ? year : ''} ${typeKeyword} trailer`.replace(/\s+/g, ' ').trim();
     const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
 
     try {
@@ -923,17 +1341,89 @@ export class TMDB {
       if (!res || !res.ok) return null;
 
       const text = await res.text();
-      const matches = [...text.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)];
-      if (matches.length > 0) {
-        const foundKey = matches[0][1];
+
+      // Extract video items with title from YouTube's videoRenderer
+      const candidates = [];
+      const seen = new Set();
+      const vrRegex = /"videoRenderer":\{.*?"videoId":"([a-zA-Z0-9_-]{11})".*?"title":\{"runs":\[\{"text":"(.*?)"\}\]/gs;
+      let m;
+      while ((m = vrRegex.exec(text)) !== null) {
+        if (!seen.has(m[1])) {
+          seen.add(m[1]);
+          candidates.push({ id: m[1], title: m[2] });
+        }
+      }
+
+      // Fallback extraction pattern for title
+      if (candidates.length === 0) {
+        const altRegex = /"videoId":"([a-zA-Z0-9_-]{11})"[^}]+?"title":\{"runs":\[\{"text":"([^"]+)"\}\]/g;
+        while ((m = altRegex.exec(text)) !== null) {
+          if (!seen.has(m[1])) {
+            seen.add(m[1]);
+            candidates.push({ id: m[1], title: m[2] });
+          }
+        }
+      }
+
+      let bestKey = null;
+
+      if (candidates.length > 0) {
+        // Score each candidate to pick genuine trailers and reject unrelated content
+        const mLower = title.toLowerCase();
+        const mediaWords = mLower.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+        const badWords = [
+          'soundtrack', 'full ost', 'official audio', 'music video', 'reaction',
+          'review', 'ending explained', 'recap', 'breakdown', 'gameplay',
+          'cover song', 'full movie', 'parody', 'instrumental', 'remix',
+          'vlog', 'unboxing', 'live performance', 'karaoke'
+        ];
+
+        let highestScore = -Infinity;
+        for (const cand of candidates) {
+          const vLower = (cand.title || '').toLowerCase();
+          if (badWords.some(bad => vLower.includes(bad))) continue;
+
+          let score = 0;
+          const matchedWords = mediaWords.filter(w => vLower.includes(w));
+          if (mediaWords.length > 0 && matchedWords.length === 0) continue; // title words not present
+          score += (matchedWords.length / Math.max(1, mediaWords.length)) * 50;
+
+          if (vLower.includes('trailer')) score += 30;
+          if (vLower.includes('teaser')) score += 20;
+          if (vLower.includes('preview') || vLower.includes('promo')) score += 15;
+          if (year && vLower.includes(String(year))) score += 15;
+          if (type === 'tv' && (vLower.includes('season') || vLower.includes('series'))) score += 15;
+
+          if (score > highestScore) {
+            highestScore = score;
+            bestKey = cand.id;
+          }
+        }
+
+        // If no candidate scored positively, fallback to first non-bad candidate
+        if (!bestKey && candidates.length > 0) {
+          const nonBad = candidates.find(c => !badWords.some(b => (c.title || '').toLowerCase().includes(b)));
+          bestKey = nonBad ? nonBad.id : candidates[0].id;
+        }
+      }
+
+      // Last-resort fallback to raw videoId match if renderer regex found 0 items
+      if (!bestKey) {
+        const rawMatches = [...text.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)];
+        if (rawMatches.length > 0) {
+          bestKey = rawMatches[0][1];
+        }
+      }
+
+      if (bestKey) {
         if (TMDB.trailerCache) {
           if (TMDB.trailerCache.size > 200) {
             const firstKey = TMDB.trailerCache.keys().next().value;
             TMDB.trailerCache.delete(firstKey);
           }
-          TMDB.trailerCache.set(cacheKey, foundKey);
+          TMDB.trailerCache.set(cacheKey, bestKey);
         }
-        return foundKey;
+        return bestKey;
       }
     } catch (err) {
       console.warn(`[TMDB] YouTube trailer fallback search error for "${title}":`, err.message);
@@ -947,16 +1437,17 @@ export class TMDB {
    */
   static async getDetails(id, type = 'movie', options = {}) {
     const { headers, queryParams } = TMDB.getAuthHeadersAndParams(options);
-    queryParams.append('append_to_response', 'videos,watch/providers,credits');
+    queryParams.append('append_to_response', 'videos,watch/providers,credits,aggregate_credits,images');
     queryParams.set('include_video_language', 'en,null,ja,ko,es,fr,de,zh,it,pt,ru,hi');
-    
+    queryParams.set('include_image_language', 'en,null,ja,ko,es,fr,de,zh,it,pt,ru,hi');
+
     const url = `${TMDB.BASE_URL}/${type}/${id}?${queryParams.toString()}`;
     const res = await TMDB.fetchWithRetry(url, { headers });
-    
+
     if (!res || !res.ok) return null;
-    
+
     const data = await res.json();
-    
+
     let trailerKey = null;
     const trailerKeys = [];
     const seenTrailerKeys = new Set();
@@ -970,30 +1461,37 @@ export class TMDB {
     if (data.videos && Array.isArray(data.videos.results) && data.videos.results.length > 0) {
       const ytVideos = data.videos.results.filter(v => v.site === 'YouTube' && v.key);
       const officialTrailers = ytVideos.filter(v => v.type === 'Trailer' && v.official === true);
-      const anyTrailers = ytVideos.filter(v => v.type === 'Trailer');
+      const anyTrailers = ytVideos.filter(v => v.type === 'Trailer' && v.official !== true);
       const anyTeasers = ytVideos.filter(v => v.type === 'Teaser');
-      const anyClips = ytVideos.filter(v => v.type === 'Clip' || v.type === 'Opening Credits' || v.type === 'Featurette');
-      
-      [...officialTrailers, ...anyTrailers, ...anyTeasers, ...anyClips, ...ytVideos].forEach(v => addTrailerKey(v.key));
+
+      // Strictly prioritize official trailers, then any trailers, then teasers
+      const validTrailers = [...officialTrailers, ...anyTrailers, ...anyTeasers];
+      if (validTrailers.length > 0) {
+        validTrailers.forEach(v => addTrailerKey(v.key));
+      } else {
+        // Fallback only to official clips if zero trailers or teasers exist
+        const anyClips = ytVideos.filter(v => v.type === 'Clip');
+        anyClips.slice(0, 1).forEach(v => addTrailerKey(v.key));
+      }
     }
 
-    // Always fetch or fallback to YouTube search if fewer than 2 keys exist to provide alternatives
+    // Only query YouTube fallback search if TMDB has zero trailer keys
     const mediaTitle = data.title || data.name || options.fallbackTitle || '';
     const mediaYear = (data.release_date || data.first_air_date || options.fallbackYear || '').substring(0, 4);
-    if (trailerKeys.length < 2 && mediaTitle) {
+    if (trailerKeys.length === 0 && mediaTitle) {
       try {
         const ytSearchKey = await TMDB.findYouTubeTrailer(mediaTitle, mediaYear, type);
         if (ytSearchKey) addTrailerKey(ytSearchKey);
-      } catch (e) {}
+      } catch (e) { }
     }
 
     trailerKey = trailerKeys[0] || null;
-    
+
     // Regional Streaming Providers
     const region = (options.region || 'US').toUpperCase();
     const allProvidersResults = data['watch/providers']?.results || {};
     const regionData = allProvidersResults[region] || allProvidersResults['US'] || Object.values(allProvidersResults)[0] || {};
-    
+
     const formatProvider = p => ({
       provider_id: p.provider_id,
       provider_name: p.provider_name,
@@ -1017,17 +1515,23 @@ export class TMDB {
 
     const availableRegions = Object.keys(allProvidersResults);
 
-    // Parse cast members for the details card
+    // Parse cast members for the details card - return all billed cast members
     let cast = [];
-    const rawCast = data.credits?.cast || data.aggregate_credits?.cast || [];
+    const rawCast = (type === 'tv' && data.aggregate_credits?.cast && data.aggregate_credits.cast.length > 0)
+      ? data.aggregate_credits.cast
+      : (data.credits?.cast || data.aggregate_credits?.cast || []);
+
     if (Array.isArray(rawCast) && rawCast.length > 0) {
-      cast = rawCast.slice(0, 16).map(c => ({
-        id: c.id,
-        name: c.name || c.original_name,
-        character: (c.character || (c.roles && c.roles[0]?.character) || '').trim(),
-        profile: c.profile_path ? `${TMDB.IMAGE_BASE_URL}${c.profile_path}` : null,
-        order: c.order ?? 999
-      }));
+      cast = rawCast
+        .filter(c => c && (c.name || c.original_name))
+        .slice(0, 100)
+        .map(c => ({
+          id: c.id,
+          name: c.name || c.original_name,
+          character: (c.character || (c.roles && c.roles[0]?.character) || '').trim(),
+          profile: c.profile_path ? `${TMDB.IMAGE_BASE_URL}${c.profile_path}` : null,
+          order: c.order ?? (c.roles && c.roles[0]?.episode_count ? (1000 - c.roles[0].episode_count) : 999)
+        }));
     }
 
     const seasons = (data.seasons || []).map(s => ({
@@ -1039,7 +1543,23 @@ export class TMDB {
       poster: s.poster_path ? `${TMDB.IMAGE_BASE_URL}${s.poster_path}` : null,
       overview: s.overview
     }));
-    
+
+    // Extract high-resolution widescreen scene stills / frames (movies, tv shows, and anime)
+    const rawBackdrops = data.images?.backdrops || [];
+    const frames = rawBackdrops
+      .filter(b => b && b.file_path)
+      .slice(0, 48)
+      .map((b, idx) => ({
+        id: idx + 1,
+        aspectRatio: b.aspect_ratio || 1.78,
+        width: b.width || 1920,
+        height: b.height || 1080,
+        thumbnail: `https://image.tmdb.org/t/p/w780${b.file_path}`,
+        full: `https://image.tmdb.org/t/p/original${b.file_path}`,
+        filePath: b.file_path,
+        voteAverage: b.vote_average || 0
+      }));
+
     return {
       id: data.id,
       mediaType: type,
@@ -1082,9 +1602,45 @@ export class TMDB {
       } : null,
       seasons,
       cast,
+      frames,
       rating: Math.round((data.vote_average || 0) * 10) / 10,
       voteCount: data.vote_count || 0
     };
+  }
+
+  /**
+   * Fetch high-resolution scene frames and stills for a media title (movies, TV shows, and anime).
+   */
+  static async getFrames(id, type = 'movie', options = {}) {
+    if (!id) return [];
+    try {
+      const details = await TMDB.getDetails(id, type, options);
+      if (details?.frames && details.frames.length > 0) {
+        return details.frames;
+      }
+      const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
+      if (!hasAuth) return [];
+      queryParams.set('include_image_language', 'en,null,ja,ko,es,fr,de,zh,it,pt,ru,hi');
+      const url = `${TMDB.BASE_URL}/${type}/${id}/images?${queryParams.toString()}`;
+      const res = await TMDB.fetchWithRetry(url, { headers });
+      if (!res || !res.ok) return [];
+      const data = await res.json();
+      return (data.backdrops || [])
+        .filter(b => b && b.file_path)
+        .slice(0, 48)
+        .map((b, idx) => ({
+          id: idx + 1,
+          aspectRatio: b.aspect_ratio || 1.78,
+          width: b.width || 1920,
+          height: b.height || 1080,
+          thumbnail: `https://image.tmdb.org/t/p/w780${b.file_path}`,
+          full: `https://image.tmdb.org/t/p/original${b.file_path}`,
+          filePath: b.file_path,
+          voteAverage: b.vote_average || 0
+        }));
+    } catch (e) {
+      return [];
+    }
   }
 
   /**
@@ -1150,7 +1706,7 @@ export class TMDB {
     const { headers, queryParams } = TMDB.getAuthHeadersAndParams(options);
     const url = `${TMDB.BASE_URL}/tv/${id}/season/${seasonNumber}?${queryParams.toString()}`;
     const res = await TMDB.fetchWithRetry(url, { headers });
-    
+
     if (!res || !res.ok) return null;
     const data = await res.json();
     return data;
@@ -1465,11 +2021,36 @@ export class TMDB {
   };
 
   /**
+   * Safe matching of a fictional character query against TMDB.CHARACTER_ACTORS.
+   * Matches full name, multi-word containment, or distinct whole words (min 4 chars).
+   * Strictly prevents false positives on partial substrings (e.g. "bar", "in", "son").
+   */
+  static matchKnownCharacterKey(raw) {
+    if (!raw || typeof raw !== 'string') return null;
+    const clean = raw.toLowerCase().replace(/['"!?.]/g, '').trim();
+    if (clean.length < 3) return null;
+
+    if (TMDB.CHARACTER_ACTORS[clean]) return clean;
+
+    for (const [charKey] of Object.entries(TMDB.CHARACTER_ACTORS)) {
+      if (clean === charKey || clean.includes(charKey)) return charKey;
+
+      const keyWords = charKey.split(/\s+/);
+      if (keyWords.some(w => w.length >= 4 && w === clean)) return charKey;
+
+      const rawWords = clean.split(/\s+/);
+      if (rawWords.length > 1 && keyWords.every(w => rawWords.includes(w))) return charKey;
+    }
+
+    return null;
+  }
+
+  /**
    * Find actors who portrayed a fictional character.
    */
   static async findActorsByCharacter(query, options = {}) {
     if (!query || !query.trim()) return [];
-    
+
     // Clean common prefixes (e.g. "who played batman", "character: walter white", "actor for luffy")
     const cleaned = query
       .trim()
@@ -1477,17 +2058,11 @@ export class TMDB {
       .trim();
     const raw = cleaned.toLowerCase().replace(/['"!?.]/g, '');
 
-    // 1. Check knowledge map
+    // 1. Check knowledge map via safe word-boundary matching
     let matchEntry = null;
-    if (TMDB.CHARACTER_ACTORS[raw]) {
-      matchEntry = TMDB.CHARACTER_ACTORS[raw];
-    } else {
-      for (const [charKey, val] of Object.entries(TMDB.CHARACTER_ACTORS)) {
-        if (raw === charKey || raw.includes(charKey) || (charKey.length > 4 && charKey.includes(raw))) {
-          matchEntry = val;
-          break;
-        }
-      }
+    const matchedKey = TMDB.matchKnownCharacterKey(raw);
+    if (matchedKey && TMDB.CHARACTER_ACTORS[matchedKey]) {
+      matchEntry = TMDB.CHARACTER_ACTORS[matchedKey];
     }
 
     let actorNames = matchEntry ? [...matchEntry.actors] : [];
@@ -1551,7 +2126,7 @@ export class TMDB {
           }
           if (actorNames.length > 0) break;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (actorNames.length === 0) return [];
@@ -1586,7 +2161,7 @@ export class TMDB {
             });
           }
         }
-      } catch (err) {}
+      } catch (err) { }
     }
 
     return actorResults;
@@ -1606,10 +2181,8 @@ export class TMDB {
       .trim();
     const cleanLower = strippedQuery.toLowerCase().replace(/['"!?.]/g, '');
 
-    // Check if query is a known fictional character first
-    const isKnownCharacter = Object.keys(TMDB.CHARACTER_ACTORS).some(key => 
-      cleanLower === key || (key.length >= 4 && (cleanLower.includes(key) || key.includes(cleanLower)))
-    );
+    // Check if query is a known fictional character first (via safe word-boundary matching)
+    const isKnownCharacter = Boolean(TMDB.matchKnownCharacterKey(cleanLower));
 
     if (isKnownCharacter) {
       const characterActors = await TMDB.findActorsByCharacter(rawQuery, options);

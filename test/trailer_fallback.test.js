@@ -49,4 +49,23 @@ describe('Trailer Fallback & Multi-Language Video Resolution Suite', () => {
       assert.ok(Array.isArray(details.trailerKeys) && details.trailerKeys.length > 0);
     }
   });
+
+  it('verifies trailer modal UI displays "SEARCHING TRAILERS...", disclaimer, and omits "OFFICIAL TRAILER"', async () => {
+    const fs = await import('fs');
+    const html = fs.readFileSync('public/index.html', 'utf8');
+    const js = fs.readFileSync('public/app.js', 'utf8');
+
+    // Searching text updated to "SEARCHING TRAILERS..."
+    assert.ok(html.includes('SEARCHING TRAILERS...'), 'HTML must have SEARCHING TRAILERS...');
+    assert.ok(js.includes('SEARCHING TRAILERS...'), 'app.js must display SEARCHING TRAILERS...');
+    assert.strictEqual(js.includes('SEARCHING OFFICIAL TRAILER...'), false, 'app.js must not say SEARCHING OFFICIAL TRAILER');
+
+    // Disclaimer present
+    assert.ok(html.includes('Trailers may not match'), 'HTML must include disclaimer');
+    assert.ok(js.includes('Trailers may not match'), 'app.js must handle disclaimer');
+
+    // "OFFICIAL TRAILER" text removed from trailer status text and sources
+    assert.strictEqual(html.includes('OFFICIAL TRAILER'), false, 'HTML must not have OFFICIAL TRAILER text');
+    assert.strictEqual(js.includes("'OFFICIAL TRAILER'"), false, "app.js must not label trailers 'OFFICIAL TRAILER'");
+  });
 });

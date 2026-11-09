@@ -58,6 +58,7 @@ describe('Character Search and Movie Cast Integration', () => {
     assert.ok(details, 'Details should be returned');
     assert.ok(Array.isArray(details.cast), 'Cast should be an array');
     assert.ok(details.cast.length > 0, 'Cast array should not be empty');
+    assert.ok(details.cast.length > 16, 'Cast array should not be truncated to 16, must include all cast members');
     
     const leo = details.cast.find(c => c.name.includes('DiCaprio'));
     assert.ok(leo, 'Leonardo DiCaprio should be in Inception cast');
@@ -87,6 +88,8 @@ describe('Character Search and Movie Cast Integration', () => {
     assert.ok(html.includes('id="detailCastList"'), 'HTML must have #detailCastList');
     assert.ok(html.includes('id="btnCastLeft"'), 'HTML must have #btnCastLeft');
     assert.ok(html.includes('id="btnCastRight"'), 'HTML must have #btnCastRight');
+    assert.ok(html.includes('ALL CAST'), 'HTML must display ALL CAST instead of TOP CAST');
+    assert.ok(html.includes('id="detailCastCount"'), 'HTML must have #detailCastCount badge');
 
     // Character search UI
     assert.ok(html.includes('id="artistSearchSuggestions"'), 'HTML must have #artistSearchSuggestions for live autocomplete');
@@ -98,10 +101,26 @@ describe('Character Search and Movie Cast Integration', () => {
     // JS logic
     assert.ok(appJs.includes('setupArtistSearchSuggestions'), 'app.js must define character suggestion setup');
     assert.ok(appJs.includes('isTargetCharacterMatch'), 'app.js must annotate credits matching character');
+    assert.ok(appJs.includes('isCharacterRoleMatch'), 'app.js must define robust character role match function');
 
     assert.ok(css.includes('.detail-cast-section'), 'CSS must define .detail-cast-section');
     assert.ok(css.includes('.detail-cast-list'), 'CSS must define .detail-cast-list');
     assert.ok(css.includes('.detail-cast-card'), 'CSS must define .detail-cast-card');
     assert.ok(css.includes('min-width: 0;'), 'CSS must constrain min-width to prevent flex overflow');
+  });
+
+  it('prevents character bleed on artist search (e.g. Aoi Yuki never gets Barney Stinson)', async () => {
+    const results = await TMDB.searchArtists('aoi yuki');
+    assert.ok(results.length > 0, 'Should find Aoi Yuki');
+    assert.strictEqual(results[0].name, 'Aoi Yuki');
+    assert.strictEqual(results[0].characterPlayed, undefined, 'Aoi Yuki must not have characterPlayed set');
+    assert.notStrictEqual(results[0].characterPlayed, 'Barney Stinson');
+
+    // Safe matching ensures short words don't match Barney Stinson
+    assert.strictEqual(TMDB.matchKnownCharacterKey('bar'), null);
+    assert.strictEqual(TMDB.matchKnownCharacterKey('in'), null);
+    assert.strictEqual(TMDB.matchKnownCharacterKey('son'), null);
+    assert.strictEqual(TMDB.matchKnownCharacterKey('aoi yuki'), null);
+    assert.strictEqual(TMDB.matchKnownCharacterKey('barney stinson'), 'barney stinson');
   });
 });
