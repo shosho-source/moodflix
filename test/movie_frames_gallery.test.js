@@ -96,6 +96,7 @@ describe('Movie, TV Show & Anime Scene Frames Gallery Suite', () => {
   describe('Frontend Markup & DOM Structure', () => {
     it('index.html provides direct gallery button opening frameLightboxModal without in-page section', () => {
       assert.ok(indexHtml.includes('id="detailGalleryBtn"'), 'detailGalleryBtn exists in detail actions');
+      assert.ok(indexHtml.includes('id="shareGalleryBtn"'), 'shareGalleryBtn exists in share-cta-grid above explore');
       assert.ok(indexHtml.includes('id="frameLightboxModal"'), 'frameLightboxModal exists in HTML');
       assert.ok(!indexHtml.includes('id="detailGallerySection"'), 'In-page detailGallerySection removed per user preference');
     });
@@ -155,6 +156,7 @@ describe('Movie, TV Show & Anime Scene Frames Gallery Suite', () => {
       assert.ok(appJs.includes("document.getElementById('btnCloseLightbox')"), 'Close button wired in JS');
       assert.ok(appJs.includes("e.target.id === 'frameLightboxModal'"), 'Backdrop click closes lightbox');
       assert.ok(appJs.includes("document.getElementById('detailGalleryBtn')"), 'detailGalleryBtn is wired in JS');
+      assert.ok(appJs.includes("document.getElementById('shareGalleryBtn')"), 'shareGalleryBtn is wired in JS');
     });
   });
 });

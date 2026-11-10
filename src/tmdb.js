@@ -335,7 +335,14 @@ export class TMDB {
     const { headers, queryParams, hasAuth } = TMDB.getAuthHeadersAndParams(options);
     if (!hasAuth) return [];
 
-    const isTv = type === 'tv';
+    let effectiveType = (type || 'movie').toLowerCase();
+    if (effectiveType === 'anime') effectiveType = 'tv';
+    if (effectiveType !== 'tv' && effectiveType !== 'movie') effectiveType = 'movie';
+
+    const isValidNumericId = id != null && /^\d+$/.test(String(id).trim());
+    if (!isValidNumericId) return [];
+
+    const isTv = effectiveType === 'tv';
     const targetId = parseInt(id, 10);
     const candidateMap = new Map();
 
@@ -1330,11 +1337,32 @@ export class TMDB {
   }
 
   /**
+   * Evaluates whether two titles loosely match (case/punctuation insensitive, handles subtitles).
+   */
+  static isTitleLooseMatch(t1, t2) {
+    if (!t1 || !t2) return false;
+    const clean = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+    const c1 = clean(t1);
+    const c2 = clean(t2);
+    if (!c1 || !c2) return false;
+    if (c1 === c2) return true;
+    if (c1.length >= 4 && c2.length >= 4) {
+      return c1.includes(c2) || c2.includes(c1);
+    }
+    return false;
+  }
+
+  /**
    * Search YouTube for a verified trailer key matching title and year if TMDB lacks one.
    */
   static async findYouTubeTrailer(title, year = '', type = 'movie') {
     if (!title) return null;
-    const cacheKey = `${type}:${title}:${year}`.toLowerCase();
+    const cleanTitle = String(title).trim();
+    let effectiveType = (type || 'movie').toLowerCase();
+    if (effectiveType === 'anime') effectiveType = 'tv';
+    if (effectiveType !== 'tv' && effectiveType !== 'movie') effectiveType = 'movie';
+
+    const cacheKey = `${effectiveType}:${cleanTitle}:${year || ''}`.toLowerCase();
     if (TMDB.trailerCache && TMDB.trailerCache.has(cacheKey)) {
       const val = TMDB.trailerCache.get(cacheKey);
       TMDB.setTrailerCache(cacheKey, val);
@@ -1346,14 +1374,53 @@ export class TMDB {
 
     const fetchPromise = (async () => {
       try {
-        const isAnime = /[\u3000-\u303f\u3040-\u309f\u30a0-\u30ff]|anime/i.test(title) || type === 'anime';
+        // 1. FIRST: Check TMDB API directly for this title! (TMDB indexes official studio trailers)
+        try {
+          const { headers, queryParams } = TMDB.getAuthHeadersAndParams();
+          const sParams = new URLSearchParams(queryParams);
+          sParams.set('query', cleanTitle);
+          sParams.set('page', '1');
+          const searchUrl = `${TMDB.BASE_URL}/search/multi?${sParams.toString()}`;
+          const sRes = await TMDB.fetchWithRetry(searchUrl, { headers });
+          if (sRes && sRes.ok) {
+            const sData = await sRes.json();
+            const results = (sData.results || []).filter(r => r.media_type === 'movie' || r.media_type === 'tv');
+            if (results.length > 0) {
+              const best = (year ? results.find(r => (r.release_date || r.first_air_date || '').substring(0, 4) === String(year) && TMDB.isTitleLooseMatch(cleanTitle, r.title || r.name)) : null)
+                || results.find(r => TMDB.isTitleLooseMatch(cleanTitle, r.title || r.name))
+                || results[0];
+
+              if (best && best.id) {
+                const origLang = (best.original_language || 'en').toLowerCase();
+                const vUrl = `${TMDB.BASE_URL}/${best.media_type}/${best.id}/videos?include_video_language=en,null,${origLang}`;
+                const vRes = await TMDB.fetchWithRetry(vUrl, { headers });
+                if (vRes && vRes.ok) {
+                  const vData = await vRes.json();
+                  const trailers = (vData.results || []).filter(v => v.site === 'YouTube' && v.key && (v.type === 'Trailer' || v.type === 'Teaser'));
+                  if (trailers.length > 0) {
+                    const topTrailer = trailers.find(v => v.official && v.iso_639_1 === 'en')
+                      || trailers.find(v => v.type === 'Trailer')
+                      || trailers[0];
+                    if (topTrailer && topTrailer.key) {
+                      TMDB.setTrailerCache(cacheKey, topTrailer.key);
+                      return topTrailer.key;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (tmdbErr) {
+          console.warn('[TMDB findYouTubeTrailer TMDB search error]:', tmdbErr.message);
+        }
+
+        // 2. SECOND: Scrape YouTube search for genuine trailers
+        const isAnime = /[\u3000-\u303f\u3040-\u309f\u30a0-\u30ff]|anime/i.test(cleanTitle) || type === 'anime';
         let query;
         if (isAnime) {
-          query = `${title} official anime trailer`;
-        } else if (type === 'tv') {
-          query = `${title} ${year ? year : ''} official trailer`;
+          query = `${cleanTitle} official anime trailer`;
         } else {
-          query = `${title} ${year ? year : ''} official trailer`;
+          query = `${cleanTitle} ${year ? year : ''} official trailer`;
         }
         query = query.replace(/\s+/g, ' ').trim();
         const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
@@ -1394,15 +1461,10 @@ export class TMDB {
           }
         }
 
-        if (candidates.length === 0) {
-          console.warn(`[TMDB YouTube Fallback] No structured candidates found for "${title}". Trying raw videoId regex.`);
-        }
-
         let bestKey = null;
 
         if (candidates.length > 0) {
-          // Score each candidate to pick genuine trailers and reject unrelated content
-          const mLower = title.toLowerCase();
+          const mLower = cleanTitle.toLowerCase();
           const mediaWords = mLower.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
           const badWords = [
             'soundtrack', 'full ost', 'official audio', 'music video', 'reaction',
@@ -1418,10 +1480,11 @@ export class TMDB {
 
             let score = 0;
             const matchedWords = mediaWords.filter(w => vLower.includes(w));
-            if (mediaWords.length > 0 && matchedWords.length === 0) continue; // title words not present
+            if (mediaWords.length > 0 && matchedWords.length === 0) continue; // title words must match!
             score += (matchedWords.length / Math.max(1, mediaWords.length)) * 50;
 
             if (vLower.includes('official trailer') || vLower.includes('main trailer')) score += 60;
+            else if (vLower.includes('theatrical trailer')) score += 40;
             else if (vLower.includes('trailer')) score += 30;
             else if (vLower.includes('teaser')) score += 10;
 
@@ -1437,27 +1500,23 @@ export class TMDB {
             }
           }
 
-          // If no candidate scored positively, fallback to first non-bad candidate
           if (!bestKey && candidates.length > 0) {
-            const nonBad = candidates.find(c => !badWords.some(b => (c.title || '').toLowerCase().includes(b)));
-            bestKey = nonBad ? nonBad.id : candidates[0].id;
+            const nonBad = candidates.find(c => {
+              const cLower = (c.title || '').toLowerCase();
+              return !badWords.some(b => cLower.includes(b)) && (mediaWords.length === 0 || mediaWords.some(w => cLower.includes(w)));
+            });
+            if (nonBad) bestKey = nonBad.id;
           }
         }
 
-        // Last-resort fallback to raw videoId match if renderer regex found 0 items
-        if (!bestKey) {
-          const rawMatches = [...text.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)];
-          if (rawMatches.length > 0) {
-            bestKey = rawMatches[0][1];
-          }
-        }
-
+        // Only cache and return if we found a verified candidate!
+        // Never fall back to arbitrary unverified video IDs.
         if (bestKey) {
           TMDB.setTrailerCache(cacheKey, bestKey);
           return bestKey;
         }
       } catch (err) {
-        console.warn(`[TMDB] YouTube trailer fallback search error for "${title}":`, err.message);
+        console.warn(`[TMDB] YouTube trailer fallback search error for "${cleanTitle}":`, err.message);
       } finally {
         TMDB._pendingTrailerFetch.delete(cacheKey);
       }
@@ -1477,12 +1536,79 @@ export class TMDB {
     queryParams.set('include_video_language', 'en,null,ja,ko,es,fr,de,zh,it,pt,ru,hi');
     queryParams.set('include_image_language', 'en,null,ja,ko,es,fr,de,zh,it,pt,ru,hi');
 
-    const url = `${TMDB.BASE_URL}/${type}/${id}?${queryParams.toString()}`;
-    const res = await TMDB.fetchWithRetry(url, { headers });
+    let effectiveType = (type || 'movie').toLowerCase();
+    if (effectiveType === 'anime') effectiveType = 'tv';
+    if (effectiveType !== 'tv' && effectiveType !== 'movie') effectiveType = 'movie';
 
-    if (!res || !res.ok) return null;
+    const isValidNumericId = id != null && /^\d+$/.test(String(id).trim());
+    const numericId = isValidNumericId ? String(id).trim() : null;
 
-    const data = await res.json();
+    let data = null;
+    let resolvedType = effectiveType;
+
+    if (numericId) {
+      const url = `${TMDB.BASE_URL}/${resolvedType}/${numericId}?${queryParams.toString()}`;
+      const res = await TMDB.fetchWithRetry(url, { headers });
+      if (res && res.ok) {
+        const fetched = await res.json();
+        if (options.fallbackTitle) {
+          const fetchedTitle = fetched.title || fetched.name || '';
+          if (TMDB.isTitleLooseMatch(options.fallbackTitle, fetchedTitle)) {
+            data = fetched;
+          } else {
+            // Check alternate media type in case movie/tv id collided (e.g. 550)
+            const altType = resolvedType === 'movie' ? 'tv' : 'movie';
+            const altUrl = `${TMDB.BASE_URL}/${altType}/${numericId}?${queryParams.toString()}`;
+            const altRes = await TMDB.fetchWithRetry(altUrl, { headers });
+            if (altRes && altRes.ok) {
+              const altFetched = await altRes.json();
+              const altTitle = altFetched.title || altFetched.name || '';
+              if (TMDB.isTitleLooseMatch(options.fallbackTitle, altTitle)) {
+                data = altFetched;
+                resolvedType = altType;
+              }
+            }
+          }
+        } else {
+          data = fetched;
+        }
+      }
+    }
+
+    // Fallback: If direct ID returned null or mismatched title, search TMDB directly
+    if (!data && options.fallbackTitle) {
+      try {
+        const sParams = new URLSearchParams(queryParams);
+        sParams.delete('append_to_response');
+        sParams.set('query', String(options.fallbackTitle).trim());
+        sParams.set('page', '1');
+        const searchUrl = `${TMDB.BASE_URL}/search/multi?${sParams.toString()}`;
+        const sRes = await TMDB.fetchWithRetry(searchUrl, { headers });
+        if (sRes && sRes.ok) {
+          const sData = await sRes.json();
+          const results = (sData.results || []).filter(r => r.media_type === 'movie' || r.media_type === 'tv');
+          if (results.length > 0) {
+            const targetYear = options.fallbackYear ? String(options.fallbackYear).trim() : '';
+            const best = (targetYear ? results.find(r => (r.release_date || r.first_air_date || '').substring(0, 4) === targetYear && TMDB.isTitleLooseMatch(options.fallbackTitle, r.title || r.name)) : null)
+              || results.find(r => TMDB.isTitleLooseMatch(options.fallbackTitle, r.title || r.name))
+              || results[0];
+
+            if (best && best.id) {
+              resolvedType = best.media_type || resolvedType;
+              const detailUrl = `${TMDB.BASE_URL}/${resolvedType}/${best.id}?${queryParams.toString()}`;
+              const dRes = await TMDB.fetchWithRetry(detailUrl, { headers });
+              if (dRes && dRes.ok) {
+                data = await dRes.json();
+              }
+            }
+          }
+        }
+      } catch (searchErr) {
+        console.warn('[TMDB getDetails fallback search error]:', searchErr.message);
+      }
+    }
+
+    if (!data) return null;
 
     let trailerKey = null;
     const trailerKeys = [];
@@ -1494,51 +1620,78 @@ export class TMDB {
       }
     };
 
+    const origLang = (data.original_language || 'en').toLowerCase();
+
+    const scoreVideo = (v) => {
+      let score = 0;
+      const vName = (v.name || '').toLowerCase();
+      const vLang = (v.iso_639_1 || '').toLowerCase();
+
+      // 1. Type scoring
+      if (v.type === 'Trailer') score += 100;
+      else if (v.type === 'Teaser') score += 40;
+      else if (v.type === 'Clip') score += 10;
+      else score += 5;
+
+      // 2. Official
+      if (v.official) score += 50;
+
+      // 3. Language preference: English or original language prioritized
+      if (vLang === 'en') {
+        score += 60;
+      } else if (vLang === origLang) {
+        score += 40;
+      } else {
+        score -= 40; // Penalize foreign dubs (e.g. Japanese dub for Inception)
+      }
+
+      // 4. Title relevance
+      if (vName.includes('official trailer') || vName.includes('main trailer')) score += 40;
+      else if (vName.includes('theatrical trailer')) score += 30;
+      else if (vName.includes('trailer')) score += 20;
+
+      if (vName.includes('trailer 1') || vName.includes('pv 1') || vName.includes('pv1') || vName.includes('pv第1弾') || vName.includes('first trailer')) score += 25;
+      if (vName.includes('subtitled') || vName.includes('english')) score += 20;
+
+      // 5. Avoid selecting later season previews for root show
+      if (vName.includes('season 4') || vName.includes('season 3') || vName.includes('final season') || vName.includes('part 2') || vName.includes('part.2')) {
+        score -= 15;
+      }
+
+      return score;
+    };
+
     if (data.videos && Array.isArray(data.videos.results) && data.videos.results.length > 0) {
       const ytVideos = data.videos.results.filter(v => v.site === 'YouTube' && v.key);
-      const origLang = (data.original_language || 'en').toLowerCase();
-
-      const scoreVideo = (v) => {
-        let score = 0;
-        const vName = (v.name || '').toLowerCase();
-        const vLang = (v.iso_639_1 || '').toLowerCase();
-
-        // 1. Type scoring
-        if (v.type === 'Trailer') score += 100;
-        else if (v.type === 'Teaser') score += 40;
-        else if (v.type === 'Clip') score += 10;
-        else score += 5;
-
-        // 2. Official
-        if (v.official) score += 50;
-
-        // 3. Language preference: English or original language prioritized
-        if (vLang === 'en') {
-          score += 60;
-        } else if (vLang === origLang) {
-          score += 40;
-        } else {
-          score -= 40; // Penalize foreign dubs (e.g. Japanese dub for Inception)
-        }
-
-        // 4. Title relevance
-        if (vName.includes('official trailer') || vName.includes('main trailer')) score += 40;
-        else if (vName.includes('theatrical trailer')) score += 30;
-        else if (vName.includes('trailer')) score += 20;
-
-        if (vName.includes('trailer 1') || vName.includes('pv 1') || vName.includes('pv1') || vName.includes('pv第1弾')) score += 25;
-        if (vName.includes('subtitled') || vName.includes('english')) score += 20;
-
-        // 5. Avoid selecting later season previews for root show
-        if (vName.includes('season 4') || vName.includes('season 3') || vName.includes('final season') || vName.includes('part 2') || vName.includes('part.2')) {
-          score -= 15;
-        }
-
-        return score;
-      };
-
       const sortedVideos = [...ytVideos].sort((a, b) => scoreVideo(b) - scoreVideo(a));
       sortedVideos.forEach(v => addTrailerKey(v.key));
+    }
+
+    // If append_to_response yielded 0 trailer keys, query TMDB videos endpoint directly with multiple languages
+    if (trailerKeys.length === 0 && data.id) {
+      try {
+        const vUrl = `${TMDB.BASE_URL}/${resolvedType}/${data.id}/videos?include_video_language=en,null,${origLang}`;
+        const vRes = await TMDB.fetchWithRetry(vUrl, { headers });
+        if (vRes && vRes.ok) {
+          const vData = await vRes.json();
+          const ytVideos = (vData.results || []).filter(v => v.site === 'YouTube' && v.key);
+          const sortedVideos = [...ytVideos].sort((a, b) => scoreVideo(b) - scoreVideo(a));
+          sortedVideos.forEach(v => addTrailerKey(v.key));
+        }
+
+        if (trailerKeys.length === 0 && resolvedType === 'tv') {
+          const s1Url = `${TMDB.BASE_URL}/tv/${data.id}/season/1/videos?include_video_language=en,null,${origLang}`;
+          const s1Res = await TMDB.fetchWithRetry(s1Url, { headers });
+          if (s1Res && s1Res.ok) {
+            const s1Data = await s1Res.json();
+            const s1Videos = (s1Data.results || []).filter(v => v.site === 'YouTube' && v.key);
+            const sortedS1 = [...s1Videos].sort((a, b) => scoreVideo(b) - scoreVideo(a));
+            sortedS1.forEach(v => addTrailerKey(v.key));
+          }
+        }
+      } catch (videoErr) {
+        console.warn('[TMDB getDetails video fetch error]:', videoErr.message);
+      }
     }
 
     // Only query YouTube fallback search if TMDB has zero trailer keys
@@ -1546,7 +1699,7 @@ export class TMDB {
     const mediaYear = (data.release_date || data.first_air_date || options.fallbackYear || '').substring(0, 4);
     if (trailerKeys.length === 0 && mediaTitle) {
       try {
-        const ytSearchKey = await TMDB.findYouTubeTrailer(mediaTitle, mediaYear, type);
+        const ytSearchKey = await TMDB.findYouTubeTrailer(mediaTitle, mediaYear, resolvedType);
         if (ytSearchKey) addTrailerKey(ytSearchKey);
       } catch (e) { }
     }
@@ -1583,7 +1736,7 @@ export class TMDB {
 
     // Parse cast members for the details card - return all billed cast members
     let cast = [];
-    const rawCast = (type === 'tv' && data.aggregate_credits?.cast && data.aggregate_credits.cast.length > 0)
+    const rawCast = (resolvedType === 'tv' && data.aggregate_credits?.cast && data.aggregate_credits.cast.length > 0)
       ? data.aggregate_credits.cast
       : (data.credits?.cast || data.aggregate_credits?.cast || []);
 
@@ -1637,7 +1790,7 @@ export class TMDB {
 
     return {
       id: data.id,
-      mediaType: type,
+      mediaType: resolvedType,
       title: data.title || data.name || options.fallbackTitle || '',
       year: (data.release_date || data.first_air_date || options.fallbackYear || '').substring(0, 4),
       releaseDate: data.release_date || data.first_air_date || '',

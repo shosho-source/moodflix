@@ -10,6 +10,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MoodFlix">
+  <meta name="description" content="Discover, stream, and download movies, TV shows, and anime with real-time swarm rankings.">
+  <meta property="og:site_name" content="MoodFlix">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="MoodFlix - Retro Stream & Swarm Engine">
+  <meta property="og:description" content="Discover, stream, and download movies, TV shows, and anime with real-time swarm rankings.">
+  <meta property="og:image" content="/images/hero.webp">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MoodFlix - Retro Stream & Swarm Engine">
+  <meta name="twitter:description" content="Discover, stream, and download movies, TV shows, and anime with real-time swarm rankings.">
+  <meta name="twitter:image" content="/images/hero.webp">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="images/favicon.svg">
 
@@ -392,6 +402,10 @@
                 <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 4px;">download</span>
                 <span>DOWNLOAD TORRENT</span>
               </button>
+              <button id="shareGenerateCardBtn" class="retro-btn share-cta-secondary scramble-text">
+                <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 4px;">style</span>
+                <span>SHARE CARD</span>
+              </button>
               <button id="shareTrailerBtn" class="retro-btn share-cta-secondary scramble-text">
                 <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 4px;">play_arrow</span>
                 <span>WATCH TRAILER</span>
@@ -399,6 +413,10 @@
               <button id="shareTutorialBtn" class="retro-btn share-cta-secondary scramble-text">
                 <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 4px;">help_outline</span>
                 <span>HOW TO DOWNLOAD & WATCH</span>
+              </button>
+              <button id="shareGalleryBtn" class="retro-btn share-cta-secondary scramble-text">
+                <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 4px;">photo_library</span>
+                <span>GALLERY</span>
               </button>
               <button id="shareExploreBtn" class="retro-btn share-cta-tertiary scramble-text">
                 <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 4px;">explore</span>
@@ -1548,6 +1566,87 @@
         </div>
         <div class="lightbox-hint">
           <span>Use &lt; &gt; arrow keys or buttons to navigate • ESC to close</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Dynamic Social Share Card Generator -->
+  <div id="shareCardModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Social Share Card Generator">
+    <div class="modal-content retro-box share-card-modal-content">
+      <div class="modal-header share-card-modal-header">
+        <div class="share-card-modal-title-wrap">
+          <span class="material-symbols-outlined" style="font-size: 22px;">style</span>
+          <span class="modal-title scramble-text" id="shareCardModalTitle">SOCIAL SHARE CARD STUDIO</span>
+        </div>
+        <button type="button" id="btnCloseShareCardModal" class="modal-close-btn retro-btn" aria-label="Close share card generator">✕</button>
+      </div>
+
+      <div class="share-card-modal-body">
+        <!-- Preview Section -->
+        <div class="share-card-preview-section">
+          <div class="share-card-canvas-container" id="shareCardCanvasContainer">
+            <canvas id="shareCardCanvas" class="share-card-canvas" width="1080" height="1920"></canvas>
+            <div id="shareCardSpinner" class="share-card-spinner hidden">
+              <span class="material-symbols-outlined spin-icon">sync</span>
+              <span class="share-card-spinner-text">RENDERING CRISP CARD...</span>
+            </div>
+          </div>
+          <div class="share-card-dimensions-info" id="shareCardDimensionsInfo">
+            <span class="badge-dim" id="shareCardDimText">1080 × 1920 PX</span>
+            <span class="badge-res" id="shareCardResText">3X ULTRA HD</span>
+          </div>
+        </div>
+
+        <!-- Controls Section -->
+        <div class="share-card-controls-section">
+          <!-- Format / Aspect Ratio -->
+          <div class="share-card-control-group">
+            <label class="share-control-label">ASPECT RATIO / FORMAT</label>
+            <div class="share-format-pills" id="shareFormatPills" role="radiogroup" aria-label="Card Format">
+              <button type="button" class="format-pill active" data-format="story" title="9:16 Story (WhatsApp Status, Stories)">
+                <span class="material-symbols-outlined" style="font-size: 16px;">stay_current_portrait</span> STORY (9:16)
+              </button>
+              <button type="button" class="format-pill" data-format="card" title="4:5 Portrait Card (Chat, Social Posts)">
+                <span class="material-symbols-outlined" style="font-size: 16px;">crop_portrait</span> CARD (4:5)
+              </button>
+              <button type="button" class="format-pill" data-format="square" title="1:1 Square Card">
+                <span class="material-symbols-outlined" style="font-size: 16px;">crop_square</span> SQUARE (1:1)
+              </button>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="share-card-actions-grid">
+            <button type="button" id="btnShareWhatsApp" class="retro-btn btn-share-whatsapp" title="Share card & link to WhatsApp">
+              <svg class="whatsapp-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2zm.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.42 0-2.82-.37-4.06-1.08l-.29-.17-3.12.82.83-3.04-.19-.3a8.188 8.188 0 0 1-1.26-4.46c0-4.54 3.7-8.24 8.24-8.24zm4.52 11.53c-.25-.13-1.47-.72-1.7-.81-.23-.08-.39-.13-.56.13-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.13-1.06-.39-2.02-1.25-.75-.67-1.26-1.5-1.41-1.75-.14-.25-.02-.39.11-.51.11-.11.25-.29.37-.44.13-.14.17-.25.25-.42.08-.17.04-.31-.02-.44-.06-.13-.56-1.34-.76-1.84-.2-.49-.4-.42-.56-.43h-.47c-.17 0-.44.06-.67.31-.23.25-.89.87-.89 2.12 0 1.25.91 2.46 1.04 2.63.13.17 1.8 2.75 4.36 3.86.61.26 1.09.42 1.46.54.61.2 1.17.17 1.61.1.49-.07 1.47-.6 1.68-1.18.21-.58.21-1.08.15-1.18-.06-.1-.23-.17-.48-.29z"/>
+              </svg>
+              <span>SHARE TO WHATSAPP</span>
+            </button>
+
+            <button type="button" id="btnDownloadShareCard" class="retro-btn btn-share-download" title="Download crisp high-res image">
+              <span class="material-symbols-outlined" style="font-size: 18px;">download</span>
+              <span>DOWNLOAD CARD</span>
+            </button>
+
+            <button type="button" id="btnCopyShareCardImage" class="retro-btn btn-share-copy-img" title="Copy card image to clipboard">
+              <span class="material-symbols-outlined" style="font-size: 18px;">content_copy</span>
+              <span>COPY IMAGE</span>
+            </button>
+
+            <button type="button" id="btnCopyShareCardLink" class="retro-btn btn-share-copy-link" title="Copy share link">
+              <span class="material-symbols-outlined" style="font-size: 18px;">link</span>
+              <span>COPY LINK</span>
+            </button>
+          </div>
+
+          <div class="share-native-wrap" id="shareNativeWrap">
+            <button type="button" id="btnNativeShare" class="retro-btn btn-share-native" title="Open device share sheet">
+              <span class="material-symbols-outlined" style="font-size: 18px;">ios_share</span>
+              <span>DEVICE SHARE SHEET</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

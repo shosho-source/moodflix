@@ -89,7 +89,198 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '10mb' }));
+
+// In-memory store for generated share cards (LRU with 200 items max)
+const shareCardStore = new Map();
+const MAX_SHARE_CARDS = 200;
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderHtmlWithOpenGraph(rawHtml, req) {
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  const host = req.headers['x-forwarded-host'] || req.get('host') || `localhost:${PORT}`;
+  const origin = `${protocol}://${host}`;
+  const fullUrl = `${origin}${req.originalUrl || '/'}`;
+
+  const isShare = req.query.share === '1' || Boolean(req.query.title);
+  const title = req.query.title ? String(req.query.title).trim() : '';
+  const year = req.query.year ? String(req.query.year).trim() : '';
+  const quality = req.query.quality ? String(req.query.quality).trim() : '';
+  const size = req.query.size ? String(req.query.size).trim() : '';
+  const seeds = req.query.seeds ? String(req.query.seeds).trim() : '';
+  const mediaType = req.query.mediaType ? String(req.query.mediaType).trim() : 'movie';
+  const poster = req.query.poster ? String(req.query.poster).trim() : '';
+  const card = req.query.card ? String(req.query.card).trim() : '';
+
+  let ogTitle = 'MoodFlix - Retro Stream & Swarm Engine';
+  let ogDesc = 'Discover, stream, and download movies, TV shows, and anime with real-time swarm rankings.';
+  let ogType = 'website';
+  let ogImage = `${origin}/images/hero.webp`;
+  let ogImageWidth = '1200';
+  let ogImageHeight = '630';
+  let ogImageType = 'image/webp';
+
+  if (isShare && title) {
+    ogTitle = `${title}${year ? ` (${year})` : ''} - Stream on MoodFlix`;
+    const details = [];
+    if (quality) details.push(quality);
+    if (size) details.push(size);
+    if (seeds) details.push(`${seeds} Seeds`);
+    const detailsStr = details.length ? ` • ${details.join(' • ')}` : '';
+    ogDesc = `Watch "${title}"${year ? ` (${year})` : ''} on MoodFlix${detailsStr}. Shared release with direct swarm streaming.`;
+    ogType = mediaType === 'tv' ? 'video.tv_show' : 'video.movie';
+
+    if (card) {
+      ogImage = card.startsWith('http') ? card : `${origin}${card.startsWith('/') ? '' : '/'}${card}`;
+      ogImageType = 'image/png';
+      ogImageWidth = '1080';
+      ogImageHeight = '1920';
+    } else if (poster) {
+      if (/^https?:\/\//i.test(poster)) {
+        ogImage = poster;
+      } else {
+        ogImage = `${origin}${poster.startsWith('/') ? '' : '/'}${poster}`;
+      }
+      ogImageType = ogImage.endsWith('.png') ? 'image/png' : 'image/jpeg';
+      ogImageWidth = '780';
+      ogImageHeight = '1170';
+    }
+  }
+
+  const safeTitle = escapeHtml(ogTitle);
+  const safeDesc = escapeHtml(ogDesc);
+  const safeImage = escapeHtml(ogImage);
+  const safeUrl = escapeHtml(fullUrl);
+  const safeType = escapeHtml(ogType);
+
+  const ogTags = [
+    `<title>${safeTitle}</title>`,
+    `<meta name="description" content="${safeDesc}">`,
+    `<meta property="og:site_name" content="MoodFlix">`,
+    `<meta property="og:type" content="${safeType}">`,
+    `<meta property="og:title" content="${safeTitle}">`,
+    `<meta property="og:description" content="${safeDesc}">`,
+    `<meta property="og:image" content="${safeImage}">`,
+    `<meta property="og:image:secure_url" content="${safeImage}">`,
+    `<meta property="og:image:type" content="${ogImageType}">`,
+    `<meta property="og:image:width" content="${ogImageWidth}">`,
+    `<meta property="og:image:height" content="${ogImageHeight}">`,
+    `<meta property="og:url" content="${safeUrl}">`,
+    `<meta name="twitter:card" content="summary_large_image">`,
+    `<meta name="twitter:site" content="@MoodFlix">`,
+    `<meta name="twitter:title" content="${safeTitle}">`,
+    `<meta name="twitter:description" content="${safeDesc}">`,
+    `<meta name="twitter:image" content="${safeImage}">`
+  ].join('\n  ');
+
+  let html = rawHtml;
+  if (/<title>.*?<\/title>/i.test(html)) {
+    html = html.replace(/<title>.*?<\/title>/i, ogTags);
+  } else {
+    html = html.replace('</head>', `  ${ogTags}\n</head>`);
+  }
+  return html;
+}
+
+// Serve root and index.html dynamically to inject server-accessible Open Graph metadata for WhatsApp and social previews
+const indexHtmlPath = path.join(__dirname, 'public', 'index.html');
+app.get(['/', '/index.html'], (req, res, next) => {
+  try {
+    const rawHtml = fs.readFileSync(indexHtmlPath, 'utf-8');
+    const enrichedHtml = renderHtmlWithOpenGraph(rawHtml, req);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(enrichedHtml);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Image Proxy to eliminate CORS canvas tainting and allow crisp 2x/3x export
+app.get('/api/proxy-image', async (req, res) => {
+  const targetUrl = req.query.url;
+  if (!targetUrl || typeof targetUrl !== 'string') {
+    return res.status(400).json({ error: 'Missing url query parameter' });
+  }
+  try {
+    const parsed = new URL(targetUrl);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return res.status(400).json({ error: 'Invalid protocol' });
+    }
+    const safeHosts = ['image.tmdb.org', 'images.unsplash.com', 'm.media-amazon.com', 'raw.githubusercontent.com', 'i.imgur.com'];
+    const isSafe = safeHosts.some(h => parsed.hostname === h || parsed.hostname.endsWith('.' + h)) || parsed.hostname.includes('tmdb.org');
+    if (!isSafe) {
+      return res.status(403).json({ error: 'Domain not allowed for image proxy' });
+    }
+
+    const response = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MoodFlix/2.0'
+      }
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).send('Upstream image error');
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400');
+
+    const buffer = await response.arrayBuffer();
+    return res.send(Buffer.from(buffer));
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to proxy image', details: err.message });
+  }
+});
+
+// Dynamic Social Share Card Storage
+app.post('/api/share/card', express.json({ limit: '10mb' }), (req, res) => {
+  const { image, title, year } = req.body || {};
+  if (!image || typeof image !== 'string' || !image.startsWith('data:image/')) {
+    return res.status(400).json({ success: false, error: 'Invalid image data' });
+  }
+  const id = 'card_' + crypto.randomBytes(8).toString('hex');
+  const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+  const buffer = Buffer.from(base64Data, 'base64');
+
+  if (shareCardStore.size >= MAX_SHARE_CARDS) {
+    const oldestKey = shareCardStore.keys().next().value;
+    if (oldestKey) shareCardStore.delete(oldestKey);
+  }
+
+  shareCardStore.set(id, {
+    buffer,
+    title: (title || '').slice(0, 100),
+    year: (year || '').slice(0, 10),
+    createdAt: Date.now()
+  });
+
+  const cardUrl = `/api/share/card/${id}.png`;
+  return res.json({ success: true, cardId: id, cardUrl });
+});
+
+app.get('/api/share/card/:id.png', (req, res) => {
+  const { id } = req.params;
+  const card = shareCardStore.get(id);
+  if (!card) {
+    return res.status(404).send('Share card not found or expired');
+  }
+  res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  return res.send(card.buffer);
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // High-Speed In-Memory Cache (10 minutes TTL) with LRU eviction and interval sweep
@@ -1383,11 +1574,17 @@ app.get('/api/details', async (req, res) => {
     const { id, type, title, year, region } = req.query;
     if (!id && !title) return res.status(400).json({ success: false, error: 'Media ID or title is required' });
     const targetRegion = (region || 'US').toUpperCase();
-    const cacheKey = `details:${id}:${type}:${targetRegion}`;
+    let cleanType = (type || 'movie').toLowerCase();
+    if (cleanType === 'anime') cleanType = 'tv';
+    if (cleanType !== 'tv' && cleanType !== 'movie') cleanType = 'movie';
+
+    const cleanTitle = (title || '').trim();
+    const cleanYear = (year || '').trim();
+    const cacheKey = `details:${id || ''}:${cleanType}:${cleanTitle}:${cleanYear}:${targetRegion}`;
     const cached = getCached(cacheKey);
     if (cached) return res.json({ success: true, details: cached, cached: true });
 
-    const details = await TMDB.getDetails(id, type || 'movie', { fallbackTitle: title, fallbackYear: year, region: targetRegion });
+    const details = await TMDB.getDetails(id, cleanType, { fallbackTitle: cleanTitle, fallbackYear: cleanYear, region: targetRegion });
     if (details) setCached(cacheKey, details);
     res.json({ success: true, details });
   } catch (err) {
@@ -1399,15 +1596,32 @@ app.get('/api/details', async (req, res) => {
 app.get('/api/trailer', async (req, res) => {
   try {
     const { id, type, title, year } = req.query;
+    let cleanType = (type || 'movie').toLowerCase();
+    if (cleanType === 'anime') cleanType = 'tv';
+    if (cleanType !== 'tv' && cleanType !== 'movie') cleanType = 'movie';
+
+    const cleanTitle = (title || '').trim();
+    const cleanYear = (year || '').trim();
+
     let trailerKey = null;
-    if (id) {
-      const details = await TMDB.getDetails(id, type || 'movie', { fallbackTitle: title, fallbackYear: year });
-      trailerKey = details?.trailerKey || null;
+    let trailerKeys = [];
+
+    // 1. Try TMDB details lookup (handles numeric id, fallback title, multiple languages, etc.)
+    const details = await TMDB.getDetails(id, cleanType, { fallbackTitle: cleanTitle, fallbackYear: cleanYear });
+    if (details) {
+      trailerKey = details.trailerKey || null;
+      trailerKeys = details.trailerKeys || (trailerKey ? [trailerKey] : []);
     }
-    if (!trailerKey && title) {
-      trailerKey = await TMDB.findYouTubeTrailer(title, year, type || 'movie');
+
+    // 2. If still no trailer and title is available, fallback to verified YouTube search
+    if (!trailerKey && cleanTitle) {
+      trailerKey = await TMDB.findYouTubeTrailer(cleanTitle, cleanYear, cleanType);
+      if (trailerKey) {
+        trailerKeys = [trailerKey];
+      }
     }
-    res.json({ success: true, trailerKey });
+
+    res.json({ success: true, trailerKey, trailerKeys });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

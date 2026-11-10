@@ -41,6 +41,7 @@ describe('Card 3-Dot Overflow Menu Suite', () => {
     const similarPart = appJs.slice(simStart, simStart + 3000);
     assert.ok(similarPart.includes('getCardOverflowMenuHtml('), 'loadSimilarMedia calls getCardOverflowMenuHtml');
     assert.ok(similarPart.includes('attachCardOverflowListeners('), 'loadSimilarMedia calls attachCardOverflowListeners');
+    assert.ok(similarPart.includes('class="similar-card-header"') && similarPart.includes('${overflowHtml}'), 'loadSimilarMedia places overflow menu next to title in similar-card-header');
   });
 
   it('CSS defines comprehensive brutalist styling for card overflow menu and action icons', () => {
@@ -48,6 +49,8 @@ describe('Card 3-Dot Overflow Menu Suite', () => {
     assert.ok(styleCss.includes('.card-overflow-trigger {'), 'CSS defines .card-overflow-trigger');
     assert.ok(styleCss.includes('.card-overflow-menu {'), 'CSS defines .card-overflow-menu');
     assert.ok(styleCss.includes('.card-overflow-item {'), 'CSS defines .card-overflow-item');
+    assert.ok(styleCss.includes('.similar-card .card-overflow-wrap'), 'CSS defines similar-card specific overflow positioning');
+    assert.ok(styleCss.includes('.similar-card-header'), 'CSS defines .similar-card-header flex container');
     assert.ok(styleCss.includes('.card-action-watched'), 'CSS defines watched action styles');
     assert.ok(styleCss.includes('.card-action-addtolist'), 'CSS defines add to list action styles');
     assert.ok(styleCss.includes('.card-action-watchlater'), 'CSS defines watch later action styles');

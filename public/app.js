@@ -38,7 +38,13 @@ const state = {
   currentMediaForModal: null,
   currentTorrents: [],
   isSharedPage: false,
-  user: null
+  user: null,
+  shareCardFormat: 'story',
+  shareCardScale: 3,
+  shareCardShowSpecs: true,
+  shareCardShowSoundwave: true,
+  currentShareData: null,
+  cachedPosterImg: null
 };
 
 // Global HTML entity escaping helper to prevent XSS
@@ -1569,7 +1575,8 @@ function renderWatchlist() {
     });
     card.querySelector('.btn-wl-trailer')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      playTrailer(item.id, item.mediaType || 'movie', item.title, item.year);
+      const tmdbId = item.tmdbId || item.tmdb_id || (/^\d+$/.test(String(item.id || '').trim()) ? item.id : null);
+      playTrailer(tmdbId, item.mediaType || 'movie', item.title, item.year);
     });
     card.querySelector('.btn-wl-remove')?.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -3698,6 +3705,28 @@ function renderSharedMovieView(data = {}) {
     };
   }
 
+  // Wire Share Card Generator Button
+  const cardBtn = document.getElementById('shareGenerateCardBtn');
+  if (cardBtn) {
+    cardBtn.onclick = () => {
+      openShareCardModal({
+        title,
+        year,
+        poster,
+        id: mediaId,
+        mediaType: mediaType || 'movie',
+        rating: data.rating || '8.5',
+        trailerKey: trailer
+      }, {
+        name: torrentName || title,
+        magnet,
+        sizeFormatted: size,
+        qualityBadge: quality,
+        seeders: seeds
+      });
+    };
+  }
+
   // Wire Trailer Button
   const trailerBtn = document.getElementById('shareTrailerBtn');
   if (trailerBtn) {
@@ -3716,6 +3745,34 @@ function renderSharedMovieView(data = {}) {
         playTrailer(mediaId, mediaType || 'movie', title, year);
       } else {
         showToast('Searching trailer...', 'info');
+      }
+    };
+  }
+
+  // Wire Gallery Button
+  const galleryBtn = document.getElementById('shareGalleryBtn');
+  if (galleryBtn) {
+    galleryBtn.onclick = async () => {
+      const targetId = mediaId || title;
+      const mediaObj = {
+        id: targetId,
+        tmdbId: mediaId,
+        title,
+        year,
+        mediaType: mediaType || 'movie',
+        poster
+      };
+      const effectiveType = mediaType || 'movie';
+      if (state.currentGallery && state.currentGallery.frames && state.currentGallery.frames.length > 0 && state.currentGallery.title === title) {
+        openFrameLightbox(0);
+      } else {
+        showToast('Loading gallery frames...', 'info');
+        await loadDetailGallery(mediaObj, effectiveType);
+        if (state.currentGallery && state.currentGallery.frames && state.currentGallery.frames.length > 0) {
+          openFrameLightbox(0);
+        } else {
+          showToast('No scene frames available for this title.', 'info');
+        }
       }
     };
   }
@@ -4868,6 +4925,9 @@ function setupEventListeners() {
       closeAllCardOverflowMenus();
     }
   });
+
+  // Spotify-style Social Share Card Studio listeners
+  initShareCardStudio();
 }
 
 // Artist Search & Filmography Engine (Google & TMDB enriched)
@@ -4884,7 +4944,8 @@ window.handleArtistCardAction = function (index, action, event) {
   if (action === 'torrent') {
     openTorrentModal(item, item.mediaType || 'movie');
   } else if (action === 'trailer') {
-    playTrailer(item.id, item.mediaType || 'movie', item.title, item.year);
+    const tmdbId = item.tmdbId || item.tmdb_id || (/^\d+$/.test(String(item.id || '').trim()) ? item.id : null);
+    playTrailer(tmdbId, item.mediaType || 'movie', item.title, item.year);
   } else if (action === 'detail') {
     openDetailView(item, item.mediaType || 'movie');
   }
@@ -6063,8 +6124,9 @@ function openDetailView(m, type, isDiagnostic = false) {
   elements.detailSynopsis.innerText = m.synopsis || 'No synopsis available.';
 
   elements.detailTorrentsBtn.onclick = () => openTorrentModal(m, effectiveType, false);
-  elements.detailTrailerBtn.onclick = () => playTrailer(m.id, effectiveType, m.title, m.year);
-  elements.detailShareBtn.onclick = () => openTorrentModal(m, effectiveType, true);
+  const detailTrailerId = m.tmdbId || m.tmdb_id || (/^\d+$/.test(String(m.id || '').trim()) ? m.id : null);
+  elements.detailTrailerBtn.onclick = () => playTrailer(detailTrailerId, effectiveType, m.title, m.year);
+  elements.detailShareBtn.onclick = () => openShareCardModal({ ...m, mediaType: effectiveType });
 
   state.currentDetailMedia = { ...m, mediaType: effectiveType };
   const detailSeparateBtn = document.getElementById('detailSeparateSeasonsBtn');
@@ -6117,7 +6179,8 @@ function openDetailView(m, type, isDiagnostic = false) {
   }
 
   // Load similar media
-  loadSimilarMedia(m.id, effectiveType);
+  const similarTmdbId = m.tmdbId || m.tmdb_id || (/^\d+$/.test(String(m.id || '').trim()) ? m.id : null);
+  loadSimilarMedia(similarTmdbId, effectiveType);
 }
 
 async function loadDetailCast(m, type) {
@@ -6135,7 +6198,7 @@ async function loadDetailCast(m, type) {
   castList.innerHTML = '<div class="detail-cast-loading">Loading cast members...</div>';
 
   try {
-    const fetchId = m.tmdbId || m.id;
+    const fetchId = m.tmdbId || m.tmdb_id || (/^\d+$/.test(String(m.id || '').trim()) ? m.id : '');
     const res = await fetch(`/api/details?id=${fetchId}&type=${mediaType}&title=${encodeURIComponent(m.title)}&year=${m.year || ''}`);
     const data = await res.json();
     
@@ -6237,11 +6300,14 @@ async function loadSimilarMedia(id, type) {
   const section = document.getElementById('similarSection');
   if (!container || !section) return;
 
+  if (!id || !/^\d+$/.test(String(id).trim())) return;
+
   section.style.display = 'none';
   container.innerHTML = '<div class="detail-similar-loading">Scanning neural network for related titles...</div>';
 
   try {
-    const res = await fetch(`/api/media/${id}/similar?type=${type}`);
+    const cleanType = (type === 'anime' ? 'tv' : (type || 'movie'));
+    const res = await fetch(`/api/media/${id}/similar?type=${cleanType}`);
     const data = await res.json();
     if (data.success && data.items && data.items.length > 0) {
       container.innerHTML = data.items.map((m, idx) => {
@@ -6252,13 +6318,15 @@ async function loadSimilarMedia(id, type) {
         const overflowHtml = getCardOverflowMenuHtml(m, type, idx);
         return `
           <div class="movie-card similar-card" data-idx="${idx}" role="button" tabindex="0" title="${safeTitle} (${safeYear})">
-            ${overflowHtml}
             <div class="similar-card-poster-wrap">
               <img src="${safePoster}" alt="${safeTitle}" onerror="this.src='images/hero.webp'" loading="lazy">
               ${score && score > 0 ? `<span class="similar-card-rating">★ ${score}</span>` : ''}
             </div>
             <div class="similar-card-info">
-              <h3 class="similar-card-title">${safeTitle}</h3>
+              <div class="similar-card-header">
+                <h3 class="similar-card-title">${safeTitle}</h3>
+                ${overflowHtml}
+              </div>
               <span class="similar-card-year">${safeYear}</span>
             </div>
           </div>
@@ -6332,23 +6400,26 @@ async function loadDetailGallery(m, type) {
 
   try {
     let frames = [];
+    const galleryId = m.tmdbId || m.tmdb_id || (/^\d+$/.test(String(m.id || '').trim()) ? m.id : '');
     if (m.frames && Array.isArray(m.frames) && m.frames.length > 0) {
       frames = m.frames;
     } else {
-      try {
-        const res = await fetch(`/api/media/${m.id}/frames?type=${effectiveType}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.success && Array.isArray(data.frames)) {
-            frames = data.frames;
+      if (galleryId) {
+        try {
+          const res = await fetch(`/api/media/${galleryId}/frames?type=${effectiveType}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.success && Array.isArray(data.frames)) {
+              frames = data.frames;
+            }
           }
-        }
-      } catch (netErr) {}
+        } catch (netErr) {}
+      }
 
       // Resilient fallback to /api/details
       if (frames.length === 0) {
         try {
-          const detRes = await fetch(`/api/details?id=${m.id}&type=${effectiveType}&title=${encodeURIComponent(m.title || '')}`);
+          const detRes = await fetch(`/api/details?id=${galleryId}&type=${effectiveType}&title=${encodeURIComponent(m.title || '')}`);
           if (detRes.ok) {
             const detData = await detRes.json();
             if (detData?.details?.frames && Array.isArray(detData.details.frames)) {
@@ -7568,6 +7639,16 @@ async function playTrailer(id, type, title = '', year = '') {
     title = elements.detailTitle.innerText;
   }
 
+  const cleanId = (id != null && /^\d+$/.test(String(id).trim())) ? String(id).trim() : '';
+  let cleanType = (type || 'movie').toLowerCase();
+  if (cleanType === 'anime') cleanType = 'tv';
+  if (cleanType !== 'tv' && cleanType !== 'movie') cleanType = 'movie';
+
+  if (!year && elements.detailMeta?.innerText) {
+    const mYear = elements.detailMeta.innerText.match(/\b(19\d\d|20\d\d)\b/);
+    if (mYear) year = mYear[1];
+  }
+
   if (title && titleEl) {
     titleEl.textContent = `TRAILER: ${title.toUpperCase()}`;
   } else if (titleEl) {
@@ -7612,7 +7693,7 @@ async function playTrailer(id, type, title = '', year = '') {
   };
 
   try {
-    const url = `/api/details?id=${id || ''}&type=${type || 'movie'}&title=${encodeURIComponent(title || '')}&year=${encodeURIComponent(year || '')}`;
+    const url = `/api/details?id=${cleanId}&type=${cleanType}&title=${encodeURIComponent(title || '')}&year=${encodeURIComponent(year || '')}`;
     const res = await fetch(url);
     const data = await res.json();
     
@@ -7628,17 +7709,18 @@ async function playTrailer(id, type, title = '', year = '') {
     });
 
     // Fallback: If details had 0 keys, query dedicated /api/trailer
-    if (sources.length === 0 && (title || id)) {
+    if (sources.length === 0 && (title || cleanId)) {
       try {
-        const tRes = await fetch(`/api/trailer?title=${encodeURIComponent(title || '')}&year=${encodeURIComponent(year || '')}&type=${type || 'movie'}&id=${id || ''}`);
+        const tRes = await fetch(`/api/trailer?title=${encodeURIComponent(title || '')}&year=${encodeURIComponent(year || '')}&type=${cleanType}&id=${cleanId}`);
         const tData = await tRes.json();
-        if (tData.success && tData.trailerKey) {
+        const fallbackKeys = tData.trailerKeys || (tData.trailerKey ? [tData.trailerKey] : []);
+        fallbackKeys.forEach((key, idx) => {
           addSource(
-            `https://www.youtube.com/embed/${tData.trailerKey}?autoplay=1&enablejsapi=1`,
-            `https://www.youtube.com/watch?v=${tData.trailerKey}`,
-            'TRAILER'
+            `https://www.youtube.com/embed/${key}?autoplay=1&enablejsapi=1`,
+            `https://www.youtube.com/watch?v=${key}`,
+            sources.length === 0 && idx === 0 ? 'TRAILER' : `ALT TRAILER #${sources.length + idx + 1}`
           );
-        }
+        });
       } catch (e) { }
     }
 
@@ -7647,7 +7729,7 @@ async function playTrailer(id, type, title = '', year = '') {
       trailerPlayerState.currentIndex = 0;
       trailerPlayerState.title = title;
       trailerPlayerState.year = year;
-      trailerPlayerState.type = type;
+      trailerPlayerState.type = cleanType;
       renderActiveTrailerSource();
     } else {
       iframe.classList.add('hidden');
@@ -8051,6 +8133,7 @@ async function executeTorrentShare(torrent, mediaObj = {}, searchTitle = '') {
     mediaType: mediaObj.mediaType || mediaObj.type || 'movie'
   });
   switchTab('share-view');
+  openShareCardModal({ ...mediaObj, title, trailerKey }, torrent);
 }
 
 function openMagnetInTorrentClient(magnetUrl) {
@@ -8335,6 +8418,899 @@ window.copyMagnetLink = async function (magnetDec, showSuccessToast = true) {
     }
   }
 };
+
+// ==========================================================================
+// Spotify-Style Dynamic Social Share Card Generator
+// ==========================================================================
+
+function generateWaveformHeights(str, count = 26) {
+  const heights = [];
+  const text = (str || 'MOODFLIX').toUpperCase();
+  let seed = 0;
+  for (let i = 0; i < text.length; i++) {
+    seed = (seed * 31 + text.charCodeAt(i)) & 0xffffffff;
+  }
+  for (let i = 0; i < count; i++) {
+    const v = Math.abs(Math.sin(seed + i * 1.7) * 0.5 + Math.cos(seed * 0.5 + i * 2.3) * 0.5);
+    const h = 6 + Math.round(v * 20); // 6px to 26px
+    heights.push(h);
+  }
+  return heights;
+}
+
+function drawRoundRectPath(ctx, x, y, width, height, radius) {
+  if (typeof ctx.roundRect === 'function') {
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, radius);
+    return;
+  }
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function wrapCanvasText(ctx, text, maxWidth, maxLines = 2) {
+  const words = (text || '').trim().split(/\s+/);
+  const lines = [];
+  let currentLine = '';
+
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+      if (lines.length === maxLines - 1) {
+        break;
+      }
+    } else {
+      currentLine = testLine;
+    }
+  }
+  if (currentLine && lines.length < maxLines) {
+    lines.push(currentLine);
+  }
+  return lines;
+}
+
+function loadSafeImage(src) {
+  return new Promise((resolve) => {
+    if (!src) return resolve(null);
+    let settled = false;
+    const finish = (result) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      }
+    };
+    const timer = setTimeout(() => finish(null), 3500);
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+
+    let safeSrc = src;
+    if (/^https?:\/\//i.test(src)) {
+      safeSrc = `/api/proxy-image?url=${encodeURIComponent(src)}`;
+    }
+
+    img.onload = () => finish(img);
+    img.onerror = () => {
+      if (safeSrc !== src) {
+        const fallback = new Image();
+        fallback.crossOrigin = 'anonymous';
+        fallback.onload = () => finish(fallback);
+        fallback.onerror = () => finish(null);
+        fallback.src = src;
+        if (fallback.complete && fallback.naturalWidth > 0) {
+          finish(fallback);
+        }
+      } else {
+        finish(null);
+      }
+    };
+    img.src = safeSrc;
+    if (img.complete && img.naturalWidth > 0) {
+      finish(img);
+    }
+  });
+}
+
+function drawRetroCorners(ctx, width, height, inset = 7, len = 7) {
+  ctx.save();
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 1.5;
+  // Top-left
+  ctx.beginPath();
+  ctx.moveTo(inset, inset + len);
+  ctx.lineTo(inset, inset);
+  ctx.lineTo(inset + len, inset);
+  ctx.stroke();
+  // Top-right
+  ctx.beginPath();
+  ctx.moveTo(width - inset - len, inset);
+  ctx.lineTo(width - inset, inset);
+  ctx.lineTo(width - inset, inset + len);
+  ctx.stroke();
+  // Bottom-left
+  ctx.beginPath();
+  ctx.moveTo(inset, height - inset - len);
+  ctx.lineTo(inset, height - inset);
+  ctx.lineTo(inset + len, height - inset);
+  ctx.stroke();
+  // Bottom-right
+  ctx.beginPath();
+  ctx.moveTo(width - inset - len, height - inset);
+  ctx.lineTo(width - inset, height - inset);
+  ctx.lineTo(width - inset, height - inset - len);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function renderShareCardToCanvas(canvas, options = {}) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const format = options.format || 'story';
+  const scale = options.scale || 3;
+  const showSpecs = options.showSpecs !== false;
+  const showSoundwave = options.showSoundwave !== false;
+
+  const title = (options.title || 'Movie Title').trim();
+  const year = options.year ? String(options.year).trim() : '';
+  const rating = options.rating ? String(options.rating).trim() : '8.5';
+  const mediaType = (options.mediaType || 'movie').toUpperCase();
+  const quality = options.quality || (options.torrent && options.torrent.qualityBadge) || '1080P HD';
+  const size = options.size || (options.torrent && (options.torrent.sizeFormatted || options.torrent.size)) || '';
+  const seeds = options.seeds || (options.torrent && options.torrent.seeders) || '';
+  const posterImg = options.posterImg || null;
+
+  let baseWidth = 360;
+  let baseHeight = 640; // 9:16 story
+  if (format === 'card') {
+    baseHeight = 450; // 4:5 portrait
+  } else if (format === 'square') {
+    baseHeight = 360; // 1:1 square
+  }
+
+  canvas.width = baseWidth * scale;
+  canvas.height = baseHeight * scale;
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+
+  // Retro Modern Minimal Paper Background
+  ctx.fillStyle = '#F7F5F0';
+  ctx.fillRect(0, 0, baseWidth, baseHeight);
+
+  // Outer brutalist border
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(1, 1, baseWidth - 2, baseHeight - 2);
+
+  // Inner architectural hairline frame & corner brackets
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(14, 14, baseWidth - 28, baseHeight - 28);
+  drawRetroCorners(ctx, baseWidth, baseHeight, 7, 7);
+
+  if (format === 'story') {
+    // ---------------- STORY (9:16) ----------------
+    // Top Archival Header
+    ctx.font = '800 8.5px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#000000';
+    ctx.textAlign = 'left';
+    ctx.fillText('[ MOODFLIX ARCHIVE ]', 20, 32);
+    ctx.textAlign = 'right';
+    ctx.fillText('CURATED PASS // 2026', baseWidth - 20, 32);
+
+    ctx.beginPath();
+    ctx.moveTo(18, 40);
+    ctx.lineTo(baseWidth - 18, 40);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Poster Frame with hard brutalist shadow
+    const pW = 210;
+    const pH = 310;
+    const pX = (baseWidth - pW) / 2;
+    const pY = 48;
+
+    // Hard drop shadow
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(pX + 5, pY + 5, pW, pH);
+
+    if (posterImg) {
+      ctx.drawImage(posterImg, pX, pY, pW, pH);
+    } else {
+      ctx.fillStyle = '#EAE6DC';
+      ctx.fillRect(pX, pY, pW, pH);
+      ctx.fillStyle = '#000000';
+      ctx.font = '800 12px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('[ NO POSTER PREVIEW ]', baseWidth / 2, pY + pH / 2);
+    }
+
+    // Poster border
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(pX, pY, pW, pH);
+
+    // Title & Info below poster
+    let curY = pY + pH + 28;
+    const titleSize = title.length > 26 ? 16 : (title.length > 18 ? 18 : 20);
+    ctx.font = `800 ${titleSize}px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif`;
+    ctx.fillStyle = '#000000';
+    ctx.textAlign = 'center';
+
+    const lines = wrapCanvasText(ctx, title, baseWidth - 44, 2);
+    for (const l of lines) {
+      ctx.fillText(l, baseWidth / 2, curY);
+      curY += titleSize * 1.25;
+    }
+
+    curY += 2;
+    ctx.font = '700 11px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#222222';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${year || '2026'}  //  ${mediaType}  //  ★ ${rating} / 10`, baseWidth / 2, curY);
+
+    if (showSpecs) {
+      curY += 12;
+      const specsText = `${quality}${size ? `  •  ${size}` : ''}  •  🌱 ${seeds ? `${seeds} SEEDS` : 'READY'}`;
+      ctx.font = '700 9px "JetBrains Mono", monospace';
+      const m = ctx.measureText(specsText);
+      const pillW = Math.min(baseWidth - 50, m.width + 20);
+      const pillH = 22;
+      const pillX = (baseWidth - pillW) / 2;
+
+      // Brutalist badge with hard shadow
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(pillX + 2, curY + 2, pillW, pillH);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(pillX, curY, pillW, pillH);
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(pillX, curY, pillW, pillH);
+
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'center';
+      ctx.fillText(specsText, baseWidth / 2, curY + 14.5);
+    }
+
+    if (showSoundwave) {
+      const barY = 534;
+      const barW = 280;
+      const barH = 44;
+      const barX = (baseWidth - barW) / 2;
+
+      // Brutalist audio card container
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(barX + 3, barY + 3, barW, barH);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(barX, barY, barW, barH);
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(barX, barY, barW, barH);
+
+      // Play button badge
+      const iconSize = 22;
+      const iconX = barX + 8;
+      const iconY = barY + 11;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(iconX, iconY, iconSize, iconSize);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath();
+      ctx.moveTo(iconX + 7, iconY + 5);
+      ctx.lineTo(iconX + iconSize - 5, iconY + iconSize / 2);
+      ctx.lineTo(iconX + 7, iconY + iconSize - 5);
+      ctx.closePath();
+      ctx.fill();
+
+      // Optical waveform bars
+      const barCount = 22;
+      const heights = generateWaveformHeights(title, barCount);
+      const startX = iconX + iconSize + 10;
+      const barWidth = 2.5;
+      const gap = 3;
+      const midY = barY + barH / 2;
+
+      ctx.fillStyle = '#000000';
+      for (let i = 0; i < barCount; i++) {
+        const h = Math.min(barH - 10, Math.max(4, Math.round(heights[i] * 0.85)));
+        const bx = startX + i * (barWidth + gap);
+        const by = midY - h / 2;
+        ctx.fillRect(bx, by, barWidth, h);
+      }
+
+      ctx.font = '800 7px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'right';
+      ctx.fillText('SCAN TO STREAM', barX + barW - 10, barY + barH / 2 + 2.5);
+    }
+  } else if (format === 'card') {
+    // ---------------- PORTRAIT CARD (4:5) ----------------
+    // Top Archival Header
+    ctx.font = '800 8px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#000000';
+    ctx.textAlign = 'left';
+    ctx.fillText('[ MOODFLIX ARCHIVE ]', 20, 24);
+    ctx.textAlign = 'right';
+    ctx.fillText('PASS // 2026', baseWidth - 20, 24);
+
+    ctx.beginPath();
+    ctx.moveTo(18, 30);
+    ctx.lineTo(baseWidth - 18, 30);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    const pW = 140;
+    const pH = 206;
+    const pX = (baseWidth - pW) / 2;
+    const pY = 38;
+
+    // Hard drop shadow
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(pX + 4, pY + 4, pW, pH);
+
+    if (posterImg) {
+      ctx.drawImage(posterImg, pX, pY, pW, pH);
+    } else {
+      ctx.fillStyle = '#EAE6DC';
+      ctx.fillRect(pX, pY, pW, pH);
+    }
+
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(pX, pY, pW, pH);
+
+    let curY = pY + pH + 20;
+    const titleSize = title.length > 24 ? 14 : 16;
+    ctx.font = `800 ${titleSize}px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif`;
+    ctx.fillStyle = '#000000';
+    ctx.textAlign = 'center';
+
+    const lines = wrapCanvasText(ctx, title, baseWidth - 40, 2);
+    for (const l of lines) {
+      ctx.fillText(l, baseWidth / 2, curY);
+      curY += titleSize * 1.25;
+    }
+
+    ctx.font = '700 10px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#222222';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${year || '2026'}  //  ${mediaType}  //  ★ ${rating} / 10`, baseWidth / 2, curY + 2);
+
+    if (showSpecs) {
+      curY += 12;
+      const specsText = `${quality}${size ? `  •  ${size}` : ''}  •  🌱 ${seeds ? `${seeds} SEEDS` : 'READY'}`;
+      ctx.font = '700 8.5px "JetBrains Mono", monospace';
+      const m = ctx.measureText(specsText);
+      const pillW = Math.min(baseWidth - 50, m.width + 16);
+      const pillH = 20;
+      const pillX = (baseWidth - pillW) / 2;
+
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(pillX + 2, curY + 2, pillW, pillH);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(pillX, curY, pillW, pillH);
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(pillX, curY, pillW, pillH);
+
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'center';
+      ctx.fillText(specsText, baseWidth / 2, curY + 13.5);
+    }
+
+    if (showSoundwave) {
+      const barY = 368;
+      const barW = 280;
+      const barH = 38;
+      const barX = (baseWidth - barW) / 2;
+
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(barX + 3, barY + 3, barW, barH);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(barX, barY, barW, barH);
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(barX, barY, barW, barH);
+
+      const iconSize = 20;
+      const iconX = barX + 8;
+      const iconY = barY + 9;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(iconX, iconY, iconSize, iconSize);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath();
+      ctx.moveTo(iconX + 6, iconY + 5);
+      ctx.lineTo(iconX + iconSize - 5, iconY + iconSize / 2);
+      ctx.lineTo(iconX + 6, iconY + iconSize - 5);
+      ctx.closePath();
+      ctx.fill();
+
+      const barCount = 20;
+      const heights = generateWaveformHeights(title, barCount);
+      const startX = iconX + iconSize + 10;
+      const barWidth = 2.5;
+      const gap = 3;
+      const midY = barY + barH / 2;
+
+      ctx.fillStyle = '#000000';
+      for (let i = 0; i < barCount; i++) {
+        const h = Math.min(barH - 8, Math.max(3, Math.round(heights[i] * 0.75)));
+        const bx = startX + i * (barWidth + gap);
+        const by = midY - h / 2;
+        ctx.fillRect(bx, by, barWidth, h);
+      }
+
+      ctx.font = '800 7px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'right';
+      ctx.fillText('SCAN TO STREAM', barX + barW - 10, barY + barH / 2 + 2.5);
+    }
+  } else {
+    // ---------------- SQUARE (1:1) ----------------
+    // Top Archival Header
+    ctx.font = '800 8px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#000000';
+    ctx.textAlign = 'left';
+    ctx.fillText('[ MOODFLIX ARCHIVE ]', 20, 22);
+    ctx.textAlign = 'right';
+    ctx.fillText('COLLECTOR PASS', baseWidth - 20, 22);
+
+    ctx.beginPath();
+    ctx.moveTo(18, 28);
+    ctx.lineTo(baseWidth - 18, 28);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    const pW = 116;
+    const pH = 172;
+    const pX = 22;
+    const pY = 36;
+
+    // Hard drop shadow
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(pX + 4, pY + 4, pW, pH);
+
+    if (posterImg) {
+      ctx.drawImage(posterImg, pX, pY, pW, pH);
+    } else {
+      ctx.fillStyle = '#EAE6DC';
+      ctx.fillRect(pX, pY, pW, pH);
+    }
+
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(pX, pY, pW, pH);
+
+    const textLeft = 154;
+    let rightY = 48;
+
+    const titleSize = title.length > 20 ? 14 : 16;
+    ctx.font = `800 ${titleSize}px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif`;
+    ctx.fillStyle = '#000000';
+    ctx.textAlign = 'left';
+    const lines = wrapCanvasText(ctx, title, baseWidth - textLeft - 22, 2);
+    for (const l of lines) {
+      ctx.fillText(l, textLeft, rightY);
+      rightY += titleSize * 1.25;
+    }
+
+    rightY += 4;
+    ctx.font = '700 10px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#222222';
+    ctx.fillText(`${year || '2026'} // ${mediaType}`, textLeft, rightY);
+
+    rightY += 16;
+    ctx.font = '800 11px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(`★ ${rating} / 10`, textLeft, rightY);
+
+    if (showSpecs) {
+      rightY += 16;
+      ctx.font = '700 8.5px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#000000';
+      ctx.fillText(`[ ${quality} ]  [ 🌱 ${seeds ? `${seeds} Seeds` : 'Ready'} ]`, textLeft, rightY);
+    }
+
+    if (showSoundwave) {
+      const barY = 244;
+      const barW = 316;
+      const barH = 44;
+      const barX = (baseWidth - barW) / 2;
+
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(barX + 3, barY + 3, barW, barH);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(barX, barY, barW, barH);
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(barX, barY, barW, barH);
+
+      const iconSize = 22;
+      const iconX = barX + 8;
+      const iconY = barY + 11;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(iconX, iconY, iconSize, iconSize);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath();
+      ctx.moveTo(iconX + 7, iconY + 5);
+      ctx.lineTo(iconX + iconSize - 5, iconY + iconSize / 2);
+      ctx.lineTo(iconX + 7, iconY + iconSize - 5);
+      ctx.closePath();
+      ctx.fill();
+
+      const barCount = 26;
+      const heights = generateWaveformHeights(title, barCount);
+      const startX = iconX + iconSize + 10;
+      const barWidth = 2.5;
+      const gap = 3;
+      const midY = barY + barH / 2;
+
+      ctx.fillStyle = '#000000';
+      for (let i = 0; i < barCount; i++) {
+        const h = Math.min(barH - 10, Math.max(4, Math.round(heights[i] * 0.85)));
+        const bx = startX + i * (barWidth + gap);
+        const by = midY - h / 2;
+        ctx.fillRect(bx, by, barWidth, h);
+      }
+
+      ctx.font = '800 7.5px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'right';
+      ctx.fillText('MOODFLIX AUDIO CODE', barX + barW - 10, barY + barH / 2 + 2.5);
+    }
+  }
+
+  ctx.restore();
+}
+
+async function refreshShareCardCanvas() {
+  const canvas = document.getElementById('shareCardCanvas');
+  if (!canvas || !state.currentShareData) return;
+
+  const dimText = document.getElementById('shareCardDimText');
+  const resText = document.getElementById('shareCardResText');
+
+  const scale = 3; // Always render in high resolution (3X Ultra HD)
+  state.shareCardScale = 3;
+  const format = state.shareCardFormat || 'story';
+  const showSpecs = state.shareCardShowSpecs !== false;
+  const showSoundwave = state.shareCardShowSoundwave !== false;
+
+  let baseW = 360, baseH = 640;
+  if (format === 'card') { baseW = 360; baseH = 450; }
+  else if (format === 'square') { baseW = 360; baseH = 360; }
+
+  const physW = baseW * scale;
+  const physH = baseH * scale;
+
+  if (dimText) dimText.innerText = `${physW} × ${physH} PX`;
+  if (resText) resText.innerText = '3X ULTRA HD';
+
+  renderShareCardToCanvas(canvas, {
+    ...state.currentShareData,
+    posterImg: state.cachedPosterImg,
+    format,
+    scale,
+    showSpecs,
+    showSoundwave
+  });
+}
+
+async function openShareCardModal(mediaObj = {}, torrentObj = null) {
+  if (!mediaObj) return;
+
+  state.shareCardScale = 3;
+  state.shareCardShowSpecs = true;
+  state.shareCardShowSoundwave = true;
+
+  state.currentShareData = {
+    ...mediaObj,
+    torrent: torrentObj,
+    title: mediaObj.title || 'Movie',
+    year: mediaObj.year || '',
+    rating: mediaObj.rating || '8.5',
+    mediaType: mediaObj.mediaType || mediaObj.type || 'movie',
+    poster: mediaObj.poster || '',
+    mediaId: mediaObj.id || mediaObj.tmdbId || '',
+    trailerKey: mediaObj.trailerKey || ''
+  };
+
+  const modal = document.getElementById('shareCardModal');
+  if (modal) modal.classList.remove('hidden');
+
+  const titleEl = document.getElementById('shareCardModalTitle');
+  if (titleEl) titleEl.innerText = `SHARE: ${(state.currentShareData.title || 'MOVIE').toUpperCase()}`;
+
+  // Fetch trailer key in background if missing
+  if (!state.currentShareData.trailerKey && state.currentShareData.mediaId) {
+    fetch(`/api/details?id=${state.currentShareData.mediaId}&type=${state.currentShareData.mediaType}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && d.details && d.details.trailerKey) {
+          state.currentShareData.trailerKey = d.details.trailerKey;
+        }
+      })
+      .catch(() => {});
+  }
+
+  // Preload image with spinner
+  const spinner = document.getElementById('shareCardSpinner');
+  if (spinner) spinner.classList.remove('hidden');
+
+  // Render initial card immediately so preview is visible without waiting
+  refreshShareCardCanvas();
+
+  try {
+    const img = await loadSafeImage(state.currentShareData.poster);
+    state.cachedPosterImg = img;
+  } catch (_) {
+    state.cachedPosterImg = null;
+  } finally {
+    if (spinner) spinner.classList.add('hidden');
+  }
+
+  await refreshShareCardCanvas();
+}
+
+function closeShareCardModal() {
+  const modal = document.getElementById('shareCardModal');
+  if (modal) modal.classList.add('hidden');
+  const spinner = document.getElementById('shareCardSpinner');
+  if (spinner) spinner.classList.add('hidden');
+}
+
+function getShareUrlForCurrentData(cardUrl = '') {
+  const current = state.currentShareData || {};
+  const queryParams = new URLSearchParams();
+  queryParams.set('share', '1');
+  queryParams.set('title', current.title || 'Movie');
+  if (current.year) queryParams.set('year', current.year);
+  if (current.poster) queryParams.set('poster', current.poster);
+  if (cardUrl) queryParams.set('card', cardUrl);
+  if (current.mediaId) queryParams.set('mediaId', current.mediaId);
+  if (current.mediaType) queryParams.set('mediaType', current.mediaType);
+  if (current.torrent) {
+    const t = current.torrent;
+    if (t.magnet) queryParams.set('magnet', t.magnet);
+    if (t.name) queryParams.set('name', t.name);
+    if (t.sizeFormatted || t.size) queryParams.set('size', t.sizeFormatted || `${(t.size / (1024 * 1024 * 1024)).toFixed(2)} GB`);
+    if (t.qualityBadge || t.quality) queryParams.set('quality', t.qualityBadge || t.quality);
+    if (t.seeders !== undefined) queryParams.set('seeds', t.seeders);
+  }
+  if (current.trailerKey) queryParams.set('trailer', current.trailerKey);
+  return `${window.location.origin}/?${queryParams.toString()}`;
+}
+
+async function shareCardToWhatsApp() {
+  const canvas = document.getElementById('shareCardCanvas');
+  if (!canvas || !state.currentShareData) return;
+
+  const current = state.currentShareData;
+  const title = current.title || 'Movie';
+  const year = current.year || '';
+  const safeFilename = `${title.replace(/[^a-zA-Z0-9]/g, '_')}_MoodFlix.png`;
+
+  showToast('Preparing WhatsApp share...', 'info');
+
+  try {
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/png', 1.0);
+    });
+
+    // Upload generated card to server in background for WhatsApp Open Graph thumbnail preview
+    let cardUrl = '';
+    try {
+      const dataUrl = canvas.toDataURL('image/png', 0.95);
+      const res = await fetch('/api/share/card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: dataUrl, title, year })
+      });
+      const data = await res.json();
+      if (data.success && data.cardUrl) {
+        cardUrl = data.cardUrl;
+      }
+    } catch (_) {}
+
+    const shareUrl = getShareUrlForCurrentData(cardUrl);
+    const shareMessage = `🎬 Check out "${title}"${year ? ` (${year})` : ''} on MoodFlix!\n${shareUrl}`;
+
+    // Web Share API check for files
+    const file = new File([blob], safeFilename, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: `${title} on MoodFlix`,
+          text: shareMessage,
+          url: shareUrl
+        });
+        showToast('Shared to WhatsApp successfully! 🎬', 'success');
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.warn('Native file share failed, switching to download fallback:', err);
+      }
+    }
+
+    // Download fallback: download card image and open WhatsApp
+    const downloadUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = safeFilename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
+
+    showToast('Card saved to Downloads! Opening WhatsApp...', 'success');
+
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareMessage)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  } catch (err) {
+    console.error('WhatsApp share failed:', err);
+    showToast('Could not export share card: ' + err.message, 'error');
+  }
+}
+
+async function downloadCurrentShareCard() {
+  const canvas = document.getElementById('shareCardCanvas');
+  if (!canvas || !state.currentShareData) return;
+  const current = state.currentShareData;
+  const title = current.title || 'Movie';
+  const scale = 3;
+  const safeFilename = `${title.replace(/[^a-zA-Z0-9]/g, '_')}_MoodFlix_${scale}X.png`;
+
+  try {
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/png', 1.0);
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = safeFilename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    showToast(`Card saved in high resolution (3X)! 🎬`, 'success');
+  } catch (err) {
+    showToast('Download failed: ' + err.message, 'error');
+  }
+}
+
+async function copyShareCardImage() {
+  const canvas = document.getElementById('shareCardCanvas');
+  if (!canvas) return;
+  try {
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/png', 1.0);
+    });
+    if (navigator.clipboard && window.ClipboardItem) {
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+      showToast('Card image copied to clipboard! Paste directly (Ctrl+V) 📋', 'success');
+    } else {
+      showToast('Clipboard image write not supported in this browser.', 'info');
+    }
+  } catch (err) {
+    showToast('Could not copy image: ' + err.message, 'error');
+  }
+}
+
+async function copyShareCardLink() {
+  const shareUrl = getShareUrlForCurrentData();
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(shareUrl);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = shareUrl;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    showToast('Share link copied to clipboard! 🎬', 'success');
+  } catch (err) {
+    showToast('Could not copy link.', 'error');
+  }
+}
+
+async function nativeShareCard() {
+  const canvas = document.getElementById('shareCardCanvas');
+  if (!canvas || !state.currentShareData) return;
+  const current = state.currentShareData;
+  const title = current.title || 'Movie';
+  const safeFilename = `${title.replace(/[^a-zA-Z0-9]/g, '_')}_MoodFlix.png`;
+  const shareUrl = getShareUrlForCurrentData();
+
+  try {
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 1.0));
+    const file = new File([blob], safeFilename, { type: 'image/png' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: `${title} on MoodFlix`,
+        text: `Check out "${title}" on MoodFlix!`,
+        url: shareUrl
+      });
+    } else if (navigator.share) {
+      await navigator.share({
+        title: `${title} on MoodFlix`,
+        text: `Check out "${title}" on MoodFlix!`,
+        url: shareUrl
+      });
+    } else {
+      downloadCurrentShareCard();
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      downloadCurrentShareCard();
+    }
+  }
+}
+
+function initShareCardStudio() {
+  state.shareCardScale = 3;
+  state.shareCardShowSpecs = true;
+  state.shareCardShowSoundwave = true;
+
+  // Format selection pills
+  document.querySelectorAll('.format-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.format-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.shareCardFormat = btn.dataset.format;
+      refreshShareCardCanvas();
+    });
+  });
+
+  // Actions
+  document.getElementById('btnShareWhatsApp')?.addEventListener('click', shareCardToWhatsApp);
+  document.getElementById('btnDownloadShareCard')?.addEventListener('click', downloadCurrentShareCard);
+  document.getElementById('btnCopyShareCardImage')?.addEventListener('click', copyShareCardImage);
+  document.getElementById('btnCopyShareCardLink')?.addEventListener('click', copyShareCardLink);
+  document.getElementById('btnNativeShare')?.addEventListener('click', nativeShareCard);
+  document.getElementById('btnCloseShareCardModal')?.addEventListener('click', closeShareCardModal);
+
+  // Close on backdrop click
+  document.getElementById('shareCardModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'shareCardModal') {
+      closeShareCardModal();
+    }
+  });
+}
+
+window.openShareCardModal = openShareCardModal;
+window.closeShareCardModal = closeShareCardModal;
+window.renderShareCardToCanvas = renderShareCardToCanvas;
+window.shareCardToWhatsApp = shareCardToWhatsApp;
+window.downloadCurrentShareCard = downloadCurrentShareCard;
+window.generateWaveformHeights = generateWaveformHeights;
+window.initShareCardStudio = initShareCardStudio;
 
 window.shareSelectedTorrent = function (titleDec, torrentStr, mediaStr) {
   const title = decodeURIComponent(titleDec);
