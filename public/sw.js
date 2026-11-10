@@ -1,5 +1,5 @@
-// MoodFlix PWA Service Worker (Network-First Strategy with runtime caching)
-const CACHE_NAME = 'moodflix-v5-anime';
+// MoodFlix PWA Service Worker (Cache-First for Images, Network-First for Shell & Assets)
+const CACHE_NAME = 'moodflix-v6-resilient';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -29,10 +29,31 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  const url = event.request.url;
+  const isImage = url.includes('image.tmdb.org') || event.request.destination === 'image';
+
+  if (isImage) {
+    // Cache-first strategy for media posters and backdrops
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        if (cachedResponse) return cachedResponse;
+        return fetch(event.request).then((response) => {
+          if (response && response.status === 200 && (response.type === 'basic' || response.type === 'cors')) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)).catch(() => {});
+          }
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  // Network-first strategy for application shell and static assets
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        if (response && response.status === 200 && response.type === 'basic') {
+        if (response && response.status === 200 && (response.type === 'basic' || response.type === 'cors')) {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);

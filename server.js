@@ -22,14 +22,17 @@ try {
   const envPath = path.join(__dirname, '.env');
   if (fs.existsSync(envPath)) {
     const envContent = fs.readFileSync(envPath, 'utf-8');
-    envContent.split('\n').forEach(line => {
+    envContent.split(/\r?\n/).forEach(line => {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#')) {
         const eqIdx = trimmed.indexOf('=');
         if (eqIdx > 0) {
           const key = trimmed.slice(0, eqIdx).trim();
-          const val = trimmed.slice(eqIdx + 1).trim();
-          if (!process.env[key]) {
+          let val = trimmed.slice(eqIdx + 1).trim();
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1);
+          }
+          if (process.env[key] === undefined) {
             process.env[key] = val;
           }
         }
@@ -41,10 +44,55 @@ try {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+// Rate limiting in-memory store
+const rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const MAX_REQUESTS_PER_WINDOW = 300;
+
+app.use((req, res, next) => {
+  const ip = req.ip || req.headers['x-forwarded-for'] || (req.socket ? req.socket.remoteAddress : 'unknown');
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip) || { count: 0, resetTime: now + RATE_LIMIT_WINDOW_MS };
+  if (now > entry.resetTime) {
+    entry.count = 1;
+    entry.resetTime = now + RATE_LIMIT_WINDOW_MS;
+  } else {
+    entry.count++;
+  }
+  rateLimitMap.set(ip, entry);
+  if (entry.count > MAX_REQUESTS_PER_WINDOW) {
+    return res.status(429).json({ success: false, error: 'Too many requests, please slow down.' });
+  }
+  next();
+});
+
+// CORS middleware
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, apikey');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// Security headers including Content-Security-Policy
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval'; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' https: data: blob:;"
+  );
+  next();
+});
+
+app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// High-Speed In-Memory Cache (10 minutes TTL)
+// High-Speed In-Memory Cache (10 minutes TTL) with LRU eviction and interval sweep
 const apiCache = new Map();
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -55,22 +103,89 @@ function getCached(key) {
     apiCache.delete(key);
     return null;
   }
+  // Refresh access position for LRU
+  apiCache.delete(key);
+  apiCache.set(key, item);
   return item.data;
 }
 
 function setCached(key, data) {
-  if (apiCache.size > 500) {
-    const keys = Array.from(apiCache.keys()).slice(0, 100);
-    keys.forEach(k => apiCache.delete(k));
+  if (apiCache.has(key)) {
+    apiCache.delete(key);
+  } else if (apiCache.size >= 500) {
+    // Evict least recently used (first inserted/accessed item)
+    const oldestKey = apiCache.keys().next().value;
+    if (oldestKey) apiCache.delete(oldestKey);
   }
   apiCache.set(key, { data, timestamp: Date.now() });
 }
+
+// Periodic cleanup sweep for expired cache & rate limiter entries
+const cacheCleanupTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [key, item] of apiCache.entries()) {
+    if (now - item.timestamp > CACHE_TTL_MS) {
+      apiCache.delete(key);
+    }
+  }
+  for (const [ip, entry] of rateLimitMap.entries()) {
+    if (now > entry.resetTime) {
+      rateLimitMap.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
+if (cacheCleanupTimer.unref) cacheCleanupTimer.unref();
 
 // Supabase REST Helper
 const getSupabaseConfig = () => {
   const url = process.env.SUPABASE_URL || '';
   const key = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || '';
   return { url, key, isConfigured: Boolean(url && key) };
+};
+
+const verifySupabaseAuthToken = async (req) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7).trim();
+  const { url, key, isConfigured } = getSupabaseConfig();
+  if (!isConfigured || !token) return null;
+  try {
+    const res = await fetch(`${url.replace(/\/$/, '')}/auth/v1/user`, {
+      headers: {
+        'apikey': key,
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    if (res.ok) {
+      const user = await res.json();
+      return user;
+    }
+  } catch (e) {
+    console.warn('[Supabase Auth Verification Error]', e.message);
+  }
+  return null;
+};
+
+// Guard function to ensure mutation caller owns target userId
+const assertUserAuthorized = async (req, targetUserId) => {
+  if (!targetUserId || targetUserId === 'guest') return true;
+  const { isConfigured } = getSupabaseConfig();
+  const authHeader = req.headers.authorization;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const authUser = await verifySupabaseAuthToken(req);
+    if (!authUser || authUser.id !== targetUserId) {
+      return false;
+    }
+    return true;
+  }
+
+  // When Supabase is configured and targeting a UUID user, require matching auth session
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(targetUserId));
+  if (isConfigured && isUuid) {
+    return false;
+  }
+  return true;
 };
 
 const supabaseFetch = async (endpoint, options = {}) => {
@@ -664,9 +779,16 @@ app.post('/api/user/watchlist', async (req, res) => {
   try {
     const { item, userId } = req.body;
     const targetUserId = userId || req.body.user_id || 'guest';
-    if (!item || !item.title) {
-      return res.status(400).json({ success: false, error: 'Valid title or item object required' });
+
+    const authorized = await assertUserAuthorized(req, targetUserId);
+    if (!authorized) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: valid user authentication session required' });
     }
+
+    if (!item || !item.title || typeof item.title !== 'string' || !item.title.trim()) {
+      return res.status(400).json({ success: false, error: 'Valid title string is required' });
+    }
+    const cleanTitle = String(item.title).trim().slice(0, 500);
 
     let resolvedTmdbId = item.tmdbId || item.id ? parseInt(item.tmdbId || item.id, 10) : null;
     if (resolvedTmdbId && (item.isSeason || item.is_season) && (item.seasonNumber != null || item.season_number != null)) {
@@ -678,27 +800,27 @@ app.post('/api/user/watchlist', async (req, res) => {
       user_id: String(targetUserId),
       tmdb_id: resolvedTmdbId,
       media_type: item.mediaType || 'movie',
-      title: item.title,
-      year: item.year ? parseInt(item.year, 10) : null,
+      title: cleanTitle,
+      year: item.year ? Math.min(2100, Math.max(1800, parseInt(item.year, 10))) : null,
       poster: item.poster || null,
       backdrop: item.backdrop || null,
-      rating: item.rating ? parseFloat(item.rating) : 0,
+      rating: item.rating ? Math.min(10, Math.max(0, parseFloat(item.rating))) : 0,
       vote_count: item.voteCount || item.vote_count || 0,
-      overview: item.overview || item.synopsis || '',
-      genres: Array.isArray(item.genres) ? item.genres : [],
-      runtime: item.runtime ? parseInt(item.runtime, 10) : 0,
-      status: item.status || 'plan_to_watch',
-      current_season: item.seasonNumber != null ? parseInt(item.seasonNumber, 10) : (item.currentSeason || item.current_season || 1),
-      current_episode: item.currentEpisode || item.current_episode || 0,
-      total_seasons: item.totalSeasons || item.total_seasons || 1,
-      total_episodes: item.totalEpisodes || item.total_episodes || 0,
-      progress_pct: item.progressPct || item.progress_pct || 0,
+      overview: (item.overview || item.synopsis || '').slice(0, 5000),
+      genres: Array.isArray(item.genres) ? item.genres.slice(0, 20).map(g => String(g).slice(0, 50)) : [],
+      runtime: item.runtime ? Math.max(0, parseInt(item.runtime, 10)) : 0,
+      status: ['plan_to_watch', 'watching', 'completed', 'dropped'].includes(item.status) ? item.status : 'plan_to_watch',
+      current_season: item.seasonNumber != null ? Math.max(1, parseInt(item.seasonNumber, 10)) : Math.max(1, parseInt(item.currentSeason || item.current_season || 1, 10)),
+      current_episode: Math.max(0, parseInt(item.currentEpisode || item.current_episode || 0, 10)),
+      total_seasons: Math.max(1, parseInt(item.totalSeasons || item.total_seasons || 1, 10)),
+      total_episodes: Math.max(0, parseInt(item.totalEpisodes || item.total_episodes || 0, 10)),
+      progress_pct: Math.min(100, Math.max(0, parseInt(item.progressPct || item.progress_pct || 0, 10))),
       user_rating: item.userRating || item.user_rating || null,
       diary_notes: item.diaryNotes || item.diary_notes || null,
       watched_date: item.watchedDate || item.watched_date || null,
       alert_enabled: Boolean(item.alertEnabled || item.alert_enabled),
       next_air_date: item.nextAirDate || item.next_air_date || null,
-      streaming_info: item.streamingInfo || item.streaming_info || [],
+      streaming_info: Array.isArray(item.streamingInfo || item.streaming_info) ? (item.streamingInfo || item.streaming_info) : [],
       custom_lists: Array.isArray(item.customLists || item.custom_lists) ? (item.customLists || item.custom_lists) : [],
       updated_at: new Date().toISOString()
     };
@@ -766,6 +888,11 @@ app.patch('/api/user/watchlist/:id', async (req, res) => {
     const { userId, updates } = req.body;
     const targetUserId = userId || 'guest';
 
+    const authorized = await assertUserAuthorized(req, targetUserId);
+    if (!authorized) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: valid user authentication session required' });
+    }
+
     const dbFields = mapWatchlistUpdatesToDb(updates);
     const fields = { ...dbFields, updated_at: new Date().toISOString() };
 
@@ -801,6 +928,11 @@ app.delete('/api/user/watchlist/:id', async (req, res) => {
     const userId = req.query.userId || req.query.user_id || 'guest';
     const fallbackTitle = req.query.title ? decodeURIComponent(req.query.title) : null;
 
+    const authorized = await assertUserAuthorized(req, userId);
+    if (!authorized) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: valid user authentication session required' });
+    }
+
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
     let queryFilter = isUuid
       ? `id=eq.${encodeURIComponent(id)}`
@@ -828,6 +960,12 @@ app.delete('/api/user/watchlist/:id', async (req, res) => {
 app.delete('/api/user/watchlist', async (req, res) => {
   try {
     const userId = req.query.userId || req.query.user_id || 'guest';
+
+    const authorized = await assertUserAuthorized(req, userId);
+    if (!authorized) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: valid user authentication session required' });
+    }
+
     await supabaseFetch(`watchlist_items?user_id=eq.${encodeURIComponent(userId)}`, {
       method: 'DELETE'
     });
@@ -864,6 +1002,11 @@ app.post('/api/user/custom-lists', async (req, res) => {
     const color = listData.color || '#ff2a5f';
     const icon = listData.icon || 'bookmark';
     const targetUserId = req.body.userId || listData.userId || req.body.user_id || 'guest';
+
+    const authorized = await assertUserAuthorized(req, targetUserId);
+    if (!authorized) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: valid user authentication session required' });
+    }
 
     if (!name) return res.status(400).json({ success: false, error: 'List name is required' });
 
@@ -911,6 +1054,11 @@ app.delete('/api/user/custom-lists/:id', async (req, res) => {
     const { id } = req.params;
     const userId = req.query.userId || req.query.user_id || 'guest';
 
+    const authorized = await assertUserAuthorized(req, userId);
+    if (!authorized) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: valid user authentication session required' });
+    }
+
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))) {
       await supabaseFetch(`custom_lists?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(userId)}`, { method: 'DELETE' });
     }
@@ -946,6 +1094,12 @@ app.post('/api/user/diary', async (req, res) => {
   try {
     const entryData = req.body.entry || req.body.diary || req.body;
     const targetUserId = req.body.userId || entryData.userId || req.body.user_id || entryData.user_id || 'guest';
+
+    const authorized = await assertUserAuthorized(req, targetUserId);
+    if (!authorized) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: valid user authentication session required' });
+    }
+
     const title = (entryData.title || entryData.movie_title || '').trim();
     if (!title) return res.status(400).json({ success: false, error: 'Title is required for diary entry' });
 
@@ -1025,6 +1179,11 @@ app.delete('/api/user/diary/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.query.userId || req.query.user_id || 'guest';
+
+    const authorized = await assertUserAuthorized(req, userId);
+    if (!authorized) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: valid user authentication session required' });
+    }
 
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))) {
       await supabaseFetch(`watch_diary?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(userId)}`, { method: 'DELETE' });
@@ -1156,7 +1315,8 @@ app.get('/api/user/export', async (req, res) => {
     let csv = 'Title,Year,MediaType,Status,Rating,Runtime,DateAdded,TMDB_ID,Genres\n';
     items.forEach(i => {
       const titleSafe = `"${(i.title || '').replace(/"/g, '""')}"`;
-      const genresSafe = `"${((i.genres || []).join(';') || '').replace(/"/g, '""')}"`;
+      const genresList = Array.isArray(i.genres) ? i.genres : (typeof i.genres === 'string' ? [i.genres] : []);
+      const genresSafe = `"${(genresList.join(';') || '').replace(/"/g, '""')}"`;
       csv += `${titleSafe},${i.year || ''},${i.media_type || i.mediaType || 'movie'},${i.status || 'plan_to_watch'},${i.rating || ''},${i.runtime || ''},${i.created_at || ''},${i.tmdb_id || i.tmdbId || ''},${genresSafe}\n`;
     });
     res.send(csv);
@@ -1168,7 +1328,11 @@ app.get('/api/user/export', async (req, res) => {
 // 8. Get settings
 app.get('/api/settings', (req, res) => {
   try {
-    const settings = Storage.getSettings();
+    const rawSettings = Storage.getSettings();
+    const settings = { ...rawSettings };
+    // Redact TMDB API key and token to prevent harvesting
+    delete settings.tmdbApiKey;
+    delete settings.tmdbReadToken;
     res.json({ success: true, settings });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

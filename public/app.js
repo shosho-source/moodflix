@@ -291,6 +291,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
+async function getAuthHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  if (supabaseClient) {
+    try {
+      const { data } = await supabaseClient.auth.getSession();
+      if (data?.session?.access_token) {
+        headers['Authorization'] = `Bearer ${data.session.access_token}`;
+      }
+    } catch (e) {}
+  }
+  return headers;
+}
+
 async function initSupabaseClient() {
   const isShared = checkShareUrl();
 
@@ -421,6 +434,10 @@ async function handleSignOut() {
       console.warn('Sign out warning:', e);
     }
   }
+  try {
+    localStorage.removeItem('moodflix_watchlist');
+  } catch (e) {}
+  state.watchlist = [];
   showToast('Signed out of session (Reverted to Guest)', 'info');
   await showDashboardView(null);
 }
@@ -711,11 +728,21 @@ function renderWatchlistStats() {
 
   let totalMinutes = 0;
   state.watchlist.forEach(i => {
-    if (i.mediaType === 'movie') {
-      totalMinutes += (i.runtime || 110);
+    const isMovie = (i.mediaType || i.media_type) === 'movie';
+    if (isMovie) {
+      if (i.status === 'completed') {
+        totalMinutes += (i.runtime || 110);
+      }
     } else {
-      const eps = i.currentEpisode || i.totalEpisodes || 10;
-      totalMinutes += eps * (i.runtime || 45);
+      if (i.status === 'completed') {
+        const eps = i.totalEpisodes || i.currentEpisode || 10;
+        totalMinutes += eps * (i.runtime || 45);
+      } else {
+        const eps = parseInt(i.currentEpisode, 10) || 0;
+        if (eps > 0) {
+          totalMinutes += eps * (i.runtime || 45);
+        }
+      }
     }
   });
   const totalHours = Math.round(totalMinutes / 60);
@@ -738,9 +765,11 @@ function renderWatchlistStats() {
 async function loadWatchlist() {
   const userId = state.user ? state.user.id : 'guest';
 
-  // 1. Read from localStorage first (immediate responsiveness)
+  // 1. Read from localStorage first (isolated per user)
   try {
-    const raw = localStorage.getItem(`moodflix_watchlist_${userId}`) || localStorage.getItem('moodflix_watchlist');
+    const raw = state.user
+      ? localStorage.getItem(`moodflix_watchlist_${userId}`)
+      : (localStorage.getItem(`moodflix_watchlist_${userId}`) || localStorage.getItem('moodflix_watchlist'));
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
@@ -773,17 +802,21 @@ async function loadWatchlist() {
           map.set(key, norm);
           // Sync to server in background
           if (state.user) {
-            fetch('/api/user/watchlist', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ item: norm, userId })
-            }).catch(() => {});
+            getAuthHeaders().then(authHeaders => {
+              fetch('/api/user/watchlist', {
+                method: 'POST',
+                headers: authHeaders,
+                body: JSON.stringify({ item: norm, userId })
+              }).catch(() => {});
+            });
           }
         }
       });
       state.watchlist = Array.from(map.values());
       localStorage.setItem(`moodflix_watchlist_${userId}`, JSON.stringify(state.watchlist));
-      localStorage.setItem('moodflix_watchlist', JSON.stringify(state.watchlist));
+      if (!state.user) {
+        localStorage.setItem('moodflix_watchlist', JSON.stringify(state.watchlist));
+      }
     }
   } catch (e) {}
 
@@ -795,7 +828,9 @@ async function saveWatchlist() {
   const userId = state.user ? state.user.id : 'guest';
   try {
     localStorage.setItem(`moodflix_watchlist_${userId}`, JSON.stringify(state.watchlist));
-    localStorage.setItem('moodflix_watchlist', JSON.stringify(state.watchlist));
+    if (!state.user) {
+      localStorage.setItem('moodflix_watchlist', JSON.stringify(state.watchlist));
+    }
   } catch (e) {}
   renderWatchlistStats();
   renderWatchlist();
@@ -828,105 +863,127 @@ async function removeWatchlistItem(item) {
   await saveWatchlist();
 
   const deleteParam = targetId || encodeURIComponent(targetTitle);
-  fetch(`/api/user/watchlist/${encodeURIComponent(deleteParam)}?userId=${encodeURIComponent(userId)}&title=${encodeURIComponent(targetTitle)}`, { method: 'DELETE' }).catch(() => {});
-  fetch(`/api/watchlist/${encodeURIComponent(deleteParam)}?title=${encodeURIComponent(targetTitle)}`, { method: 'DELETE' }).catch(() => {});
+  getAuthHeaders().then(authHeaders => {
+    fetch(`/api/user/watchlist/${encodeURIComponent(deleteParam)}?userId=${encodeURIComponent(userId)}&title=${encodeURIComponent(targetTitle)}`, {
+      method: 'DELETE',
+      headers: authHeaders
+    }).catch(() => {});
+  });
 }
 
+const _pendingToggleWatchlist = new Set();
 async function toggleWatchlistItem(media, mediaType = 'movie') {
   if (!media) return;
   const title = (media.title || media.name || '').trim();
   if (!title) return;
+  const userId = state.user ? state.user.id : 'guest';
 
-  const targetItem = findWatchlistItem(media);
+  // Mutual exclusion guard to prevent concurrent race duplicates
+  const toggleKey = String(media.tmdbId || media.id || title).toLowerCase();
+  if (_pendingToggleWatchlist.has(toggleKey)) return;
+  _pendingToggleWatchlist.add(toggleKey);
 
-  if (targetItem) {
-    await removeWatchlistItem(targetItem);
-  } else {
-    let enriched = { ...media };
-    // Fetch complete metadata if not present
-    if (media.id && (!media.runtime || !media.seasons)) {
-      try {
-        const detailsRes = await fetch(`/api/details?id=${media.id}&type=${mediaType || media.mediaType || 'movie'}&title=${encodeURIComponent(title)}`);
-        const detailsData = await detailsRes.json();
-        if (detailsData?.details) {
-          enriched = { ...media, ...detailsData.details };
-        }
-      } catch (e) {}
+  try {
+    const targetItem = findWatchlistItem(media);
+
+    if (targetItem) {
+      await removeWatchlistItem(targetItem);
+    } else {
+      let enriched = { ...media };
+      // Fetch complete metadata if not present
+      if (media.id && (!media.runtime || !media.seasons)) {
+        try {
+          const detailsRes = await fetch(`/api/details?id=${media.id}&type=${mediaType || media.mediaType || 'movie'}&title=${encodeURIComponent(title)}`);
+          const detailsData = await detailsRes.json();
+          if (detailsData?.details) {
+            enriched = { ...media, ...detailsData.details };
+          }
+        } catch (e) {}
+      }
+
+      const entry = normalizeWatchlistItem({
+        id: enriched.id || Date.now().toString(),
+        tmdbId: enriched.tmdbId || enriched.id || null,
+        title: title,
+        year: enriched.year || (enriched.releaseDate ? enriched.releaseDate.slice(0, 4) : ''),
+        poster: enriched.poster || '',
+        backdrop: enriched.backdrop || '',
+        rating: enriched.rating || 0,
+        voteCount: enriched.voteCount || 0,
+        mediaType: mediaType || enriched.mediaType || 'movie',
+        overview: enriched.synopsis || enriched.overview || '',
+        genres: enriched.genres || [],
+        runtime: enriched.runtime || 0,
+        status: 'plan_to_watch',
+        currentSeason: 1,
+        currentEpisode: 0,
+        totalSeasons: enriched.numberOfSeasons || (enriched.seasons ? enriched.seasons.length : 1),
+        totalEpisodes: enriched.numberOfEpisodes || 0,
+        progressPct: 0,
+        nextAirDate: enriched.nextEpisodeToAir?.airDate || ''
+      });
+
+      state.watchlist.unshift(entry);
+      showToast(`Added "${title}" to Watchlist (Cloud Synced)`, 'success');
+
+      getAuthHeaders().then(authHeaders => {
+        fetch('/api/user/watchlist', {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({ item: entry, userId })
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (data.success && data.item?.id) {
+              entry.id = data.item.id;
+              saveWatchlist();
+            }
+          })
+          .catch(() => {});
+      });
+
+      await saveWatchlist();
     }
-
-    const entry = normalizeWatchlistItem({
-      id: enriched.id || Date.now().toString(),
-      tmdbId: enriched.tmdbId || enriched.id || null,
-      title: title,
-      year: enriched.year || (enriched.releaseDate ? enriched.releaseDate.slice(0, 4) : ''),
-      poster: enriched.poster || '',
-      backdrop: enriched.backdrop || '',
-      rating: enriched.rating || 0,
-      voteCount: enriched.voteCount || 0,
-      mediaType: mediaType || enriched.mediaType || 'movie',
-      overview: enriched.synopsis || enriched.overview || '',
-      genres: enriched.genres || [],
-      runtime: enriched.runtime || 0,
-      status: 'plan_to_watch',
-      currentSeason: 1,
-      currentEpisode: 0,
-      totalSeasons: enriched.numberOfSeasons || (enriched.seasons ? enriched.seasons.length : 1),
-      totalEpisodes: enriched.numberOfEpisodes || 0,
-      progressPct: 0,
-      nextAirDate: enriched.nextEpisodeToAir?.airDate || ''
-    });
-
-    state.watchlist.unshift(entry);
-    showToast(`Added "${title}" to Watchlist (Cloud Synced)`, 'success');
-
-    fetch('/api/user/watchlist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item: entry, userId })
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success && data.item?.id) {
-          entry.id = data.item.id;
-          saveWatchlist();
-        }
-      })
-      .catch(() => {});
-
-    fetch('/api/watchlist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(entry)
-    }).catch(() => {});
+  } finally {
+    _pendingToggleWatchlist.delete(toggleKey);
   }
 
   updateDetailButtons(media);
-  await saveWatchlist();
 }
 
 function findWatchlistItem(mediaOrTitle) {
   if (!mediaOrTitle) return null;
   const targetTitle = typeof mediaOrTitle === 'string' ? mediaOrTitle.trim().toLowerCase() : (mediaOrTitle.title || mediaOrTitle.name || '').trim().toLowerCase();
   const targetId = typeof mediaOrTitle === 'object' && mediaOrTitle.id ? String(mediaOrTitle.id) : null;
-  const targetTmdb = typeof mediaOrTitle === 'object' && (mediaOrTitle.tmdbId || mediaOrTitle.tmdb_id) ? String(mediaOrTitle.tmdbId || mediaOrTitle.tmdb_id) : null;
+  const targetTmdb = typeof mediaOrTitle === 'object' ? String(mediaOrTitle.tmdbId || mediaOrTitle.tmdb_id || mediaOrTitle.id || '') : null;
   const targetSeason = typeof mediaOrTitle === 'object' ? (mediaOrTitle.seasonNumber || mediaOrTitle.season_number || null) : null;
 
   return state.watchlist.find(w => {
     const wTitle = (w.title || '').trim().toLowerCase();
     const wId = w.id ? String(w.id) : null;
-    const wTmdb = w.tmdbId ? String(w.tmdbId) : null;
+    const wTmdb = (w.tmdbId || w.tmdb_id) ? String(w.tmdbId || w.tmdb_id) : (w.id && !isNaN(w.id) ? String(w.id) : null);
 
     if (wId && targetId && wId === targetId) return true;
-    if (w.isSeason && targetSeason != null && wTmdb && targetTmdb && wTmdb === targetTmdb) {
+    if (wTmdb && targetTmdb && wTmdb === targetTmdb) {
+      if (w.isSeason && targetSeason != null) {
+        return (w.seasonNumber == targetSeason);
+      }
+      return (!w.isSeason || targetSeason == null);
+    }
+    if (w.isSeason && targetSeason != null && wTitle === targetTitle) {
       return (w.seasonNumber == targetSeason);
     }
-    return (!w.isSeason && targetTmdb && wTmdb === targetTmdb) || (targetTitle && wTitle === targetTitle);
+    return targetTitle && (wTitle === targetTitle || (w.seriesTitle && targetTitle.length >= 4 && w.seriesTitle.toLowerCase() === targetTitle));
   }) || null;
 }
 
 function updateDetailButtons(media) {
-  if (!media) return;
-  const item = findWatchlistItem(media);
+  const targetMedia = media || state.currentDetailMedia;
+  if (!targetMedia) return;
+  if (media && (!state.currentDetailMedia || state.currentDetailMedia.id === media.id || state.currentDetailMedia.title === media.title)) {
+    state.currentDetailMedia = { ...state.currentDetailMedia, ...media };
+  }
+  const item = findWatchlistItem(targetMedia);
   const isWatched = item && item.status === 'completed';
   const isWatchLater = item && item.status !== 'completed';
   const customListCount = (item && Array.isArray(item.customLists)) ? item.customLists.length : 0;
@@ -1014,7 +1071,7 @@ async function handleDetailWatched(media, mediaType = 'movie') {
       genres: enriched.genres || [],
       runtime: enriched.runtime || 0,
       status: 'completed',
-      currentSeason: enriched.numberOfSeasons || 1,
+      currentSeason: enriched.seasonNumber != null ? parseInt(enriched.seasonNumber, 10) : 1,
       currentEpisode: totalEpisodes,
       totalSeasons: enriched.numberOfSeasons || (enriched.seasons ? enriched.seasons.length : 1),
       totalEpisodes: totalEpisodes,
@@ -1025,19 +1082,21 @@ async function handleDetailWatched(media, mediaType = 'movie') {
     state.watchlist.unshift(target);
     showToast(`Marked "${title}" as Watched`, 'success');
 
-    fetch('/api/user/watchlist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item: target, userId })
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success && data.item?.id) {
-          target.id = data.item.id;
-          saveWatchlist();
-        }
+    getAuthHeaders().then(authHeaders => {
+      fetch('/api/user/watchlist', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ item: target, userId })
       })
-      .catch(() => {});
+        .then(r => r.json())
+        .then(data => {
+          if (data.success && data.item?.id) {
+            target.id = data.item.id;
+            saveWatchlist();
+          }
+        })
+        .catch(() => {});
+    });
   } else {
     const isCurrentlyWatched = target.status === 'completed';
     const newStatus = isCurrentlyWatched ? 'plan_to_watch' : 'completed';
@@ -1052,18 +1111,20 @@ async function handleDetailWatched(media, mediaType = 'movie') {
         target.progressPct = 0;
       }
     }
-    fetch(`/api/user/watchlist/${target.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId,
-        updates: {
-          status: newStatus,
-          current_episode: target.currentEpisode,
-          progress_pct: target.progressPct
-        }
-      })
-    }).catch(() => {});
+    getAuthHeaders().then(authHeaders => {
+      fetch(`/api/user/watchlist/${target.id}`, {
+        method: 'PATCH',
+        headers: authHeaders,
+        body: JSON.stringify({
+          userId,
+          updates: {
+            status: newStatus,
+            current_episode: target.currentEpisode,
+            progress_pct: target.progressPct
+          }
+        })
+      }).catch(() => {});
+    });
     showToast(newStatus === 'completed' ? `Marked "${target.title}" as Watched` : `Marked "${target.title}" as Unwatched`, 'info');
   }
 
@@ -1078,7 +1139,7 @@ async function handleDetailWatchLater(media, mediaType = 'movie') {
   const title = (media.title || media.name || 'Title').trim();
 
   if (target && target.status === 'plan_to_watch') {
-    await toggleWatchlistItem(media, mediaType);
+    await removeWatchlistItem(target);
   } else if (target && target.status === 'completed') {
     target.status = 'plan_to_watch';
     const userId = state.user ? state.user.id : 'guest';
@@ -1106,6 +1167,18 @@ async function handleDetailAddToList(media, mediaType = 'movie') {
   }
   if (target) {
     openAssignToListModal(target);
+  } else {
+    const fallbackItem = normalizeWatchlistItem({
+      id: media.id || Date.now().toString(),
+      tmdbId: media.tmdbId || media.id || null,
+      title: media.title || media.name || 'Title',
+      mediaType: mediaType || media.mediaType || 'movie',
+      poster: media.poster || '',
+      customLists: []
+    });
+    state.watchlist.unshift(fallbackItem);
+    await saveWatchlist();
+    openAssignToListModal(fallbackItem);
   }
 }
 
@@ -1220,8 +1293,8 @@ function renderWatchlist() {
     return true;
   });
 
-  // Sorting Pipeline
-  filtered.sort((a, b) => {
+  // Sorting Pipeline (Immutable)
+  const sorted = [...filtered].sort((a, b) => {
     if (sort === 'date_asc') return (new Date(a.createdAt || 0)) - (new Date(b.createdAt || 0));
     if (sort === 'rating_desc') return (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0);
     if (sort === 'year_desc') return (parseInt(b.year) || 0) - (parseInt(a.year) || 0);
@@ -1234,14 +1307,14 @@ function renderWatchlist() {
 
   if (!grid || !emptyState) return;
 
-  if (filtered.length === 0) {
+  if (sorted.length === 0) {
     grid.innerHTML = '';
     emptyState.classList.remove('hidden');
     return;
   }
 
   emptyState.classList.add('hidden');
-  grid.innerHTML = filtered.map((item, idx) => {
+  grid.innerHTML = sorted.map((item, idx) => {
     const safeTitle = escapeHtml(item.title);
     const safeYear = escapeHtml(item.year || '');
     const safePoster = escapeHtml(item.poster || 'images/hero.webp');
@@ -1642,17 +1715,27 @@ async function markSeasonCompleted(seasonNum) {
 
     item.currentSeason = seasonNum;
     item.currentEpisode = lastEp;
-    const totalEps = item.totalEpisodes || lastEp;
-    item.progressPct = totalEps > 0 ? Math.min(100, Math.round((item.currentEpisode / totalEps) * 100)) : 100;
-    item.status = seasonNum >= (item.totalSeasons || 1) ? 'completed' : 'watching';
+    const isFinalSeason = seasonNum >= (item.totalSeasons || 1);
+    if (item.isSeason) {
+      item.progressPct = 100;
+      item.status = 'completed';
+    } else if (isFinalSeason) {
+      item.progressPct = 100;
+      item.status = 'completed';
+    } else {
+      const seasonFraction = (seasonNum / Math.max(1, item.totalSeasons || 1));
+      item.progressPct = Math.min(99, Math.round(seasonFraction * 100));
+      item.status = 'watching';
+    }
 
     showToast(`✓ Marked Season ${seasonNum} of "${item.title}" as Watched!`, 'success');
     await saveWatchlist();
 
     const userId = state.user ? state.user.id : 'guest';
+    const authHeaders = await getAuthHeaders();
     fetch(`/api/user/watchlist/${item.id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({
         userId,
         updates: {
@@ -1765,7 +1848,7 @@ function renderDiaryEntries() {
             </div>
           </div>
           <div class="diary-card-title-row">
-            <h4 class="diary-card-title" title="${safeTitle}">${safeTitle}</h4>
+            <h4 class="diary-card-title" title="Click to view details for ${safeTitle}" role="button" tabindex="0">${safeTitle}</h4>
             ${safeYear ? `<span class="diary-card-year">(${safeYear})</span>` : ''}
           </div>
           <div class="diary-card-rating-row">
@@ -1800,28 +1883,53 @@ function renderDiaryEntries() {
       deleteDiaryEntry(entry.id);
     });
 
-    const openItemDetail = () => {
+    const openItemDetail = async (e) => {
+      if (e) e.stopPropagation();
       const match = state.watchlist.find(w =>
-        (entry.tmdb_id && (w.id === entry.tmdb_id || w.tmdbId === entry.tmdb_id)) ||
-        (w.id === entry.id) ||
+        (entry.tmdb_id && (String(w.id) === String(entry.tmdb_id) || String(w.tmdbId) === String(entry.tmdb_id))) ||
         (w.title && entry.title && w.title.toLowerCase() === entry.title.toLowerCase())
       );
       if (match) {
         openDetailView(match, match.mediaType || entry.media_type || 'movie');
-      } else if (entry.tmdb_id || entry.id) {
-        const itemObj = {
-          id: entry.tmdb_id || entry.id,
+        return;
+      }
+      if (entry.tmdb_id && !isNaN(entry.tmdb_id)) {
+        openDetailView({
+          id: entry.tmdb_id,
+          tmdbId: entry.tmdb_id,
           title: entry.title,
           poster: entry.poster,
           mediaType: entry.media_type || 'movie',
           year: entry.year
-        };
-        openDetailView(itemObj, entry.media_type || 'movie');
+        }, entry.media_type || 'movie');
+        return;
       }
+      try {
+        const sRes = await fetch(`/api/media/rapid-search?q=${encodeURIComponent(entry.title || '')}`);
+        const sData = await sRes.json();
+        if (sData.results && sData.results.length > 0) {
+          const top = sData.results[0];
+          openDetailView(top, top.mediaType || entry.media_type || 'movie');
+          return;
+        }
+      } catch (err) {}
+      openDetailView({
+        id: entry.tmdb_id || entry.id,
+        title: entry.title,
+        poster: entry.poster,
+        mediaType: entry.media_type || 'movie',
+        year: entry.year
+      }, entry.media_type || 'movie');
     };
 
     card.querySelector('.diary-card-poster-wrap')?.addEventListener('click', openItemDetail);
     card.querySelector('.diary-card-title')?.addEventListener('click', openItemDetail);
+    card.querySelector('.diary-card-title')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openItemDetail(e);
+      }
+    });
   });
 }
 
@@ -1916,15 +2024,34 @@ async function saveDiaryEntry(e) {
     ? crypto.randomUUID()
     : (`${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
 
+  let tmdbId = item.tmdbId || item.id || null;
+  let poster = item.poster || 'images/hero.webp';
+  let mediaType = item.mediaType || 'movie';
+  let year = item.year || null;
+
+  if (!tmdbId && chosenTitle) {
+    try {
+      const sRes = await fetch(`/api/media/rapid-search?q=${encodeURIComponent(chosenTitle)}`);
+      const sData = await sRes.json();
+      if (sData.results && sData.results.length > 0) {
+        const top = sData.results[0];
+        tmdbId = top.id;
+        if (!poster || poster === 'images/hero.webp') poster = top.poster || poster;
+        mediaType = top.mediaType || mediaType;
+        year = year || top.year;
+      }
+    } catch (e) {}
+  }
+
   const entryPayload = {
     id: entryId,
     user_id: userId,
     watchlist_item_id: (item && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(item.id))) ? item.id : null,
-    tmdb_id: item.tmdbId || item.id || null,
-    media_type: item.mediaType || 'movie',
+    tmdb_id: tmdbId,
+    media_type: mediaType,
     title: chosenTitle,
-    year: item.year || null,
-    poster: item.poster || 'images/hero.webp',
+    year: year,
+    poster: poster,
     watch_date: date,
     watched_date: date,
     rating: rating,
@@ -1967,9 +2094,10 @@ async function saveDiaryEntry(e) {
 
   // Persist to database & backend
   try {
+    const authHeaders = await getAuthHeaders();
     const res = await fetch('/api/user/diary', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({ userId, entry: entryPayload })
     });
     if (res.ok) {
@@ -1989,14 +2117,24 @@ async function saveDiaryEntry(e) {
 }
 
 async function deleteDiaryEntry(entryId) {
-  if (!confirm('Delete this diary entry?')) return;
+  let confirmed = false;
+  try {
+    confirmed = typeof window !== 'undefined' && typeof window.confirm === 'function' ? window.confirm('Delete this diary entry?') : true;
+  } catch (e) {
+    confirmed = true;
+  }
+  if (!confirmed) return;
   state.diaryEntries = state.diaryEntries.filter(d => d.id !== entryId);
   const userId = state.user ? state.user.id : 'guest';
   localStorage.setItem(`moodflix_diary_${userId}`, JSON.stringify(state.diaryEntries));
   renderDiaryEntries();
 
   try {
-    await fetch(`/api/user/diary/${encodeURIComponent(entryId)}?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' });
+    const authHeaders = await getAuthHeaders();
+    await fetch(`/api/user/diary/${encodeURIComponent(entryId)}?userId=${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+      headers: authHeaders
+    });
   } catch (err) {
     console.warn('Failed to delete diary entry from database:', err);
   }
@@ -2188,9 +2326,10 @@ async function createCustomList(e) {
   renderCustomLists();
 
   try {
+    const authHeaders = await getAuthHeaders();
     const res = await fetch('/api/user/custom-lists', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({
         userId,
         name: listPayload.name,
@@ -2222,6 +2361,7 @@ async function deleteCustomList(listId) {
   if (state.activeCustomListId === listId) state.activeCustomListId = 'all';
 
   // Remove list tag from items
+  const affected = state.watchlist.filter(w => Array.isArray(w.customLists) && w.customLists.includes(listId));
   state.watchlist.forEach(w => {
     if (Array.isArray(w.customLists)) {
       w.customLists = w.customLists.filter(id => id !== listId);
@@ -2231,11 +2371,27 @@ async function deleteCustomList(listId) {
 
   const userId = state.user ? state.user.id : 'guest';
   localStorage.setItem(`moodflix_custom_lists_${userId}`, JSON.stringify(state.customLists));
-  localStorage.setItem('moodflix_custom_lists', JSON.stringify(state.customLists));
+  if (!state.user) {
+    localStorage.setItem('moodflix_custom_lists', JSON.stringify(state.customLists));
+  }
   renderCustomLists();
 
   try {
-    await fetch(`/api/user/custom-lists/${encodeURIComponent(listId)}?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' });
+    const authHeaders = await getAuthHeaders();
+    await fetch(`/api/user/custom-lists/${encodeURIComponent(listId)}?userId=${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+      headers: authHeaders
+    });
+
+    if (state.user) {
+      for (const item of affected) {
+        fetch(`/api/user/watchlist/${encodeURIComponent(item.id)}`, {
+          method: 'PATCH',
+          headers: authHeaders,
+          body: JSON.stringify({ userId, updates: { custom_lists: item.customLists } })
+        }).catch(() => {});
+      }
+    }
   } catch (e) {
     console.warn('Failed to delete custom list from server:', e);
   }
@@ -2312,7 +2468,10 @@ async function saveAssignLists() {
   closeAssignToListModal();
   renderCustomLists();
   renderWatchlist();
-  showToast(`Updated collections for "${item.title}"`, 'success');
+  if (state.currentDetailMedia) {
+    updateDetailButtons(state.currentDetailMedia);
+  }
+  showToast(`Updated collections for "${item.title || 'Title'}"`, 'success');
 }
 
 // ==========================================================================
@@ -2596,14 +2755,20 @@ function switchWatchlistSubTab(subTab) {
   if (paneWatchlist) paneWatchlist.classList.toggle('hidden', subTab !== 'watchlist');
   if (paneDiary) paneDiary.classList.toggle('hidden', subTab !== 'diary');
   if (paneCustom) paneCustom.classList.toggle('hidden', subTab !== 'custom-lists');
-  if (subTab === 'watchlist') renderWatchlist();
-  else if (subTab === 'diary') {
-    renderDiaryEntries();
-    loadDiaryEntries();
-  }
-  else if (subTab === 'custom-lists') {
-    renderCustomLists();
-    loadCustomLists();
+  if (subTab === 'watchlist') {
+    renderWatchlist();
+  } else if (subTab === 'diary') {
+    if (!state.diaryEntries || state.diaryEntries.length === 0) {
+      loadDiaryEntries();
+    } else {
+      renderDiaryEntries();
+    }
+  } else if (subTab === 'custom-lists') {
+    if (!state.customLists || state.customLists.length === 0) {
+      loadCustomLists();
+    } else {
+      renderCustomLists();
+    }
   }
 }
 
@@ -2759,10 +2924,32 @@ function initRetroCustomSelect(selectEl) {
   });
 
   trigger.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      openMenu();
-    } else if (e.key === 'Escape') {
+      if (menu.classList.contains('hidden')) {
+        openMenu();
+      } else {
+        const options = Array.from(menu.querySelectorAll('.retro-select-option'));
+        const currentIndex = options.findIndex(o => o.dataset.value === selectEl.value);
+        let nextIndex = e.key === 'ArrowDown' ? currentIndex + 1 : currentIndex - 1;
+        if (nextIndex < 0) nextIndex = options.length - 1;
+        if (nextIndex >= options.length) nextIndex = 0;
+        const targetOpt = options[nextIndex];
+        if (targetOpt) {
+          selectEl.value = targetOpt.dataset.value;
+          selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+          syncRetroCustomSelect(selectEl);
+          targetOpt.scrollIntoView({ block: 'nearest' });
+        }
+      }
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (menu.classList.contains('hidden')) {
+        openMenu();
+      } else {
+        closeMenu();
+      }
+    } else if (e.key === 'Escape' || e.key === 'Tab') {
       closeMenu();
     }
   });
@@ -3104,12 +3291,13 @@ async function executeImport() {
     try {
       const match = state.watchlist.find(w => (w.title || '').toLowerCase().trim() === (imp.title || '').toLowerCase().trim());
       if (match && (!match.poster || match.poster === 'images/hero.webp')) {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(imp.title)}&minSeeds=0`);
+        const res = await fetch(`/api/media/rapid-search?q=${encodeURIComponent(imp.title)}`);
         const searchData = await res.json();
-        const found = searchData.results?.[0] || searchData.torrents?.[0];
+        const found = searchData.results?.[0];
         if (found && found.poster && found.poster !== 'images/hero.webp') {
           match.poster = found.poster;
           if (!match.year && found.year) match.year = found.year;
+          if (!match.tmdbId && found.id) match.tmdbId = found.id;
           saveWatchlist();
         }
       }
@@ -3229,7 +3417,7 @@ function renderSharedMovieView(data = {}) {
   const trailerBtn = document.getElementById('shareTrailerBtn');
   if (trailerBtn) {
     trailerBtn.onclick = () => {
-      if (trailer) {
+      if (trailer && /^[a-zA-Z0-9_-]{11}$/.test(trailer)) {
         const modal = document.getElementById('trailer-modal');
         const iframe = document.getElementById('trailer-iframe');
         const loader = document.getElementById('trailer-loader');
@@ -3237,7 +3425,7 @@ function renderSharedMovieView(data = {}) {
         loader?.classList.add('hidden');
         if (iframe) {
           iframe.classList.remove('hidden');
-          iframe.src = `https://www.youtube.com/embed/${trailer}?autoplay=1`;
+          iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(trailer)}?autoplay=1`;
         }
       } else if (mediaId || title) {
         playTrailer(mediaId, mediaType || 'movie', title, year);
@@ -3264,17 +3452,27 @@ function checkShareUrl() {
   const params = new URLSearchParams(window.location.search);
   if (params.has('share')) {
     state.isSharedPage = true;
-    const title = decodeURIComponent(params.get('title') || 'Movie');
-    const year = decodeURIComponent(params.get('year') || '');
-    const poster = decodeURIComponent(params.get('poster') || '');
-    const magnet = decodeURIComponent(params.get('magnet') || '');
-    const torrentName = decodeURIComponent(params.get('name') || title);
-    const size = decodeURIComponent(params.get('size') || '');
-    const quality = decodeURIComponent(params.get('quality') || '1080P HD');
-    const seeds = decodeURIComponent(params.get('seeds') || '');
-    const trailer = decodeURIComponent(params.get('trailer') || '');
-    const mediaId = decodeURIComponent(params.get('mediaId') || '');
-    const mediaType = decodeURIComponent(params.get('mediaType') || 'movie');
+    const cleanStr = (s) => (s ? decodeURIComponent(s).trim().slice(0, 500) : '');
+    const title = cleanStr(params.get('title')) || 'Movie';
+    const year = cleanStr(params.get('year'));
+    let poster = cleanStr(params.get('poster'));
+    if (!/^(https?:\/\/|\/|images\/)/i.test(poster)) {
+      poster = 'images/hero.webp';
+    }
+    let magnet = cleanStr(params.get('magnet'));
+    if (magnet && !magnet.toLowerCase().startsWith('magnet:?xt=urn:btih:')) {
+      magnet = '';
+    }
+    const torrentName = cleanStr(params.get('name')) || title;
+    const size = cleanStr(params.get('size'));
+    const quality = cleanStr(params.get('quality')) || '1080P HD';
+    const seeds = cleanStr(params.get('seeds'));
+    let trailer = cleanStr(params.get('trailer'));
+    if (trailer && !/^[a-zA-Z0-9_-]{11}$/.test(trailer)) {
+      trailer = '';
+    }
+    const mediaId = cleanStr(params.get('mediaId'));
+    const mediaType = cleanStr(params.get('mediaType')) || 'movie';
 
     renderSharedMovieView({
       title,
@@ -3708,7 +3906,7 @@ function setupEventListeners() {
   const overrideBtn = document.getElementById('btnOverrideDiagnostic');
   if (overrideBtn) {
     overrideBtn.addEventListener('click', () => {
-      const tabs = ['movies-view', 'tv-view'];
+      const tabs = ['movies-view', 'anime-view'];
       const randomTab = tabs[Math.floor(Math.random() * tabs.length)];
       switchTab(randomTab);
     });
@@ -3804,8 +4002,9 @@ function setupEventListeners() {
       state.watchlist = [];
       await saveWatchlist();
       const userId = state.user ? state.user.id : 'guest';
-      fetch(`/api/user/watchlist?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' }).catch(() => {});
-      fetch('/api/watchlist', { method: 'DELETE' }).catch(() => {});
+      getAuthHeaders().then(authHeaders => {
+        fetch(`/api/user/watchlist?userId=${encodeURIComponent(userId)}`, { method: 'DELETE', headers: authHeaders }).catch(() => {});
+      });
       showToast('Watchlist cleared', 'info');
     }
   });
@@ -4130,7 +4329,17 @@ function setupEventListeners() {
 
 
   // Brand Logos & Tutorial View Nav
-  document.getElementById('logo-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.lastFeedTab || 'movies-view')));
+  const logoBtn = document.getElementById('logo-btn');
+  if (logoBtn) {
+    const handleLogoClick = () => switchTab(state.isSharedPage ? 'share-view' : (state.lastFeedTab || 'movies-view'));
+    logoBtn.addEventListener('click', handleLogoClick);
+    logoBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleLogoClick();
+      }
+    });
+  }
   document.getElementById('shareTutorialBtn')?.addEventListener('click', () => switchTab('tutorial-view'));
   document.getElementById('tutorial-logo-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.previousTab || state.lastFeedTab || 'movies-view')));
   document.getElementById('tutorial-back-feed-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.previousTab || state.lastFeedTab || 'movies-view')));
@@ -4310,7 +4519,8 @@ function setupEventListeners() {
 
   // Diagnostic Navigation
   document.getElementById('btnDiagExit')?.addEventListener('click', () => {
-    document.getElementById('diagnosticNav').style.display = 'none';
+    const nav = document.getElementById('diagnosticNav');
+    if (nav) nav.style.display = 'none';
     state.diagnosticResults = null;
     switchTab('diagnostic-view');
   });
@@ -4321,7 +4531,8 @@ function setupEventListeners() {
       const idx = state.diagnosticIndex;
       const total = state.diagnosticResults.length;
 
-      document.getElementById('diagMatchIndex').innerText = idx + 1;
+      const idxEl = document.getElementById('diagMatchIndex');
+      if (idxEl) idxEl.innerText = idx + 1;
       const btnPrev = document.getElementById('btnDiagPrev');
       const btnNext = document.getElementById('btnDiagNext');
       if (btnPrev) btnPrev.disabled = idx <= 0;
@@ -4338,7 +4549,8 @@ function setupEventListeners() {
       const idx = state.diagnosticIndex;
       const total = state.diagnosticResults.length;
 
-      document.getElementById('diagMatchIndex').innerText = idx + 1;
+      const idxEl = document.getElementById('diagMatchIndex');
+      if (idxEl) idxEl.innerText = idx + 1;
       const btnPrev = document.getElementById('btnDiagPrev');
       const btnNext = document.getElementById('btnDiagNext');
       if (btnPrev) btnPrev.disabled = idx <= 0;
@@ -4612,7 +4824,7 @@ function renderArtistFilmography(artist, matches = [], originalQuery = '') {
         <span class="alt-matches-label">${listLabel}</span>
         <div class="alt-matches-scroll">
           ${matches.map(m => `
-            <button type="button" class="alt-match-btn ${m.id === artist.id ? 'active' : ''}" onclick="fetchArtistDetailsById(${m.id}, '${escapeHtml(characterPlayed || '')}')">
+            <button type="button" class="alt-match-btn ${m.id === artist.id ? 'active' : ''}" onclick="fetchArtistDetailsById(${m.id}, '${escapeHtml(characterPlayed || '').replace(/'/g, "\\'")}')">
               ${escapeHtml(m.name)}
               ${m.characterPlayed ? `<span class="alt-match-sub">(as ${escapeHtml(m.characterPlayed)})</span>` : (m.knownFor && m.knownFor.length ? `<span class="alt-match-sub">(${escapeHtml(m.knownFor[0])})</span>` : '')}
             </button>
@@ -4857,7 +5069,7 @@ async function performDirectSearch(query, minSeeds = 0, category = '200') {
             </div>
             <div style="border-top: 1.5px dashed #000; padding-top: 16px; margin-top: 10px;">
               <span style="font-family: var(--font-mono); font-size: 12px; margin-right: 12px;">Looking for raw torrent releases instead?</span>
-              <button type="button" class="retro-btn" style="padding: 6px 14px; font-size: 12px;" onclick="searchRawTorrentsFallback('${escapeHtml(cleanQuery)}')">
+              <button type="button" class="retro-btn" style="padding: 6px 14px; font-size: 12px;" onclick="searchRawTorrentsFallback('${escapeHtml(cleanQuery).replace(/'/g, "\\'")}')">
                 <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">search</span>
                 <span>SEARCH RELEASES ON CINE BAY</span>
               </button>
@@ -5118,13 +5330,37 @@ async function loadMovies() {
   const year = elements.movieYearSelect ? elements.movieYearSelect.value : 'all';
   try {
     const res = await fetch(`/api/movies?search=${encodeURIComponent(search)}&category=${category}&type=${type}&year=${encodeURIComponent(year)}`);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
     const data = await res.json();
     if (data.success) {
       state.movies = data.movies || data.media || [];
       renderMediaGrid(elements.movieGrid, state.movies, type === 'all' ? 'movie' : type);
       updateTypoBanner('movieTypoBanner', search, data.correctedQuery);
+      if (state.movies.length === 0 && elements.movieGrid) {
+        elements.movieGrid.innerHTML = `
+          <div class="empty-state-box" style="grid-column: 1 / -1; text-align: center; padding: 48px 16px; font-family: var(--font-mono); color: var(--retro-fg);">
+            <span class="material-symbols-outlined" style="font-size: 36px; opacity: 0.7;">movie_off</span>
+            <div style="margin-top: 12px; font-weight: 700;">NO TITLES FOUND</div>
+            <div style="margin-top: 6px; font-size: 13px; opacity: 0.75;">Try another search or select a different category or year.</div>
+          </div>
+        `;
+      }
     }
-  } catch (err) { }
+  } catch (err) {
+    console.error('Error loading movies:', err);
+    if (elements.movieGrid) {
+      elements.movieGrid.innerHTML = `
+        <div class="feed-error-box" style="grid-column: 1 / -1; text-align: center; padding: 48px 16px; font-family: var(--font-mono); color: var(--retro-fg);">
+          <span class="material-symbols-outlined" style="font-size: 36px; color: var(--retro-accent);">error</span>
+          <div style="margin-top: 12px; font-weight: 700;">COULD NOT LOAD TITLES</div>
+          <div style="margin-top: 6px; font-size: 13px; opacity: 0.75;">${escapeHtml(err.message || 'Network error')}</div>
+          <button type="button" class="retro-btn" style="margin-top: 16px; padding: 6px 14px;" onclick="loadMovies()">RETRY</button>
+        </div>
+      `;
+    }
+  }
 }
 
 async function loadAnime() {
@@ -5223,15 +5459,21 @@ async function loadSettingsIntoUI() {
 async function saveSettings(e) {
   e.preventDefault();
   const btn = document.querySelector('.submit-settings-btn');
-  const originalText = btn.innerText;
-  btn.innerText = 'SAVING...';
+  const originalText = btn ? btn.innerText : 'SAVE';
+  if (btn) btn.innerText = 'SAVING...';
+
+  const elKey = document.getElementById('tmdbApiKey');
+  const elToken = document.getElementById('tmdbReadToken');
+  const elRating = document.getElementById('minRating');
+  const elSeeds = document.getElementById('minSeeds');
+  const elMagnets = document.getElementById('autoOpenMagnets');
 
   const payload = {
-    tmdbApiKey: document.getElementById('tmdbApiKey').value,
-    tmdbReadToken: document.getElementById('tmdbReadToken').value,
-    minRating: parseFloat(document.getElementById('minRating').value) || 7.0,
-    minSeeds: parseInt(document.getElementById('minSeeds').value, 10) || 5,
-    autoOpenMagnets: document.getElementById('autoOpenMagnets').checked
+    tmdbApiKey: elKey ? elKey.value : (state.settings?.tmdbApiKey || ''),
+    tmdbReadToken: elToken ? elToken.value : (state.settings?.tmdbReadToken || ''),
+    minRating: elRating ? (parseFloat(elRating.value) || 7.0) : (state.settings?.minRating || 7.0),
+    minSeeds: elSeeds ? (parseInt(elSeeds.value, 10) || 5) : (state.settings?.minSeeds || 5),
+    autoOpenMagnets: elMagnets ? elMagnets.checked : !!state.settings?.autoOpenMagnets
   };
 
   try {
@@ -5250,7 +5492,7 @@ async function saveSettings(e) {
   } catch (err) {
     showToast('Network error saving configuration', 'error');
   } finally {
-    btn.innerText = originalText;
+    if (btn) btn.innerText = originalText;
   }
 }
 
@@ -5660,15 +5902,15 @@ async function loadDetailGallery(m, type) {
         }
       }
 
-      section.style.display = 'block';
+      if (section) section.style.display = 'block';
     } else {
-      strip.innerHTML = '';
-      section.style.display = 'none';
+      if (strip) strip.innerHTML = '';
+      if (section) section.style.display = 'none';
     }
   } catch (err) {
     console.error('Failed to load frames gallery', err);
-    strip.innerHTML = '';
-    section.style.display = 'none';
+    if (strip) strip.innerHTML = '';
+    if (section) section.style.display = 'none';
   }
 }
 
@@ -6759,6 +7001,7 @@ function renderActiveTrailerSource() {
   if (loader) loader.classList.add('hidden');
   if (iframe) {
     iframe.classList.remove('hidden');
+    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
     iframe.src = current.embedUrl;
   }
 
@@ -6856,7 +7099,7 @@ async function playTrailer(id, type, title = '', year = '') {
 
     trailerKeys.forEach((key, idx) => {
       addSource(
-        `https://www.youtube.com/embed/${key}?autoplay=1`,
+        `https://www.youtube.com/embed/${key}?autoplay=1&enablejsapi=1`,
         `https://www.youtube.com/watch?v=${key}`,
         idx === 0 ? 'TRAILER' : `ALT TRAILER #${idx + 1}`
       );
@@ -6869,7 +7112,7 @@ async function playTrailer(id, type, title = '', year = '') {
         const tData = await tRes.json();
         if (tData.success && tData.trailerKey) {
           addSource(
-            `https://www.youtube.com/embed/${tData.trailerKey}?autoplay=1`,
+            `https://www.youtube.com/embed/${tData.trailerKey}?autoplay=1&enablejsapi=1`,
             `https://www.youtube.com/watch?v=${tData.trailerKey}`,
             'TRAILER'
           );
@@ -7378,7 +7621,24 @@ function generateClientTorrentBlob(torrent = {}, title = '') {
   let hashHex = torrent.infoHash || '';
   if (!hashHex && torrent.magnet) {
     const m = torrent.magnet.match(/xt=urn:btih:([a-zA-Z0-9]{32,40})/i);
-    if (m) hashHex = m[1];
+    if (m) {
+      const rawHash = m[1];
+      if (rawHash.length === 40) {
+        hashHex = rawHash.toLowerCase();
+      } else if (rawHash.length === 32) {
+        const base32Alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+        let bits = '';
+        for (const char of rawHash.toUpperCase()) {
+          const val = base32Alphabet.indexOf(char);
+          if (val !== -1) bits += val.toString(2).padStart(5, '0');
+        }
+        let hex = '';
+        for (let i = 0; i + 8 <= bits.length; i += 8) {
+          hex += parseInt(bits.substring(i, i + 8), 2).toString(16).padStart(2, '0');
+        }
+        if (hex.length === 40) hashHex = hex.toLowerCase();
+      }
+    }
   }
 
   const pieceLen = 262144;
@@ -7597,6 +7857,20 @@ if ('serviceWorker' in navigator && window.location.protocol.startsWith('http'))
 
 // Character & Artist Autocomplete Directory
 const POPULAR_CHARACTER_SUGGESTIONS = [
+  { name: 'Rajesh Koothrappali', type: 'character', detail: 'The Big Bang Theory • Kunal Nayyar' },
+  { name: 'Howard Wolowitz', type: 'character', detail: 'The Big Bang Theory • Simon Helberg' },
+  { name: 'Penny', type: 'character', detail: 'The Big Bang Theory • Kaley Cuoco' },
+  { name: 'Sheldon Cooper', type: 'character', detail: 'The Big Bang Theory • Jim Parsons' },
+  { name: 'Leonard Hofstadter', type: 'character', detail: 'The Big Bang Theory • Johnny Galecki' },
+  { name: 'Phil Dunphy', type: 'character', detail: 'Modern Family • Ty Burrell' },
+  { name: 'Alex Dunphy', type: 'character', detail: 'Modern Family • Ariel Winter' },
+  { name: 'Claire Dunphy', type: 'character', detail: 'Modern Family • Julie Bowen' },
+  { name: 'Haley Dunphy', type: 'character', detail: 'Modern Family • Sarah Hyland' },
+  { name: 'Luke Dunphy', type: 'character', detail: 'Modern Family • Nolan Gould' },
+  { name: 'Gloria Delgado-Pritchett', type: 'character', detail: 'Modern Family • Sofía Vergara' },
+  { name: 'Jay Pritchett', type: 'character', detail: 'Modern Family • Ed O\'Neill' },
+  { name: 'Cameron Tucker', type: 'character', detail: 'Modern Family • Eric Stonestreet' },
+  { name: 'Mitchell Pritchett', type: 'character', detail: 'Modern Family • Jesse Tyler Ferguson' },
   { name: 'Barney Stinson', type: 'character', detail: 'How I Met Your Mother • Neil Patrick Harris' },
   { name: 'Walter White', type: 'character', detail: 'Breaking Bad • Bryan Cranston' },
   { name: 'Jesse Pinkman', type: 'character', detail: 'Breaking Bad • Aaron Paul' },

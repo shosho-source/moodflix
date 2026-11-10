@@ -875,24 +875,24 @@ export class TMDB {
       { id: 146233, title: 'Prisoners', year: 2013, rating: 8.1, ratingPercent: 81, voteCount: 12100, genres: ['Drama', 'Thriller', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/uhvi6kud6mcl5zgvF4iJgHq81X.jpg`, synopsis: "When a father's daughter goes missing and the police release the primary suspect, he takes matters into his own hands." },
       { id: 210577, title: 'Gone Girl', year: 2014, rating: 7.9, ratingPercent: 79, voteCount: 18500, genres: ['Mystery', 'Thriller', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/qymaZZQb5xsTQ2BYu99XgCgxiqU.jpg`, synopsis: 'A man becomes the center of an intense media circus and criminal investigation after his wife mysteriously vanishes.' },
       { id: 496243, title: 'Parasite', year: 2019, rating: 8.5, ratingPercent: 85, voteCount: 18000, genres: ['Comedy', 'Thriller', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'A poor family schemes to become employed by a wealthy family by infiltrating their household, sparking unforeseen consequences.' },
-      { id: 10494, title: 'Perfect Blue', year: 1998, rating: 8.3, ratingPercent: 83, voteCount: 2700, genres: ['Animation', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'A pop idol sheds her innocent image to become an actress, but slips into a descent where reality and delusion blur.' },
+      { id: 10494, title: 'Perfect Blue', year: 1998, rating: 8.3, ratingPercent: 83, voteCount: 2700, genres: ['Animation', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/original/mHG7dpLb0ZScSY3LpP443IHRmjy.jpg', poster: 'https://image.tmdb.org/t/p/w500/6WTiOCfDPP8XV4jqfloiVWf7KHq.jpg', synopsis: 'A pop idol sheds her innocent image to become an actress, but slips into a descent where reality and delusion blur.' },
       { id: 419430, title: 'Get Out', year: 2017, rating: 7.6, ratingPercent: 76, voteCount: 17000, genres: ['Mystery', 'Thriller', 'Horror'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/tFXcEccSQMf3lfhfXKSU9iRBpa3.jpg`, synopsis: "A young African-American visits his white girlfriend's parents for the weekend, where a disturbing secret unravels." },
       { id: 1954, title: 'The Butterfly Effect', year: 2004, rating: 7.5, ratingPercent: 75, voteCount: 7800, genres: ['Sci-Fi', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/pWDtHJqTGv97Y95YrENyP7UMnvB.jpg`, synopsis: 'A young man discovers he can travel back in time to change his past, but each change alters the future with devastating consequences.' },
-      { id: 1018, title: 'Mulholland Drive', year: 2001, rating: 7.9, ratingPercent: 79, voteCount: 6300, genres: ['Thriller', 'Drama', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'An aspiring actress befriends an amnesiac woman recovering from a car accident as dreams and reality warp in Hollywood.' },
-      { id: 63, title: 'Twelve Monkeys', year: 1995, rating: 7.6, ratingPercent: 76, voteCount: 8200, genres: ['Mystery', 'Sci-Fi', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'In a future world devastated by disease, a convict is sent back in time to gather information about the origin of the deadly virus.' },
-      { id: 44214, title: 'Black Swan', year: 2010, rating: 7.7, ratingPercent: 77, voteCount: 14000, genres: ['Drama', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'A ballet dancer wins the lead in "Swan Lake" and is pushed to the edge of sanity as she struggles to embrace her dark side.' },
-      { id: 619264, title: 'The Platform', year: 2019, rating: 7.0, ratingPercent: 70, voteCount: 6800, genres: ['Sci-Fi', 'Thriller', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'A vertical prison with one cell per level. Two people per cell. Only one food platform and two minutes per day to feed.' },
-      { id: 431, title: 'Cube', year: 1997, rating: 6.9, ratingPercent: 69, voteCount: 3400, genres: ['Thriller', 'Mystery', 'Sci-Fi'], backdrop: 'https://image.tmdb.org/t/p/w1280/mMZWTv4tE6EupQ04kYp0v8K4P9v.jpg', poster: `${TMDB.IMAGE_BASE_URL}/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg`, synopsis: 'Six strangers awake in a bizarre endless labyrinth of deadly booby-trapped cubes.' }
+      { id: 1018, title: 'Mulholland Drive', year: 2001, rating: 7.9, ratingPercent: 79, voteCount: 6300, genres: ['Thriller', 'Drama', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/original/g9ClaS5EqU0Hk8WIbMNhld0Bk6f.jpg', poster: 'https://image.tmdb.org/t/p/w500/x7A59t6ySylr1L7aubOQEA480vM.jpg', synopsis: 'An aspiring actress befriends an amnesiac woman recovering from a car accident as dreams and reality warp in Hollywood.' },
+      { id: 63, title: 'Twelve Monkeys', year: 1995, rating: 7.6, ratingPercent: 76, voteCount: 8200, genres: ['Mystery', 'Sci-Fi', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/original/mKIkGoyuR71qz6FdiEiOjxvBQcS.jpg', poster: 'https://image.tmdb.org/t/p/w500/gt3iyguaCIw8DpQZI1LIN5TohM2.jpg', synopsis: 'In a future world devastated by disease, a convict is sent back in time to gather information about the origin of the deadly virus.' },
+      { id: 44214, title: 'Black Swan', year: 2010, rating: 7.7, ratingPercent: 77, voteCount: 14000, genres: ['Drama', 'Thriller'], backdrop: 'https://image.tmdb.org/t/p/original/eDLp4uFdqP1gpy9oMrutwH6Q64I.jpg', poster: 'https://image.tmdb.org/t/p/w500/viWheBd44bouiLCHgNMvahLThqx.jpg', synopsis: 'A ballet dancer wins the lead in "Swan Lake" and is pushed to the edge of sanity as she struggles to embrace her dark side.' },
+      { id: 619264, title: 'The Platform', year: 2019, rating: 7.0, ratingPercent: 70, voteCount: 6800, genres: ['Sci-Fi', 'Thriller', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/original/3tkDMNfM2YuIAJlvGO6rfIzAnfG.jpg', poster: 'https://image.tmdb.org/t/p/w500/iXvQnzy6JCAx1PiQEKXuTY04ZHl.jpg', synopsis: 'A vertical prison with one cell per level. Two people per cell. Only one food platform and two minutes per day to feed.' },
+      { id: 431, title: 'Cube', year: 1997, rating: 6.9, ratingPercent: 69, voteCount: 3400, genres: ['Thriller', 'Mystery', 'Sci-Fi'], backdrop: 'https://image.tmdb.org/t/p/original/3TimUBrXMVblpnTsyg4HssGVbBv.jpg', poster: 'https://image.tmdb.org/t/p/w500/x4BTjxdrOKC27FcSkBh8KPEgnum.jpg', synopsis: 'Six strangers awake in a bizarre endless labyrinth of deadly booby-trapped cubes.' }
     ].map(m => ({ ...m, mediaType: 'movie' }));
 
     // Curated canon of verified legendary TV Series Mind Benders
     const CANONICAL_TV_MIND_BENDERS = [
       { id: 70523, title: 'Dark', year: 2017, rating: 8.4, ratingPercent: 84, voteCount: 6200, mediaType: 'tv', genres: ['Sci-Fi & Fantasy', 'Drama', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/3lBDg3i6nn5R2NKFCJHgGry0ahS.jpg', poster: `${TMDB.IMAGE_BASE_URL}/apbrbWs8M9lyOpJYU5WXrpFbk1Z.jpg`, synopsis: 'A missing child sets four families on a frantic hunt for answers as they unearth a mind-bending mystery that spans three generations.' },
-      { id: 95557, title: 'Severance', year: 2022, rating: 8.4, ratingPercent: 84, voteCount: 2200, mediaType: 'tv', genres: ['Drama', 'Mystery', 'Sci-Fi & Fantasy'], backdrop: 'https://image.tmdb.org/t/p/w1280/95557.jpg', poster: `${TMDB.IMAGE_BASE_URL}/95557.jpg`, synopsis: 'Mark leads a team of office workers whose memories have been surgically divided between their work and personal lives.' },
-      { id: 42009, title: 'Black Mirror', year: 2011, rating: 8.3, ratingPercent: 83, voteCount: 4900, mediaType: 'tv', genres: ['Sci-Fi & Fantasy', 'Drama', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/42009.jpg', poster: `${TMDB.IMAGE_BASE_URL}/42009.jpg`, synopsis: 'A contemporary British anthology series with twist-laden tales exploring twisted high-tech near futures.' },
-      { id: 63247, title: 'Westworld', year: 2016, rating: 8.0, ratingPercent: 80, voteCount: 5200, mediaType: 'tv', genres: ['Sci-Fi & Fantasy', 'Western', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/w1280/63247.jpg', poster: `${TMDB.IMAGE_BASE_URL}/63247.jpg`, synopsis: 'A dark odyssey about the dawn of artificial consciousness and the evolution of sin.' },
-      { id: 62560, title: 'Mr. Robot', year: 2015, rating: 8.2, ratingPercent: 82, voteCount: 4600, mediaType: 'tv', genres: ['Crime', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/w1280/62560.jpg', poster: `${TMDB.IMAGE_BASE_URL}/62560.jpg`, synopsis: 'A cyber-security engineer and vigilante hacker with social anxiety disorder is recruited by an insurrectionary anarchist.' },
-      { id: 46648, title: 'True Detective', year: 2014, rating: 8.3, ratingPercent: 83, voteCount: 3500, mediaType: 'tv', genres: ['Drama', 'Crime', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/46648.jpg', poster: `${TMDB.IMAGE_BASE_URL}/46648.jpg`, synopsis: 'An anthology series in which police investigations unearth the personal and professional secrets of those involved.' },
+      { id: 95396, title: 'Severance', year: 2022, rating: 8.4, ratingPercent: 84, voteCount: 3100, mediaType: 'tv', genres: ['Drama', 'Mystery', 'Sci-Fi & Fantasy'], backdrop: 'https://image.tmdb.org/t/p/w1280/ixgFmf1X59PUZam2qbAfskx2gQr.jpg', poster: 'https://image.tmdb.org/t/p/w500/pPHpeI2X1qEd1CS1SeyrdhZ4qnT.jpg', synopsis: 'Mark leads a team of office workers whose memories have been surgically divided between their work and personal lives.' },
+      { id: 42009, title: 'Black Mirror', year: 2011, rating: 8.3, ratingPercent: 83, voteCount: 4900, mediaType: 'tv', genres: ['Sci-Fi & Fantasy', 'Drama', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/original/dg3OindVAGZBjlT3xYKqIAdukPL.jpg', poster: 'https://image.tmdb.org/t/p/w500/seN6rRfN0I6n8iDXjlSMk1QjNcq.jpg', synopsis: 'A contemporary British anthology series with twist-laden tales exploring twisted high-tech near futures.' },
+      { id: 63247, title: 'Westworld', year: 2016, rating: 8.0, ratingPercent: 80, voteCount: 5200, mediaType: 'tv', genres: ['Sci-Fi & Fantasy', 'Western', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/original/rX5hvSRB2k4YoIvRg6Zky52rWk0.jpg', poster: 'https://image.tmdb.org/t/p/w500/8MfgyFHf7XEboZJPZXCIDqqiz6e.jpg', synopsis: 'A dark odyssey about the dawn of artificial consciousness and the evolution of sin.' },
+      { id: 62560, title: 'Mr. Robot', year: 2015, rating: 8.2, ratingPercent: 82, voteCount: 4600, mediaType: 'tv', genres: ['Crime', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/original/uJUe985oIuRiD3hmHQYskIMc2WU.jpg', poster: 'https://image.tmdb.org/t/p/w500/kv1nRqgebSsREnd7vdC2pSGjpLo.jpg', synopsis: 'A cyber-security engineer and vigilante hacker with social anxiety disorder is recruited by an insurrectionary anarchist.' },
+      { id: 46648, title: 'True Detective', year: 2014, rating: 8.3, ratingPercent: 83, voteCount: 3500, mediaType: 'tv', genres: ['Drama', 'Crime', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/original/v8YFr8BbU9qsO8PYIulzTeM6Qk.jpg', poster: 'https://image.tmdb.org/t/p/w500/cuV2O5ZyDLHSOWzg3nLVljp1ubw.jpg', synopsis: 'An anthology series in which police investigations unearth the personal and professional secrets of those involved.' },
       { id: 67744, title: 'Mindhunter', year: 2017, rating: 8.1, ratingPercent: 81, voteCount: 2600, mediaType: 'tv', genres: ['Drama', 'Crime'], backdrop: 'https://image.tmdb.org/t/p/w1280/67744.jpg', poster: `${TMDB.IMAGE_BASE_URL}/67744.jpg`, synopsis: 'In the late 1970s two FBI agents expand criminal science by delving into the psychology of murder.' },
       { id: 125988, title: 'Silo', year: 2023, rating: 8.1, ratingPercent: 81, voteCount: 1300, mediaType: 'tv', genres: ['Sci-Fi & Fantasy', 'Drama'], backdrop: 'https://image.tmdb.org/t/p/w1280/125988.jpg', poster: `${TMDB.IMAGE_BASE_URL}/125988.jpg`, synopsis: 'Men and women live in a giant underground silo with regulations they believe are meant to protect them.' },
       { id: 75219, title: 'Russian Doll', year: 2019, rating: 7.3, ratingPercent: 73, voteCount: 1100, mediaType: 'tv', genres: ['Comedy', 'Drama', 'Mystery'], backdrop: 'https://image.tmdb.org/t/p/w1280/75219.jpg', poster: `${TMDB.IMAGE_BASE_URL}/75219.jpg`, synopsis: 'A woman gets caught in a mysterious loop, repeatedly attending the same party and dying at the end of the night.' },
@@ -1316,6 +1316,18 @@ export class TMDB {
   }
 
   static trailerCache = new Map();
+  static _pendingTrailerFetch = new Map();
+
+  static setTrailerCache(key, value) {
+    if (!TMDB.trailerCache) TMDB.trailerCache = new Map();
+    if (TMDB.trailerCache.has(key)) {
+      TMDB.trailerCache.delete(key);
+    } else if (TMDB.trailerCache.size >= 200) {
+      const firstKey = TMDB.trailerCache.keys().next().value;
+      if (firstKey) TMDB.trailerCache.delete(firstKey);
+    }
+    TMDB.trailerCache.set(key, value);
+  }
 
   /**
    * Search YouTube for a verified trailer key matching title and year if TMDB lacks one.
@@ -1324,112 +1336,136 @@ export class TMDB {
     if (!title) return null;
     const cacheKey = `${type}:${title}:${year}`.toLowerCase();
     if (TMDB.trailerCache && TMDB.trailerCache.has(cacheKey)) {
-      return TMDB.trailerCache.get(cacheKey);
+      const val = TMDB.trailerCache.get(cacheKey);
+      TMDB.setTrailerCache(cacheKey, val);
+      return val;
+    }
+    if (TMDB._pendingTrailerFetch && TMDB._pendingTrailerFetch.has(cacheKey)) {
+      return TMDB._pendingTrailerFetch.get(cacheKey);
     }
 
-    const typeKeyword = type === 'tv' ? 'tv series' : 'movie';
-    const query = `${title} ${year ? year : ''} ${typeKeyword} trailer`.replace(/\s+/g, ' ').trim();
-    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-
-    try {
-      const res = await TMDB.fetchWithRetry(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept-Language': 'en-US,en;q=0.9'
+    const fetchPromise = (async () => {
+      try {
+        const isAnime = /[\u3000-\u303f\u3040-\u309f\u30a0-\u30ff]|anime/i.test(title) || type === 'anime';
+        let query;
+        if (isAnime) {
+          query = `${title} official anime trailer`;
+        } else if (type === 'tv') {
+          query = `${title} ${year ? year : ''} official trailer`;
+        } else {
+          query = `${title} ${year ? year : ''} official trailer`;
         }
-      });
-      if (!res || !res.ok) return null;
+        query = query.replace(/\s+/g, ' ').trim();
+        const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
 
-      const text = await res.text();
-
-      // Extract video items with title from YouTube's videoRenderer
-      const candidates = [];
-      const seen = new Set();
-      const vrRegex = /"videoRenderer":\{.*?"videoId":"([a-zA-Z0-9_-]{11})".*?"title":\{"runs":\[\{"text":"(.*?)"\}\]/gs;
-      let m;
-      while ((m = vrRegex.exec(text)) !== null) {
-        if (!seen.has(m[1])) {
-          seen.add(m[1]);
-          candidates.push({ id: m[1], title: m[2] });
-        }
-      }
-
-      // Fallback extraction pattern for title
-      if (candidates.length === 0) {
-        const altRegex = /"videoId":"([a-zA-Z0-9_-]{11})"[^}]+?"title":\{"runs":\[\{"text":"([^"]+)"\}\]/g;
-        while ((m = altRegex.exec(text)) !== null) {
-          if (!seen.has(m[1])) {
-            seen.add(m[1]);
-            candidates.push({ id: m[1], title: m[2] });
+        const res = await TMDB.fetchWithRetry(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9'
           }
-        }
-      }
+        });
+        if (!res || !res.ok) return null;
 
-      let bestKey = null;
+        const text = await res.text();
 
-      if (candidates.length > 0) {
-        // Score each candidate to pick genuine trailers and reject unrelated content
-        const mLower = title.toLowerCase();
-        const mediaWords = mLower.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
-        const badWords = [
-          'soundtrack', 'full ost', 'official audio', 'music video', 'reaction',
-          'review', 'ending explained', 'recap', 'breakdown', 'gameplay',
-          'cover song', 'full movie', 'parody', 'instrumental', 'remix',
-          'vlog', 'unboxing', 'live performance', 'karaoke'
-        ];
-
-        let highestScore = -Infinity;
-        for (const cand of candidates) {
-          const vLower = (cand.title || '').toLowerCase();
-          if (badWords.some(bad => vLower.includes(bad))) continue;
-
-          let score = 0;
-          const matchedWords = mediaWords.filter(w => vLower.includes(w));
-          if (mediaWords.length > 0 && matchedWords.length === 0) continue; // title words not present
-          score += (matchedWords.length / Math.max(1, mediaWords.length)) * 50;
-
-          if (vLower.includes('trailer')) score += 30;
-          if (vLower.includes('teaser')) score += 20;
-          if (vLower.includes('preview') || vLower.includes('promo')) score += 15;
-          if (year && vLower.includes(String(year))) score += 15;
-          if (type === 'tv' && (vLower.includes('season') || vLower.includes('series'))) score += 15;
-
-          if (score > highestScore) {
-            highestScore = score;
-            bestKey = cand.id;
+        // Extract video items with title from YouTube's videoRenderer
+        const candidates = [];
+        const seen = new Set();
+        const vrBlocks = text.split('"videoRenderer":{');
+        for (let i = 1; i < vrBlocks.length; i++) {
+          const block = vrBlocks[i].slice(0, 2000);
+          const idMatch = block.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
+          const titleMatch = block.match(/"title":\{"runs":\[\{"text":"(.*?)"\}\]/);
+          if (idMatch && titleMatch && !seen.has(idMatch[1])) {
+            seen.add(idMatch[1]);
+            candidates.push({ id: idMatch[1], title: titleMatch[1] });
           }
         }
 
-        // If no candidate scored positively, fallback to first non-bad candidate
-        if (!bestKey && candidates.length > 0) {
-          const nonBad = candidates.find(c => !badWords.some(b => (c.title || '').toLowerCase().includes(b)));
-          bestKey = nonBad ? nonBad.id : candidates[0].id;
-        }
-      }
-
-      // Last-resort fallback to raw videoId match if renderer regex found 0 items
-      if (!bestKey) {
-        const rawMatches = [...text.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)];
-        if (rawMatches.length > 0) {
-          bestKey = rawMatches[0][1];
-        }
-      }
-
-      if (bestKey) {
-        if (TMDB.trailerCache) {
-          if (TMDB.trailerCache.size > 200) {
-            const firstKey = TMDB.trailerCache.keys().next().value;
-            TMDB.trailerCache.delete(firstKey);
+        // Fallback extraction pattern for title
+        if (candidates.length === 0) {
+          const altRegex = /"videoId":"([a-zA-Z0-9_-]{11})"[^}]+?"title":\{"runs":\[\{"text":"([^"]+)"\}\]/g;
+          let m;
+          while ((m = altRegex.exec(text)) !== null) {
+            if (!seen.has(m[1])) {
+              seen.add(m[1]);
+              candidates.push({ id: m[1], title: m[2] });
+            }
           }
-          TMDB.trailerCache.set(cacheKey, bestKey);
         }
-        return bestKey;
-      }
-    } catch (err) {
-      console.warn(`[TMDB] YouTube trailer fallback search error for "${title}":`, err.message);
-    }
 
-    return null;
+        if (candidates.length === 0) {
+          console.warn(`[TMDB YouTube Fallback] No structured candidates found for "${title}". Trying raw videoId regex.`);
+        }
+
+        let bestKey = null;
+
+        if (candidates.length > 0) {
+          // Score each candidate to pick genuine trailers and reject unrelated content
+          const mLower = title.toLowerCase();
+          const mediaWords = mLower.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+          const badWords = [
+            'soundtrack', 'full ost', 'official audio', 'music video', 'reaction',
+            'review', 'ending explained', 'recap', 'breakdown', 'gameplay',
+            'cover song', 'full movie', 'parody', 'instrumental', 'remix',
+            'vlog', 'unboxing', 'live performance', 'karaoke'
+          ];
+
+          let highestScore = -Infinity;
+          for (const cand of candidates) {
+            const vLower = (cand.title || '').toLowerCase();
+            if (badWords.some(bad => vLower.includes(bad))) continue;
+
+            let score = 0;
+            const matchedWords = mediaWords.filter(w => vLower.includes(w));
+            if (mediaWords.length > 0 && matchedWords.length === 0) continue; // title words not present
+            score += (matchedWords.length / Math.max(1, mediaWords.length)) * 50;
+
+            if (vLower.includes('official trailer') || vLower.includes('main trailer')) score += 60;
+            else if (vLower.includes('trailer')) score += 30;
+            else if (vLower.includes('teaser')) score += 10;
+
+            if (vLower.includes('official')) score += 20;
+            if (year && vLower.includes(String(year))) score += 15;
+            if (vLower.includes('promo') || vLower.includes('preview') || vLower.includes('episode') || /\b\d+x\d+\b/.test(vLower)) {
+              score -= 40;
+            }
+
+            if (score > highestScore) {
+              highestScore = score;
+              bestKey = cand.id;
+            }
+          }
+
+          // If no candidate scored positively, fallback to first non-bad candidate
+          if (!bestKey && candidates.length > 0) {
+            const nonBad = candidates.find(c => !badWords.some(b => (c.title || '').toLowerCase().includes(b)));
+            bestKey = nonBad ? nonBad.id : candidates[0].id;
+          }
+        }
+
+        // Last-resort fallback to raw videoId match if renderer regex found 0 items
+        if (!bestKey) {
+          const rawMatches = [...text.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)];
+          if (rawMatches.length > 0) {
+            bestKey = rawMatches[0][1];
+          }
+        }
+
+        if (bestKey) {
+          TMDB.setTrailerCache(cacheKey, bestKey);
+          return bestKey;
+        }
+      } catch (err) {
+        console.warn(`[TMDB] YouTube trailer fallback search error for "${title}":`, err.message);
+      } finally {
+        TMDB._pendingTrailerFetch.delete(cacheKey);
+      }
+      return null;
+    })();
+
+    TMDB._pendingTrailerFetch.set(cacheKey, fetchPromise);
+    return await fetchPromise;
   }
 
   /**
@@ -1460,19 +1496,49 @@ export class TMDB {
 
     if (data.videos && Array.isArray(data.videos.results) && data.videos.results.length > 0) {
       const ytVideos = data.videos.results.filter(v => v.site === 'YouTube' && v.key);
-      const officialTrailers = ytVideos.filter(v => v.type === 'Trailer' && v.official === true);
-      const anyTrailers = ytVideos.filter(v => v.type === 'Trailer' && v.official !== true);
-      const anyTeasers = ytVideos.filter(v => v.type === 'Teaser');
+      const origLang = (data.original_language || 'en').toLowerCase();
 
-      // Strictly prioritize official trailers, then any trailers, then teasers
-      const validTrailers = [...officialTrailers, ...anyTrailers, ...anyTeasers];
-      if (validTrailers.length > 0) {
-        validTrailers.forEach(v => addTrailerKey(v.key));
-      } else {
-        // Fallback only to official clips if zero trailers or teasers exist
-        const anyClips = ytVideos.filter(v => v.type === 'Clip');
-        anyClips.slice(0, 1).forEach(v => addTrailerKey(v.key));
-      }
+      const scoreVideo = (v) => {
+        let score = 0;
+        const vName = (v.name || '').toLowerCase();
+        const vLang = (v.iso_639_1 || '').toLowerCase();
+
+        // 1. Type scoring
+        if (v.type === 'Trailer') score += 100;
+        else if (v.type === 'Teaser') score += 40;
+        else if (v.type === 'Clip') score += 10;
+        else score += 5;
+
+        // 2. Official
+        if (v.official) score += 50;
+
+        // 3. Language preference: English or original language prioritized
+        if (vLang === 'en') {
+          score += 60;
+        } else if (vLang === origLang) {
+          score += 40;
+        } else {
+          score -= 40; // Penalize foreign dubs (e.g. Japanese dub for Inception)
+        }
+
+        // 4. Title relevance
+        if (vName.includes('official trailer') || vName.includes('main trailer')) score += 40;
+        else if (vName.includes('theatrical trailer')) score += 30;
+        else if (vName.includes('trailer')) score += 20;
+
+        if (vName.includes('trailer 1') || vName.includes('pv 1') || vName.includes('pv1') || vName.includes('pv第1弾')) score += 25;
+        if (vName.includes('subtitled') || vName.includes('english')) score += 20;
+
+        // 5. Avoid selecting later season previews for root show
+        if (vName.includes('season 4') || vName.includes('season 3') || vName.includes('final season') || vName.includes('part 2') || vName.includes('part.2')) {
+          score -= 15;
+        }
+
+        return score;
+      };
+
+      const sortedVideos = [...ytVideos].sort((a, b) => scoreVideo(b) - scoreVideo(a));
+      sortedVideos.forEach(v => addTrailerKey(v.key));
     }
 
     // Only query YouTube fallback search if TMDB has zero trailer keys
@@ -1545,9 +1611,18 @@ export class TMDB {
     }));
 
     // Extract high-resolution widescreen scene stills / frames (movies, tv shows, and anime)
-    const rawBackdrops = data.images?.backdrops || [];
-    const frames = rawBackdrops
-      .filter(b => b && b.file_path)
+    // Strictly exclude vertical images, posters (aspect ratio < 1.3 or width < height), and non-scene promotional posters
+    const rawBackdrops = (data.images?.backdrops || []).filter(b => {
+      if (!b || !b.file_path) return false;
+      const ratio = b.aspect_ratio || (b.width && b.height ? b.width / b.height : 0);
+      return ratio >= 1.3 && (!b.width || !b.height || b.width > b.height);
+    });
+
+    const cleanSceneFrames = rawBackdrops.filter(b => !b.iso_639_1);
+    const otherWidescreen = rawBackdrops.filter(b => b.iso_639_1);
+    const candidateFrames = cleanSceneFrames.length >= 10 ? cleanSceneFrames : [...cleanSceneFrames, ...otherWidescreen];
+
+    const frames = candidateFrames
       .slice(0, 48)
       .map((b, idx) => ({
         id: idx + 1,
@@ -1625,8 +1700,16 @@ export class TMDB {
       const res = await TMDB.fetchWithRetry(url, { headers });
       if (!res || !res.ok) return [];
       const data = await res.json();
-      return (data.backdrops || [])
-        .filter(b => b && b.file_path)
+      const rawBackdrops = (data.backdrops || []).filter(b => {
+        if (!b || !b.file_path) return false;
+        const ratio = b.aspect_ratio || (b.width && b.height ? b.width / b.height : 0);
+        return ratio >= 1.3 && (!b.width || !b.height || b.width > b.height);
+      });
+      const cleanSceneFrames = rawBackdrops.filter(b => !b.iso_639_1);
+      const otherWidescreen = rawBackdrops.filter(b => b.iso_639_1);
+      const candidateFrames = cleanSceneFrames.length >= 10 ? cleanSceneFrames : [...cleanSceneFrames, ...otherWidescreen];
+
+      return candidateFrames
         .slice(0, 48)
         .map((b, idx) => ({
           id: idx + 1,
@@ -1742,6 +1825,36 @@ export class TMDB {
     'monica geller': { character: 'Monica Geller', actors: ['Courteney Cox'] },
     'phoebe buffay': { character: 'Phoebe Buffay', actors: ['Lisa Kudrow'] },
     'sheldon cooper': { character: 'Sheldon Cooper', actors: ['Jim Parsons'] },
+    'sheldon': { character: 'Sheldon Cooper', actors: ['Jim Parsons'] },
+    'rajesh koothrappali': { character: 'Rajesh Koothrappali', actors: ['Kunal Nayyar'] },
+    'rajesh koothrapalli': { character: 'Rajesh Koothrappali', actors: ['Kunal Nayyar'] },
+    'raj koothrappali': { character: 'Rajesh Koothrappali', actors: ['Kunal Nayyar'] },
+    'rajesh': { character: 'Rajesh Koothrappali', actors: ['Kunal Nayyar'] },
+    'howard wolowitz': { character: 'Howard Wolowitz', actors: ['Simon Helberg'] },
+    'howard wallowitz': { character: 'Howard Wolowitz', actors: ['Simon Helberg'] },
+    'howard': { character: 'Howard Wolowitz', actors: ['Simon Helberg'] },
+    'penny': { character: 'Penny', actors: ['Kaley Cuoco'] },
+    'penny hofstadter': { character: 'Penny', actors: ['Kaley Cuoco'] },
+    'leonard hofstadter': { character: 'Leonard Hofstadter', actors: ['Johnny Galecki'] },
+    'leonard': { character: 'Leonard Hofstadter', actors: ['Johnny Galecki'] },
+    'bernadette rostenkowski': { character: 'Bernadette Rostenkowski', actors: ['Melissa Rauch'] },
+    'amy farrah fowler': { character: 'Amy Farrah Fowler', actors: ['Mayim Bialik'] },
+
+    // Modern Family
+    'phil dunphy': { character: 'Phil Dunphy', actors: ['Ty Burrell'] },
+    'alex dunphy': { character: 'Alex Dunphy', actors: ['Ariel Winter'] },
+    'claire dunphy': { character: 'Claire Dunphy', actors: ['Julie Bowen'] },
+    'haley dunphy': { character: 'Haley Dunphy', actors: ['Sarah Hyland'] },
+    'luke dunphy': { character: 'Luke Dunphy', actors: ['Nolan Gould'] },
+    'gloria delgado-pritchett': { character: 'Gloria Delgado-Pritchett', actors: ['Sofía Vergara'] },
+    'gloria delgado': { character: 'Gloria Delgado-Pritchett', actors: ['Sofía Vergara'] },
+    'gloria pritchett': { character: 'Gloria Delgado-Pritchett', actors: ['Sofía Vergara'] },
+    'jay pritchett': { character: 'Jay Pritchett', actors: ['Ed O\'Neill'] },
+    'cameron tucker': { character: 'Cameron Tucker', actors: ['Eric Stonestreet'] },
+    'cam tucker': { character: 'Cameron Tucker', actors: ['Eric Stonestreet'] },
+    'mitchell pritchett': { character: 'Mitchell Pritchett', actors: ['Jesse Tyler Ferguson'] },
+    'mitch pritchett': { character: 'Mitchell Pritchett', actors: ['Jesse Tyler Ferguson'] },
+    'manny delgado': { character: 'Manny Delgado', actors: ['Rico Rodriguez'] },
 
     // Breaking Bad & Better Call Saul
     'walter white': { character: 'Walter White', actors: ['Bryan Cranston'] },
@@ -2020,9 +2133,32 @@ export class TMDB {
     'morty smith': { character: 'Morty Smith', actors: ['Justin Roiland', 'Harry Belden'] }
   };
 
+  static levenshtein(a, b) {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b.charAt(i - 1) === a.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          );
+        }
+      }
+    }
+    return matrix[b.length][a.length];
+  }
+
   /**
    * Safe matching of a fictional character query against TMDB.CHARACTER_ACTORS.
-   * Matches full name, multi-word containment, or distinct whole words (min 4 chars).
+   * Matches full name, multi-word containment, distinct whole words (min 4 chars), or close typos.
    * Strictly prevents false positives on partial substrings (e.g. "bar", "in", "son").
    */
   static matchKnownCharacterKey(raw) {
@@ -2032,14 +2168,28 @@ export class TMDB {
 
     if (TMDB.CHARACTER_ACTORS[clean]) return clean;
 
+    const rawWords = clean.split(/\s+/).filter(Boolean);
+
     for (const [charKey] of Object.entries(TMDB.CHARACTER_ACTORS)) {
       if (clean === charKey || clean.includes(charKey)) return charKey;
 
-      const keyWords = charKey.split(/\s+/);
+      const keyWords = charKey.split(/\s+/).filter(Boolean);
       if (keyWords.some(w => w.length >= 4 && w === clean)) return charKey;
 
-      const rawWords = clean.split(/\s+/);
       if (rawWords.length > 1 && keyWords.every(w => rawWords.includes(w))) return charKey;
+
+      // Fuzzy matching for multi-word queries with small typos (e.g. "rajesh koothrapalli", "howard wallowitz")
+      if (rawWords.length === keyWords.length && rawWords.length >= 2) {
+        const wordsMatch = keyWords.every((kw, idx) => {
+          const rw = rawWords[idx];
+          if (kw === rw) return true;
+          if (kw.length >= 5 && rw.length >= 5) {
+            return TMDB.levenshtein(kw, rw) <= 2;
+          }
+          return false;
+        });
+        if (wordsMatch) return charKey;
+      }
     }
 
     return null;

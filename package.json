@@ -9,7 +9,7 @@
     "serve": "node server.js",
     "build": "echo 'No build step required'",
     "vercel-build": "echo 'No build step required'",
-    "test": "node --test test/*.test.js"
+    "test": "node --test --test-concurrency=1 test/*.test.js"
   },
   "keywords": [
     "rotten-tomatoes",

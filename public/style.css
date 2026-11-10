@@ -10557,12 +10557,16 @@ select option {
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, text-decoration 0.15s ease;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
 }
 
-.diary-card-title:hover {
-  color: #2563eb;
-  text-decoration: underline;
+.diary-card-title:hover,
+.diary-card-title:focus {
+  color: var(--accent-primary, #ff2a5f);
+  text-decoration-color: var(--accent-primary, #ff2a5f);
 }
 
 .diary-card-year {

@@ -14,6 +14,7 @@ export class Storage {
   static DATA_DIR = process.env.VERCEL ? path.join('/tmp', '.rotten-cine') : path.resolve(process.cwd(), '.rotten-cine');
   static DATA_FILE = path.join(Storage.DATA_DIR, 'data.json');
   static _memoryState = null;
+  static _cache = null;
 
   static DEFAULT_STATE = {
     settings: {
@@ -43,36 +44,56 @@ export class Storage {
   }
 
   static read() {
+    if (Storage._cache) {
+      return JSON.parse(JSON.stringify(Storage._cache));
+    }
     try {
       Storage.ensureDataFile();
       if (fs.existsSync(Storage.DATA_FILE)) {
         const content = fs.readFileSync(Storage.DATA_FILE, 'utf-8');
-        const parsed = JSON.parse(content);
-        return {
-          ...Storage.DEFAULT_STATE,
-          ...parsed,
-          settings: { ...Storage.DEFAULT_STATE.settings, ...(parsed.settings || {}) }
-        };
+        if (content && content.trim()) {
+          const parsed = JSON.parse(content);
+          const state = {
+            ...Storage.DEFAULT_STATE,
+            ...parsed,
+            settings: { ...Storage.DEFAULT_STATE.settings, ...(parsed.settings || {}) },
+            downloads: Array.isArray(parsed.downloads) ? parsed.downloads : [],
+            watchlist: Array.isArray(parsed.watchlist) ? parsed.watchlist : [],
+            customLists: Array.isArray(parsed.customLists) ? parsed.customLists : [],
+            watchDiary: Array.isArray(parsed.watchDiary) ? parsed.watchDiary : []
+          };
+          Storage._cache = state;
+          Storage._memoryState = state;
+          return JSON.parse(JSON.stringify(state));
+        }
       }
     } catch (err) {
       // Fallback to memory
     }
     if (Storage._memoryState) {
-      return Storage._memoryState;
+      Storage._cache = Storage._memoryState;
+      return JSON.parse(JSON.stringify(Storage._memoryState));
     }
-    return { ...Storage.DEFAULT_STATE };
+    const fallback = JSON.parse(JSON.stringify(Storage.DEFAULT_STATE));
+    Storage._cache = fallback;
+    return fallback;
   }
 
   static write(data) {
-    Storage._memoryState = data;
+    Storage._cache = JSON.parse(JSON.stringify(data));
+    Storage._memoryState = Storage._cache;
     try {
       Storage.ensureDataFile();
       const tmpFile = `${Storage.DATA_FILE}.${crypto.randomBytes(16).toString('hex')}.tmp`;
+      let renamed = false;
       try {
         fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf-8');
         fs.renameSync(tmpFile, Storage.DATA_FILE);
+        renamed = true;
       } catch (e) {
         try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch (_) {}
+      }
+      if (!renamed) {
         fs.writeFileSync(Storage.DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
       }
     } catch (e) {
