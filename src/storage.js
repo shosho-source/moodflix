@@ -220,6 +220,32 @@ export class Storage {
     Storage.write(data);
     return data.watchlist;
   }
+
+  static updateWatchlistItem(identifier, updates = {}, fallbackTitle = null) {
+    const data = Storage.read();
+    if (!Array.isArray(data.watchlist)) data.watchlist = [];
+    const target = String(identifier || '').toLowerCase();
+    const targetTitle = String(fallbackTitle || '').toLowerCase();
+
+    const idx = data.watchlist.findIndex(w => {
+      const itemTitle = typeof w === 'string' ? w : (w.title || '');
+      const itemId = typeof w === 'object' && w.id ? String(w.id) : '';
+      const tmdbId = typeof w === 'object' && (w.tmdbId || w.tmdb_id) ? String(w.tmdbId || w.tmdb_id) : '';
+      if (itemId && target && itemId.toLowerCase() === target) return true;
+      if (tmdbId && target && tmdbId === target) return true;
+      if (itemTitle && target && itemTitle.toLowerCase() === target) return true;
+      if (itemTitle && targetTitle && itemTitle.toLowerCase() === targetTitle) return true;
+      return false;
+    });
+
+    if (idx !== -1) {
+      const current = typeof data.watchlist[idx] === 'string' ? { title: data.watchlist[idx] } : data.watchlist[idx];
+      data.watchlist[idx] = { ...current, ...updates, updatedAt: new Date().toISOString() };
+      Storage.write(data);
+      return data.watchlist[idx];
+    }
+    return null;
+  }
   static getCustomLists(userId = 'guest') {
     const data = Storage.read();
     const lists = Array.isArray(data.customLists) ? data.customLists : [];

@@ -139,7 +139,7 @@ if (cacheCleanupTimer.unref) cacheCleanupTimer.unref();
 // Supabase REST Helper
 const getSupabaseConfig = () => {
   const url = process.env.SUPABASE_URL || '';
-  const key = process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || '';
   return { url, key, isConfigured: Boolean(url && key) };
 };
 
@@ -881,11 +881,11 @@ const mapWatchlistUpdatesToDb = (updates = {}) => {
   return result;
 };
 
-// PATCH User Watchlist Item (Progress, Rating, Status, Diary)
+// PATCH User Watchlist Item (Progress, Rating, Status, Diary, Custom Lists)
 app.patch('/api/user/watchlist/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId, updates } = req.body;
+    const { userId, updates, tmdbId, title } = req.body;
     const targetUserId = userId || 'guest';
 
     const authorized = await assertUserAuthorized(req, targetUserId);
@@ -897,13 +897,16 @@ app.patch('/api/user/watchlist/:id', async (req, res) => {
     const fields = { ...dbFields, updated_at: new Date().toISOString() };
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
+    const isSmallNumber = /^\d{1,9}$/.test(String(id));
+    const reqTmdbId = tmdbId || req.body.tmdb_id;
     let queryFilter = isUuid
       ? `id=eq.${encodeURIComponent(id)}`
-      : (/^\d+$/.test(String(id))
-          ? `tmdb_id=eq.${encodeURIComponent(id)}`
-          : `title=eq.${encodeURIComponent(id)}`);
+      : ((reqTmdbId || isSmallNumber)
+          ? `tmdb_id=eq.${encodeURIComponent(reqTmdbId || id)}`
+          : `title=eq.${encodeURIComponent(title || id)}`);
     queryFilter += `&user_id=eq.${encodeURIComponent(targetUserId)}`;
 
+    let savedItem = fields;
     const sbRes = await supabaseFetch(`watchlist_items?${queryFilter}`, {
       method: 'PATCH',
       headers: { 'Prefer': 'return=representation' },
@@ -912,10 +915,15 @@ app.patch('/api/user/watchlist/:id', async (req, res) => {
 
     if (sbRes && sbRes.ok) {
       const data = await sbRes.json();
-      return res.json({ success: true, item: data[0] || fields });
+      if (Array.isArray(data) && data[0]) {
+        savedItem = data[0];
+      }
     }
 
-    res.json({ success: true, item: fields });
+    // Mirror updates into local Storage for fallback & guest persistence
+    Storage.updateWatchlistItem(id, fields, title);
+
+    res.json({ success: true, item: savedItem });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

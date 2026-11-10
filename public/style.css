@@ -1172,7 +1172,11 @@ input:focus, select:focus {
   transition: transform 0.1s, box-shadow 0.1s;
   width: 100%;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
+}
+
+.movie-card.menu-open {
+  z-index: 60 !important;
 }
 
 .movie-card:hover {
@@ -1228,6 +1232,166 @@ input:focus, select:focus {
   box-shadow: 2px 2px 0px var(--retro-surface);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.movie-card:has(.card-overflow-wrap) .unreleased-badge {
+  right: 48px;
+}
+
+/* Card 3-Dot Overflow Menu & Icon Actions */
+.card-overflow-wrap {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.similar-card .card-overflow-wrap {
+  top: 8px;
+  right: 8px;
+}
+
+.card-overflow-trigger {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--retro-surface, #ffffff);
+  color: var(--retro-fg, #000000);
+  border: 2px solid var(--retro-border, #000000);
+  box-shadow: 2px 2px 0px var(--retro-border, #000000);
+  border-radius: 0;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  user-select: none;
+}
+
+.card-overflow-trigger:hover,
+.card-overflow-trigger.active {
+  background: #000000;
+  color: #ffffff;
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px var(--retro-border, #000000);
+}
+
+.card-overflow-trigger:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px var(--retro-border, #000000);
+}
+
+.card-overflow-trigger .material-symbols-outlined {
+  font-size: 18px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.card-overflow-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--retro-surface, #ffffff);
+  border: 2px solid var(--retro-border, #000000);
+  box-shadow: 3.5px 3.5px 0px var(--retro-border, #000000);
+  padding: 4px;
+  z-index: 70;
+  box-sizing: border-box;
+}
+
+.card-overflow-menu.hidden {
+  display: none !important;
+}
+
+.card-overflow-item {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: #000000;
+  border: 1.5px solid #000000;
+  box-shadow: 1.5px 1.5px 0px #000000;
+  cursor: pointer;
+  border-radius: 0;
+  transition: all 0.1s ease;
+}
+
+.card-overflow-item:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 2.5px 2.5px 0px #000000;
+}
+
+.card-overflow-item:active {
+  transform: translate(1px, 1px);
+  box-shadow: 0px 0px 0px #000000;
+}
+
+.card-overflow-item .material-symbols-outlined {
+  font-size: 17px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Watched Action Item */
+.card-overflow-item.card-action-watched:hover {
+  background: #00F0FF;
+  color: #000000;
+}
+.card-overflow-item.card-action-watched.active {
+  background: #000000;
+  color: #00F0FF;
+}
+.card-overflow-item.card-action-watched.active:hover {
+  background: #00F0FF;
+  color: #000000;
+}
+
+/* Add to List Action Item */
+.card-overflow-item.card-action-addtolist:hover {
+  background: #ff2a5f;
+  color: #ffffff;
+}
+.card-overflow-item.card-action-addtolist.active {
+  background: #000000;
+  color: #ff2a5f;
+}
+.card-overflow-item.card-action-addtolist.active:hover {
+  background: #ff2a5f;
+  color: #ffffff;
+}
+
+/* Watch Later Action Item */
+.card-overflow-item.card-action-watchlater:hover {
+  background: #FFE600;
+  color: #000000;
+}
+.card-overflow-item.card-action-watchlater.active {
+  background: #000000;
+  color: #FFE600;
+}
+.card-overflow-item.card-action-watchlater.active:hover {
+  background: #FFE600;
+  color: #000000;
+}
+
+@media screen and (max-width: 600px) {
+  .card-overflow-wrap {
+    top: 10px;
+    right: 10px;
+  }
 }
 
 /* Diagnostic Landing View (Explore Page - Balanced Viewport Distribution) */
@@ -10749,6 +10913,131 @@ select option {
   border: 1px solid #000000;
 }
 
+/* Active Custom Collection Banner */
+.active-custom-list-banner {
+  background: #ffffff;
+  border: 2.5px solid var(--retro-border, #000000);
+  box-shadow: 4px 4px 0px 0px var(--retro-border, #000000);
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.active-list-content {
+  flex: 1;
+  min-width: 200px;
+}
+
+.active-list-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.active-list-pill {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #ffffff;
+  padding: 3px 8px;
+  letter-spacing: 0.05em;
+  border: 1px solid #000000;
+}
+
+.active-list-heading {
+  font-family: var(--font-bebas, 'Bebas Neue', cursive);
+  font-size: 1.5rem;
+  margin: 0;
+  color: var(--retro-fg, #181818);
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
+
+.active-list-count {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid #000000;
+}
+
+.active-list-description {
+  margin: 6px 0 0 0;
+  font-size: 0.85rem;
+  color: #555555;
+  line-height: 1.35;
+}
+
+.active-list-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.active-list-actions .retro-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  padding: 8px 14px;
+}
+
+/* Manage List Titles Modal */
+.manage-list-search-wrap {
+  margin-bottom: 10px;
+}
+
+.manage-list-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.manage-list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1.5px solid var(--retro-border, #000000);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.manage-list-row:hover {
+  background: rgba(0, 0, 0, 0.07);
+}
+
+.manage-list-thumb {
+  width: 38px;
+  height: 54px;
+  object-fit: cover;
+  border: 1px solid #000000;
+  flex-shrink: 0;
+}
+
+.manage-list-title-text {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--retro-fg, #181818);
+}
+
+.manage-list-meta-text {
+  font-size: 0.72rem;
+  color: #666666;
+  font-family: var(--font-mono, monospace);
+  margin-top: 2px;
+}
+
 
 /* ==========================================================================
    Watchlist Studio: Modals & Popups
@@ -10758,6 +11047,7 @@ select option {
 .custom-list-modal-card,
 .assign-modal-card,
 .import-export-modal-card,
+.manage-list-modal-card,
 .streaming-modal-card {
   width: 95% !important;
   max-width: 580px !important;
@@ -10779,6 +11069,7 @@ select option {
   .custom-list-modal-card,
   .assign-modal-card,
   .import-export-modal-card,
+  .manage-list-modal-card,
   .streaming-modal-card {
     width: 96% !important;
     max-width: 480px !important;
@@ -10791,6 +11082,7 @@ select option {
 .diary-modal-card { max-width: 520px !important; }
 .custom-list-modal-card { max-width: 480px !important; }
 .assign-modal-card { max-width: 480px !important; }
+.manage-list-modal-card { max-width: 520px !important; }
 .import-export-modal-card { max-width: 620px !important; }
 .streaming-modal-card { max-width: 580px !important; }
 
@@ -10800,6 +11092,7 @@ select option {
 .custom-list-modal-card .modal-header,
 .assign-modal-card .modal-header,
 .import-export-modal-card .modal-header,
+.manage-list-modal-card .modal-header,
 .streaming-modal-card .modal-header {
   display: flex !important;
   align-items: center !important;
@@ -10815,6 +11108,7 @@ select option {
 .custom-list-modal-card .modal-title,
 .assign-modal-card .modal-title,
 .import-export-modal-card .modal-title,
+.manage-list-modal-card .modal-title,
 .streaming-modal-card .modal-title {
   font-family: var(--font-bebas, 'Bebas Neue', cursive) !important;
   font-size: 1.4rem !important;
@@ -10832,6 +11126,7 @@ select option {
 .custom-list-modal-card .modal-body,
 .assign-modal-card .modal-body,
 .import-export-modal-card .modal-body,
+.manage-list-modal-card .modal-body,
 .streaming-modal-card .modal-body {
   padding: 16px !important;
   overflow-y: auto !important;

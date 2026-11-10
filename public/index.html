@@ -641,6 +641,9 @@
             <!-- SUB-TAB 1: Watchlist Grid View -->
             <div id="wlTabContentWatchlist" class="wl-subtab-pane active">
 
+              <!-- Active Curated Collection Filter Banner -->
+              <div id="activeCustomListBanner" class="active-custom-list-banner hidden"></div>
+
               <!-- Intuitive Watchlist Filter & Control Toolbar -->
               <div class="wl-toolbar-container">
                 <div class="wl-toolbar-main">
@@ -1397,6 +1400,27 @@
         <button type="button" id="btnSaveAssignLists" class="retro-btn" style="width:100%; margin-top:14px; padding:12px;">
           UPDATE COLLECTIONS
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4.1 Manage Titles in Custom Collection Modal -->
+  <div id="manageListTitlesModal" class="modal-overlay hidden">
+    <div class="modal-card retro-box manage-list-modal-card">
+      <div class="modal-header">
+        <span class="modal-title scramble-text" id="manageListModalTitle">MANAGE COLLECTION TITLES</span>
+        <button type="button" id="btnCloseManageListModal" class="modal-close-btn retro-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="manage-list-search-wrap">
+          <input type="text" id="manageListSearchInput" class="styled-input" placeholder="Search your library titles..." autocomplete="off">
+        </div>
+        <div id="manageListChecklist" class="manage-list-checklist"></div>
+        <div class="modal-actions-row" style="margin-top: 14px;">
+          <button type="button" id="btnSaveManageListTitles" class="retro-btn" style="width: 100%; padding: 12px;">
+            SAVE TITLES TO COLLECTION
+          </button>
+        </div>
       </div>
     </div>
   </div>

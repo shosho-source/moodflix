@@ -34,6 +34,7 @@ const state = {
   activeTab: 'diagnostic-view',
   lastFeedTab: 'movies-view',
   previousTab: 'diagnostic-view',
+  feedScrollPositions: {},
   currentMediaForModal: null,
   currentTorrents: [],
   isSharedPage: false,
@@ -920,11 +921,19 @@ async function toggleWatchlistItem(media, mediaType = 'movie') {
         totalSeasons: enriched.numberOfSeasons || (enriched.seasons ? enriched.seasons.length : 1),
         totalEpisodes: enriched.numberOfEpisodes || 0,
         progressPct: 0,
-        nextAirDate: enriched.nextEpisodeToAir?.airDate || ''
+        nextAirDate: enriched.nextEpisodeToAir?.airDate || '',
+        customLists: (state.activeCustomListId && state.activeCustomListId !== 'all') ? [state.activeCustomListId] : []
       });
 
       state.watchlist.unshift(entry);
-      showToast(`Added "${title}" to Watchlist (Cloud Synced)`, 'success');
+      const activeList = (state.activeCustomListId && state.activeCustomListId !== 'all')
+        ? state.customLists.find(l => l.id === state.activeCustomListId)
+        : null;
+      if (activeList) {
+        showToast(`Added "${title}" to "${activeList.name}" (Cloud Synced) 📂`, 'success');
+      } else {
+        showToast(`Added "${title}" to Watchlist (Cloud Synced)`, 'success');
+      }
 
       getAuthHeaders().then(authHeaders => {
         fetch('/api/user/watchlist', {
@@ -1230,9 +1239,62 @@ function renderWatchlist() {
   const countBadge = document.getElementById('watchlistCountBadge');
   const clearBtn = document.getElementById('btnClearWatchlist');
 
+  // Handle active custom list banner
+  const activeBanner = document.getElementById('activeCustomListBanner');
+  if (activeBanner) {
+    if (state.activeCustomListId && state.activeCustomListId !== 'all') {
+      const activeList = state.customLists.find(l => l.id === state.activeCustomListId);
+      if (activeList) {
+        const listItems = state.watchlist.filter(w => Array.isArray(w.customLists) && w.customLists.includes(activeList.id));
+        activeBanner.style.borderLeft = `6px solid ${activeList.color || '#ff2a5f'}`;
+        activeBanner.innerHTML = `
+          <div class="active-list-content">
+            <div class="active-list-meta-row">
+              <span class="active-list-pill" style="background: ${activeList.color || '#ff2a5f'};">CURATED COLLECTION</span>
+              <h3 class="active-list-heading">${escapeHtml(activeList.name)}</h3>
+              <span class="active-list-count">${listItems.length} ${listItems.length === 1 ? 'TITLE' : 'TITLES'}</span>
+            </div>
+            ${activeList.description ? `<p class="active-list-description">${escapeHtml(activeList.description)}</p>` : ''}
+          </div>
+          <div class="active-list-actions">
+            <button type="button" class="retro-btn btn-active-add-titles" style="background: ${activeList.color || '#ff2a5f'}; color: #fff;">
+              <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">playlist_add</span>
+              <span>+ ADD TITLES</span>
+            </button>
+            <button type="button" class="retro-btn btn-active-view-all">
+              <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_back</span>
+              <span>ALL TITLES</span>
+            </button>
+          </div>
+        `;
+        activeBanner.classList.remove('hidden');
+
+        activeBanner.querySelector('.btn-active-add-titles')?.addEventListener('click', () => {
+          openManageListTitlesModal(activeList.id);
+        });
+        activeBanner.querySelector('.btn-active-view-all')?.addEventListener('click', () => {
+          state.activeCustomListId = 'all';
+          renderWatchlist();
+          renderWatchlistStats();
+        });
+      } else {
+        activeBanner.classList.add('hidden');
+      }
+    } else {
+      activeBanner.classList.add('hidden');
+    }
+  }
+
   const totalCount = state.watchlist.length;
   if (countBadge) {
-    countBadge.textContent = `${totalCount} TITLE${totalCount === 1 ? '' : 'S'}`;
+    if (state.activeCustomListId && state.activeCustomListId !== 'all') {
+      const activeList = state.customLists.find(l => l.id === state.activeCustomListId);
+      const name = activeList ? activeList.name.toUpperCase() : 'COLLECTION';
+      const inListCount = state.watchlist.filter(w => Array.isArray(w.customLists) && w.customLists.includes(state.activeCustomListId)).length;
+      countBadge.textContent = `${inListCount} TITLE${inListCount === 1 ? '' : 'S'} IN "${name}"`;
+    } else {
+      countBadge.textContent = `${totalCount} TITLE${totalCount === 1 ? '' : 'S'}`;
+    }
   }
 
   const moreWrap = document.getElementById('wlMoreActionsWrap');
@@ -1309,6 +1371,55 @@ function renderWatchlist() {
 
   if (sorted.length === 0) {
     grid.innerHTML = '';
+    if (state.activeCustomListId && state.activeCustomListId !== 'all') {
+      const activeList = state.customLists.find(l => l.id === state.activeCustomListId);
+      const listName = activeList ? escapeHtml(activeList.name) : 'THIS COLLECTION';
+      const listColor = activeList ? (activeList.color || '#ff2a5f') : '#ff2a5f';
+      emptyState.innerHTML = `
+        <div class="watchlist-empty-icon" style="color: ${listColor};">
+          <span class="material-symbols-outlined" style="font-size: 48px;">folder_open</span>
+        </div>
+        <h3 class="watchlist-empty-title scramble-text">${listName.toUpperCase()} IS EMPTY</h3>
+        <p class="watchlist-empty-text">
+          This curated collection does not have any titles yet.<br>
+          Click <strong>ADD TITLES FROM WATCHLIST</strong> to add movies from your library, or use the quick add bar above.
+        </p>
+        <div class="watchlist-empty-actions">
+          <button type="button" class="retro-btn btn-empty-add-titles" style="background: ${listColor}; color: #fff;">
+            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">playlist_add</span>
+            ADD TITLES FROM WATCHLIST
+          </button>
+          <button type="button" class="retro-btn btn-empty-view-all">
+            <span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">arrow_back</span>
+            VIEW ALL WATCHLIST TITLES
+          </button>
+        </div>
+      `;
+      emptyState.querySelector('.btn-empty-add-titles')?.addEventListener('click', () => {
+        openManageListTitlesModal(state.activeCustomListId);
+      });
+      emptyState.querySelector('.btn-empty-view-all')?.addEventListener('click', () => {
+        state.activeCustomListId = 'all';
+        renderWatchlist();
+        renderWatchlistStats();
+      });
+    } else {
+      emptyState.innerHTML = `
+        <div class="watchlist-empty-icon">
+          <span class="material-symbols-outlined" style="font-size: 48px;">bookmark_border</span>
+        </div>
+        <h3 class="watchlist-empty-title scramble-text">YOUR WATCHLIST IS EMPTY</h3>
+        <p class="watchlist-empty-text">
+          Use the <strong>⚡ RAPID ENTRY</strong> bar above or browse movies and TV series to bookmark titles with rich metadata and streaming availability.
+        </p>
+        <div class="watchlist-empty-actions">
+          <button type="button" id="btnBrowseFromWatchlist" class="retro-btn">EXPLORE MOVIES FEED</button>
+        </div>
+      `;
+      document.getElementById('btnBrowseFromWatchlist')?.addEventListener('click', () => {
+        switchTab('movies-view');
+      });
+    }
     emptyState.classList.remove('hidden');
     return;
   }
@@ -2158,7 +2269,10 @@ async function loadCustomLists() {
 
   // 2. Fetch server / Supabase custom lists
   try {
-    const res = await fetch(`/api/user/custom-lists?userId=${encodeURIComponent(userId)}`);
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(`/api/user/custom-lists?userId=${encodeURIComponent(userId)}`, {
+      headers: authHeaders
+    });
     const data = await res.json();
     if (data.success && Array.isArray(data.lists)) {
       const serverMap = new Map();
@@ -2174,7 +2288,7 @@ async function loadCustomLists() {
             // Sync to server in background
             fetch('/api/user/custom-lists', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: authHeaders,
               body: JSON.stringify({
                 userId,
                 name: localList.name,
@@ -2190,13 +2304,53 @@ async function loadCustomLists() {
 
       state.customLists = merged;
       localStorage.setItem(`moodflix_custom_lists_${userId}`, JSON.stringify(state.customLists));
-      localStorage.setItem('moodflix_custom_lists', JSON.stringify(state.customLists));
+      if (!state.user) {
+        localStorage.setItem('moodflix_custom_lists', JSON.stringify(state.customLists));
+      }
     }
   } catch (e) {
     console.warn('Failed to fetch custom lists from server:', e);
   }
 
   renderCustomLists();
+}
+
+function viewCustomList(listId) {
+  state.activeCustomListId = listId;
+  state.watchlistFilters.type = 'all';
+  state.watchlistFilters.status = 'all';
+  state.watchlistFilters.genre = 'all';
+  state.watchlistFilters.year = 'all';
+  state.watchlistFilters.minRating = 0;
+  state.watchlistFilters.runtime = 'all';
+  state.watchlistFilters.search = '';
+
+  const searchInput = document.getElementById('wlSearchFilterInput');
+  if (searchInput) searchInput.value = '';
+
+  // Sync retro dropdown selects to 'all'
+  const elStatus = document.getElementById('wlStatusSelect');
+  if (elStatus) { elStatus.value = 'all'; syncRetroCustomSelect(elStatus); }
+  const elGenre = document.getElementById('wlGenreSelect');
+  if (elGenre) { elGenre.value = 'all'; syncRetroCustomSelect(elGenre); }
+  const elYear = document.getElementById('wlYearSelect');
+  if (elYear) { elYear.value = 'all'; syncRetroCustomSelect(elYear); }
+
+  document.querySelectorAll('.filter-pill').forEach(p => {
+    p.classList.toggle('active', p.dataset.filterType === 'all');
+  });
+
+  switchWatchlistSubTab('watchlist');
+
+  const section = document.querySelector('.profile-watchlist-section');
+  if (section) {
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  const list = state.customLists.find(l => l.id === listId);
+  if (list) {
+    showToast(`Viewing collection "${list.name}" 📂`, 'info');
+  }
 }
 
 function renderCustomLists() {
@@ -2222,9 +2376,14 @@ function renderCustomLists() {
 
   pillsBar.querySelectorAll('.custom-list-pill').forEach(pill => {
     pill.addEventListener('click', () => {
-      state.activeCustomListId = pill.dataset.listId || 'all';
-      renderCustomLists();
-      renderWatchlist();
+      const listId = pill.dataset.listId || 'all';
+      if (listId === 'all') {
+        state.activeCustomListId = 'all';
+        renderCustomLists();
+        renderWatchlist();
+      } else {
+        viewCustomList(listId);
+      }
     });
   });
 
@@ -2264,8 +2423,7 @@ function renderCustomLists() {
 
   grid.querySelectorAll('.btn-view-list').forEach(btn => {
     btn.addEventListener('click', () => {
-      state.activeCustomListId = btn.dataset.id;
-      switchWatchlistSubTab('watchlist');
+      viewCustomList(btn.dataset.id);
     });
   });
 
@@ -2375,6 +2533,7 @@ async function deleteCustomList(listId) {
     localStorage.setItem('moodflix_custom_lists', JSON.stringify(state.customLists));
   }
   renderCustomLists();
+  renderWatchlist();
 
   try {
     const authHeaders = await getAuthHeaders();
@@ -2456,10 +2615,16 @@ async function saveAssignLists() {
 
   const userId = state.user ? state.user.id : 'guest';
   try {
+    const authHeaders = await getAuthHeaders();
     await fetch(`/api/user/watchlist/${encodeURIComponent(item.id)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, updates: { custom_lists: selectedListIds } })
+      headers: authHeaders,
+      body: JSON.stringify({
+        userId,
+        updates: { custom_lists: selectedListIds },
+        tmdbId: item.tmdbId,
+        title: item.title
+      })
     });
   } catch (e) {
     console.warn('Failed to sync custom lists to database:', e);
@@ -2471,7 +2636,127 @@ async function saveAssignLists() {
   if (state.currentDetailMedia) {
     updateDetailButtons(state.currentDetailMedia);
   }
-  showToast(`Updated collections for "${item.title || 'Title'}"`, 'success');
+  showToast(`Updated collections for "${item.title || 'Title'}" 📂`, 'success');
+}
+
+function openManageListTitlesModal(listId) {
+  const list = state.customLists.find(l => l.id === listId);
+  if (!list) return;
+
+  const modal = document.getElementById('manageListTitlesModal');
+  const titleEl = document.getElementById('manageListModalTitle');
+  const checklist = document.getElementById('manageListChecklist');
+  const searchInput = document.getElementById('manageListSearchInput');
+  if (!modal || !checklist) return;
+
+  if (titleEl) titleEl.textContent = `ADD TITLES TO "${list.name.toUpperCase()}"`;
+  if (searchInput) searchInput.value = '';
+
+  const renderItems = (filterQuery = '') => {
+    const q = filterQuery.trim().toLowerCase();
+    const items = state.watchlist.filter(w => {
+      if (!q) return true;
+      return (w.title || '').toLowerCase().includes(q);
+    });
+
+    if (items.length === 0) {
+      checklist.innerHTML = `
+        <div style="text-align: center; padding: 24px; color: #666; font-family: var(--font-mono, monospace);">
+          ${q ? 'NO MATCHING TITLES IN WATCHLIST' : 'YOUR WATCHLIST IS CURRENTLY EMPTY'}
+        </div>
+      `;
+      return;
+    }
+
+    checklist.innerHTML = items.map(item => {
+      const isChecked = Array.isArray(item.customLists) && item.customLists.includes(listId);
+      const safeTitle = escapeHtml(item.title);
+      const safeYear = item.year ? `(${item.year})` : '';
+      const safePoster = escapeHtml(item.poster || 'images/hero.webp');
+      const safeType = (item.mediaType || 'movie').toUpperCase();
+
+      return `
+        <label class="manage-list-row" style="border-left: 4px solid ${list.color || '#ff2a5f'};">
+          <input type="checkbox" class="retro-toggle manage-list-item-cb" data-item-id="${item.id}" ${isChecked ? 'checked' : ''}>
+          <img src="${safePoster}" alt="${safeTitle}" class="manage-list-thumb" onerror="this.src='images/hero.webp'" loading="lazy">
+          <div class="manage-list-info" style="flex: 1;">
+            <div class="manage-list-title-text">${safeTitle} <span style="font-weight: normal; color: #666;">${safeYear}</span></div>
+            <div class="manage-list-meta-text">${safeType}</div>
+          </div>
+        </label>
+      `;
+    }).join('');
+  };
+
+  renderItems();
+
+  if (searchInput) {
+    searchInput.oninput = (e) => {
+      renderItems(e.target.value);
+    };
+  }
+
+  const saveBtn = document.getElementById('btnSaveManageListTitles');
+  if (saveBtn) {
+    saveBtn.onclick = async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'SAVING...';
+
+      const checkBoxes = checklist.querySelectorAll('.manage-list-item-cb');
+      const userId = state.user ? state.user.id : 'guest';
+      const authHeaders = await getAuthHeaders();
+      const changedItems = [];
+
+      checkBoxes.forEach(cb => {
+        const itemId = cb.dataset.itemId;
+        const item = state.watchlist.find(w => String(w.id) === String(itemId));
+        if (item) {
+          if (!Array.isArray(item.customLists)) item.customLists = [];
+          const wasInList = item.customLists.includes(listId);
+          const shouldBeInList = cb.checked;
+          if (wasInList !== shouldBeInList) {
+            if (shouldBeInList) {
+              item.customLists.push(listId);
+            } else {
+              item.customLists = item.customLists.filter(id => id !== listId);
+            }
+            changedItems.push(item);
+          }
+        }
+      });
+
+      await saveWatchlist();
+
+      // Sync changes to server / Supabase
+      for (const item of changedItems) {
+        fetch(`/api/user/watchlist/${encodeURIComponent(item.id)}`, {
+          method: 'PATCH',
+          headers: authHeaders,
+          body: JSON.stringify({
+            userId,
+            updates: { custom_lists: item.customLists },
+            tmdbId: item.tmdbId,
+            title: item.title
+          })
+        }).catch(err => console.warn('Sync item custom list error:', err));
+      }
+
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'SAVE TITLES TO COLLECTION';
+      modal.classList.add('hidden');
+      renderWatchlist();
+      renderCustomLists();
+      renderWatchlistStats();
+      showToast(`Updated "${list.name}" 📂`, 'success');
+    };
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeManageListTitlesModal() {
+  const modal = document.getElementById('manageListTitlesModal');
+  if (modal) modal.classList.add('hidden');
 }
 
 // ==========================================================================
@@ -4116,6 +4401,9 @@ function setupEventListeners() {
   // --- Watchlist Studio: Sub-Tabs Navigation ---
   document.querySelectorAll('.wl-subnav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (btn.dataset.subtab === 'watchlist') {
+        state.activeCustomListId = 'all';
+      }
       switchWatchlistSubTab(btn.dataset.subtab);
     });
   });
@@ -4138,6 +4426,9 @@ function setupEventListeners() {
       } else {
         state.watchlistFilters.type = pill.dataset.filterType || 'all';
         state.watchlistFilters.status = 'all';
+        if (pill.dataset.filterType === 'all') {
+          state.activeCustomListId = 'all';
+        }
       }
 
       const elStatus = document.getElementById('wlStatusSelect');
@@ -4275,6 +4566,7 @@ function setupEventListeners() {
   document.getElementById('customListForm')?.addEventListener('submit', createCustomList);
   document.getElementById('btnCloseAssignModal')?.addEventListener('click', closeAssignToListModal);
   document.getElementById('btnSaveAssignLists')?.addEventListener('click', saveAssignLists);
+  document.getElementById('btnCloseManageListModal')?.addEventListener('click', closeManageListTitlesModal);
 
   // --- Regional Streaming Availability Modal ---
   document.getElementById('btnCloseStreamingModal')?.addEventListener('click', closeStreamingModal);
@@ -4341,8 +4633,8 @@ function setupEventListeners() {
     });
   }
   document.getElementById('shareTutorialBtn')?.addEventListener('click', () => switchTab('tutorial-view'));
-  document.getElementById('tutorial-logo-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.previousTab || state.lastFeedTab || 'movies-view')));
-  document.getElementById('tutorial-back-feed-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.previousTab || state.lastFeedTab || 'movies-view')));
+  document.getElementById('tutorial-logo-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.previousTab || state.lastFeedTab || 'movies-view'), true));
+  document.getElementById('tutorial-back-feed-btn')?.addEventListener('click', () => switchTab(state.isSharedPage ? 'share-view' : (state.previousTab || state.lastFeedTab || 'movies-view'), true));
   document.getElementById('back-to-share-btn')?.addEventListener('click', () => switchTab('share-view'));
 
   // Movies & TV Combined
@@ -4498,7 +4790,11 @@ function setupEventListeners() {
     }
   });
 
-  elements.btnBackToFeed?.addEventListener('click', () => switchTab(state.lastFeedTab));
+  elements.btnBackToFeed?.addEventListener('click', () => {
+    const targetTab = state.lastFeedTab || 'movies-view';
+    switchTab(targetTab, true);
+    restoreFeedScrollPosition(targetTab);
+  });
 
   // Similar Media Scrolling & Horizontal Mouse Wheel Support
   const similarContainer = document.getElementById('similarMediaContainer');
@@ -4558,6 +4854,18 @@ function setupEventListeners() {
 
       const m = state.diagnosticResults[idx];
       openDetailView(m, m.mediaType || 'movie', true);
+    }
+  });
+
+  // Global document dismiss listeners for card 3-dot overflow menus
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.card-overflow-wrap')) {
+      closeAllCardOverflowMenus();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeAllCardOverflowMenus();
     }
   });
 }
@@ -5208,7 +5516,65 @@ function handleQuickMoodSelect(mood) {
   }
 }
 
-function switchTab(tabId) {
+// Feed Scroll Position Preservation Engine
+function saveFeedScrollPosition(tabId = state.activeTab) {
+  if (!tabId || tabId === 'detail-view') return;
+  const el = document.getElementById(tabId);
+  if (el && el.classList.contains('hidden')) return;
+
+  const siteMain = document.querySelector('.site-main');
+  const mainScroll = siteMain ? siteMain.scrollTop : 0;
+  const winScroll = window.scrollY || document.documentElement?.scrollTop || 0;
+
+  if (!state.feedScrollPositions) {
+    state.feedScrollPositions = {};
+  }
+  state.feedScrollPositions[tabId] = {
+    main: mainScroll,
+    window: winScroll
+  };
+}
+
+function restoreFeedScrollPosition(tabId = state.lastFeedTab) {
+  if (!tabId || !state.feedScrollPositions || state.feedScrollPositions[tabId] === undefined) return;
+  const saved = state.feedScrollPositions[tabId];
+  const targetMain = typeof saved === 'object' && saved !== null
+    ? (typeof saved.main === 'number' ? saved.main : 0)
+    : (typeof saved === 'number' ? saved : 0);
+  const targetWin = typeof saved === 'object' && saved !== null
+    ? (typeof saved.window === 'number' ? saved.window : 0)
+    : (typeof saved === 'number' ? saved : 0);
+
+  const siteMain = document.querySelector('.site-main');
+
+  const apply = () => {
+    if (siteMain && typeof targetMain === 'number') {
+      siteMain.scrollTop = targetMain;
+    }
+    if (typeof targetWin === 'number' && typeof window.scrollTo === 'function') {
+      try {
+        window.scrollTo({ top: targetWin, behavior: 'instant' });
+      } catch (e) {
+        window.scrollTo(0, targetWin);
+      }
+    }
+  };
+
+  apply();
+
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      apply();
+      requestAnimationFrame(() => {
+        apply();
+      });
+    });
+  }
+}
+window.saveFeedScrollPosition = saveFeedScrollPosition;
+window.restoreFeedScrollPosition = restoreFeedScrollPosition;
+
+function switchTab(tabId, restoreScroll = false) {
   if (tabId === 'settings-view') {
     tabId = 'profile-view';
   }
@@ -5222,7 +5588,14 @@ function switchTab(tabId) {
     }
   }
 
+  const prevTab = state.activeTab;
+  const isReturningFromDetail = (prevTab === 'detail-view' && (tabId === state.lastFeedTab || tabId === state.previousTab));
+  const shouldRestoreScroll = Boolean(restoreScroll || isReturningFromDetail);
+
   if (state.activeTab !== tabId) {
+    if (state.activeTab && state.activeTab !== 'detail-view') {
+      saveFeedScrollPosition(state.activeTab);
+    }
     if (state.activeTab !== 'profile-view' && state.activeTab !== 'settings-view' && state.activeTab !== 'tutorial-view') {
       state.previousTab = state.activeTab;
       if (state.activeTab === 'movies-view' || state.activeTab === 'anime-view' || state.activeTab === 'tv-view' || state.activeTab === 'directSearchSection') {
@@ -5297,6 +5670,10 @@ function switchTab(tabId) {
       if (!document.hidden) fluidInstance.resume();
       if (canvas) canvas.style.opacity = '1';
     }
+  }
+
+  if (shouldRestoreScroll) {
+    restoreFeedScrollPosition(tabId);
   }
 }
 
@@ -5496,6 +5873,131 @@ async function saveSettings(e) {
   }
 }
 
+// Card 3-Dot Overflow Menu Engine
+function getCardOverflowMenuHtml(m, type, idx) {
+  const item = findWatchlistItem(m);
+  const isWatched = item && item.status === 'completed';
+  const isWatchLater = item && item.status !== 'completed';
+  const inLists = item && Array.isArray(item.customLists) && item.customLists.length > 0;
+
+  const watchedIcon = isWatched ? 'visibility' : 'visibility_off';
+  const watchedTitle = isWatched ? 'Watched — click to mark unwatched' : 'Mark as Watched';
+  const listIcon = inLists ? 'playlist_add_check' : 'playlist_add';
+  const listTitle = inLists ? `In Lists (${item.customLists.length}) — click to edit` : 'Add to List';
+  const watchLaterIcon = isWatchLater ? 'bookmark_added' : 'bookmark_add';
+  const watchLaterTitle = isWatchLater ? 'In Watch Later — click to remove' : 'Save to Watch Later';
+
+  return `
+    <div class="card-overflow-wrap">
+      <button type="button" class="card-overflow-trigger" aria-label="Card options" title="Options" data-card-idx="${idx}">
+        <span class="material-symbols-outlined">more_vert</span>
+      </button>
+      <div class="card-overflow-menu hidden" role="menu">
+        <button type="button" class="card-overflow-item card-action-watched ${isWatched ? 'active' : ''}" data-action="watched" data-card-idx="${idx}" title="${watchedTitle}" aria-label="${watchedTitle}">
+          <span class="material-symbols-outlined">${watchedIcon}</span>
+        </button>
+        <button type="button" class="card-overflow-item card-action-addtolist ${inLists ? 'active' : ''}" data-action="addtolist" data-card-idx="${idx}" title="${listTitle}" aria-label="${listTitle}">
+          <span class="material-symbols-outlined">${listIcon}</span>
+        </button>
+        <button type="button" class="card-overflow-item card-action-watchlater ${isWatchLater ? 'active' : ''}" data-action="watchlater" data-card-idx="${idx}" title="${watchLaterTitle}" aria-label="${watchLaterTitle}">
+          <span class="material-symbols-outlined">${watchLaterIcon}</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function attachCardOverflowListeners(container, items, defaultType) {
+  if (!container) return;
+  container.querySelectorAll('.card-overflow-wrap').forEach(wrap => {
+    const trigger = wrap.querySelector('.card-overflow-trigger');
+    const menu = wrap.querySelector('.card-overflow-menu');
+    const card = wrap.closest('.movie-card');
+    const idx = trigger?.dataset.cardIdx;
+    const selectedItem = (items || [])[idx];
+    if (!trigger || !menu || !selectedItem) return;
+
+    const itemType = selectedItem.mediaType || defaultType || 'movie';
+
+    const syncMenuState = () => {
+      const curItem = findWatchlistItem(selectedItem);
+      const isW = curItem && curItem.status === 'completed';
+      const isWL = curItem && curItem.status !== 'completed';
+      const hasLists = curItem && Array.isArray(curItem.customLists) && curItem.customLists.length > 0;
+
+      const watchedBtn = menu.querySelector('.card-action-watched');
+      if (watchedBtn) {
+        watchedBtn.classList.toggle('active', Boolean(isW));
+        watchedBtn.title = isW ? 'Watched — click to mark unwatched' : 'Mark as Watched';
+        watchedBtn.setAttribute('aria-label', watchedBtn.title);
+        const ic = watchedBtn.querySelector('.material-symbols-outlined');
+        if (ic) ic.textContent = isW ? 'visibility' : 'visibility_off';
+      }
+
+      const listBtn = menu.querySelector('.card-action-addtolist');
+      if (listBtn) {
+        listBtn.classList.toggle('active', Boolean(hasLists));
+        listBtn.title = hasLists ? `In Lists (${curItem.customLists.length}) — click to edit` : 'Add to List';
+        listBtn.setAttribute('aria-label', listBtn.title);
+        const ic = listBtn.querySelector('.material-symbols-outlined');
+        if (ic) ic.textContent = hasLists ? 'playlist_add_check' : 'playlist_add';
+      }
+
+      const wlBtn = menu.querySelector('.card-action-watchlater');
+      if (wlBtn) {
+        wlBtn.classList.toggle('active', Boolean(isWL));
+        wlBtn.title = isWL ? 'In Watch Later — click to remove' : 'Save to Watch Later';
+        wlBtn.setAttribute('aria-label', wlBtn.title);
+        const ic = wlBtn.querySelector('.material-symbols-outlined');
+        if (ic) ic.textContent = isWL ? 'bookmark_added' : 'bookmark_add';
+      }
+    };
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isCurrentlyOpen = !menu.classList.contains('hidden');
+      closeAllCardOverflowMenus();
+
+      if (!isCurrentlyOpen) {
+        syncMenuState();
+        menu.classList.remove('hidden');
+        card?.classList.add('menu-open');
+        trigger.classList.add('active');
+      }
+    });
+
+    menu.querySelectorAll('.card-overflow-item').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const action = btn.dataset.action;
+        if (action === 'watched') {
+          await handleDetailWatched(selectedItem, itemType);
+          syncMenuState();
+        } else if (action === 'watchlater') {
+          await handleDetailWatchLater(selectedItem, itemType);
+          syncMenuState();
+        } else if (action === 'addtolist') {
+          closeAllCardOverflowMenus();
+          await handleDetailAddToList(selectedItem, itemType);
+        }
+      });
+    });
+  });
+}
+
+function closeAllCardOverflowMenus() {
+  document.querySelectorAll('.card-overflow-menu:not(.hidden)').forEach(m => {
+    m.classList.add('hidden');
+    m.closest('.movie-card')?.classList.remove('menu-open');
+    const trig = m.closest('.card-overflow-wrap')?.querySelector('.card-overflow-trigger');
+    if (trig) trig.classList.remove('active');
+  });
+}
+
+window.getCardOverflowMenuHtml = getCardOverflowMenuHtml;
+window.attachCardOverflowListeners = attachCardOverflowListeners;
+window.closeAllCardOverflowMenus = closeAllCardOverflowMenus;
+
 function renderMediaGrid(container, items, type) {
   if (!container) return;
   const now = new Date();
@@ -5513,18 +6015,23 @@ function renderMediaGrid(container, items, type) {
     const safeTitle = escapeHtml(m.title);
     const safeYear = escapeHtml(m.year);
     const safePoster = escapeHtml(m.poster || 'images/hero.webp');
+    const overflowHtml = getCardOverflowMenuHtml(m, type, idx);
     return `
       <div class="movie-card" data-idx="${idx}">
         ${unreleasedHtml}
         ${typeBadge}
+        ${overflowHtml}
         <img src="${safePoster}" alt="${safeTitle}" onerror="this.src='images/hero.webp'">
         <h3>${safeTitle} (${safeYear})</h3>
       </div>
     `;
   }).join('');
 
+  attachCardOverflowListeners(container, items, type);
+
   container.querySelectorAll('.movie-card').forEach(card => {
-    card.addEventListener('click', () => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.card-overflow-wrap')) return;
       const idx = card.dataset.idx;
       const selectedItem = (items || [])[idx];
       if (selectedItem) {
@@ -5537,6 +6044,7 @@ function renderMediaGrid(container, items, type) {
 
 function openDetailView(m, type, isDiagnostic = false) {
   if (state.activeTab !== 'detail-view') {
+    saveFeedScrollPosition(state.activeTab);
     state.lastFeedTab = state.activeTab;
   }
 
@@ -5600,7 +6108,13 @@ function openDetailView(m, type, isDiagnostic = false) {
   loadDetailGallery(m, effectiveType);
 
   switchTab('detail-view');
-  window.scrollTo(0, 0);
+  const siteMain = document.querySelector('.site-main');
+  if (siteMain) {
+    siteMain.scrollTop = 0;
+  }
+  if (typeof window.scrollTo === 'function') {
+    window.scrollTo(0, 0);
+  }
 
   // Load similar media
   loadSimilarMedia(m.id, effectiveType);
@@ -5735,8 +6249,10 @@ async function loadSimilarMedia(id, type) {
         const safeYear = escapeHtml(m.year);
         const safePoster = escapeHtml(m.poster || 'images/hero.webp');
         const score = m.rating ? parseFloat(m.rating).toFixed(1) : null;
+        const overflowHtml = getCardOverflowMenuHtml(m, type, idx);
         return `
           <div class="movie-card similar-card" data-idx="${idx}" role="button" tabindex="0" title="${safeTitle} (${safeYear})">
+            ${overflowHtml}
             <div class="similar-card-poster-wrap">
               <img src="${safePoster}" alt="${safeTitle}" onerror="this.src='images/hero.webp'" loading="lazy">
               ${score && score > 0 ? `<span class="similar-card-rating">★ ${score}</span>` : ''}
@@ -5749,13 +6265,19 @@ async function loadSimilarMedia(id, type) {
         `;
       }).join('');
 
+      attachCardOverflowListeners(container, data.items, type);
+
       container.querySelectorAll('.movie-card').forEach(card => {
         const handleOpen = () => {
           const idx = card.dataset.idx;
           openDetailView(data.items[idx], type);
         };
-        card.addEventListener('click', handleOpen);
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.card-overflow-wrap')) return;
+          handleOpen();
+        });
         card.addEventListener('keydown', (e) => {
+          if (e.target.closest('.card-overflow-wrap')) return;
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             handleOpen();

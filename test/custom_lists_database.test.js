@@ -164,4 +164,48 @@ describe('Custom Lists & Database Connection Suite', () => {
     await fetch(`${baseUrl()}/api/user/custom-lists/${listId}?userId=${userId}`, { method: 'DELETE' });
     await fetch(`${baseUrl()}/api/user/watchlist/${testItemId}?userId=${userId}`, { method: 'DELETE' });
   });
+
+  it('Storage.updateWatchlistItem updates watchlist items and custom_lists locally', () => {
+    const testItem = {
+      id: 'local_test_wl_1',
+      tmdbId: 998877,
+      title: 'Local Watchlist Update Test',
+      custom_lists: []
+    };
+    Storage.addToWatchlist(testItem);
+
+    const updated = Storage.updateWatchlistItem('local_test_wl_1', {
+      custom_lists: ['list_uuid_alpha']
+    });
+
+    assert.ok(updated, 'item updated in storage');
+    assert.deepStrictEqual(updated.custom_lists, ['list_uuid_alpha']);
+
+    // Clean up
+    Storage.removeFromWatchlist('local_test_wl_1');
+  });
+
+  it('UI defines viewCustomList, activeCustomListBanner, and manageListTitlesModal wiring', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const appJs = fs.readFileSync(path.resolve('public/app.js'), 'utf-8');
+    const indexHtml = fs.readFileSync(path.resolve('public/index.html'), 'utf-8');
+    const styleCss = fs.readFileSync(path.resolve('public/style.css'), 'utf-8');
+
+    // UI elements exist in HTML
+    assert.ok(indexHtml.includes('id="activeCustomListBanner"'), 'activeCustomListBanner exists in HTML');
+    assert.ok(indexHtml.includes('id="manageListTitlesModal"'), 'manageListTitlesModal exists in HTML');
+    assert.ok(indexHtml.includes('id="manageListChecklist"'), 'manageListChecklist exists in HTML');
+
+    // JS functions and wiring
+    assert.ok(appJs.includes('function viewCustomList('), 'viewCustomList is defined');
+    assert.ok(appJs.includes('viewCustomList(btn.dataset.id)'), 'btn-view-list calls viewCustomList');
+    assert.ok(appJs.includes('function openManageListTitlesModal('), 'openManageListTitlesModal is defined');
+    assert.ok(appJs.includes('function closeManageListTitlesModal('), 'closeManageListTitlesModal is defined');
+    assert.ok(appJs.includes('saveAssignLists'), 'saveAssignLists is defined');
+
+    // CSS styles
+    assert.ok(styleCss.includes('.active-custom-list-banner'), 'active-custom-list-banner styles defined');
+    assert.ok(styleCss.includes('.manage-list-modal-card'), 'manage-list-modal-card styles defined');
+  });
 });
