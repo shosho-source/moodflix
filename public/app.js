@@ -5002,11 +5002,18 @@ function checkShareUrl() {
     const title = cleanStr(params.get('title')) || 'Movie';
     const year = cleanStr(params.get('year'));
     let poster = cleanStr(params.get('poster'));
-    if (!/^(https?:\/\/|\/|images\/)/i.test(poster)) {
+    if (poster && poster.startsWith('/') && (poster.endsWith('.jpg') || poster.endsWith('.png')) && !poster.startsWith('/images/')) {
+      poster = `https://image.tmdb.org/t/p/w500${poster}`;
+    } else if (!/^(https?:\/\/|\/|images\/)/i.test(poster)) {
       poster = 'images/hero.webp';
     }
     let magnet = cleanStr(params.get('magnet'));
-    if (magnet && !magnet.toLowerCase().startsWith('magnet:?xt=urn:btih:')) {
+    const hash = cleanStr(params.get('hash') || params.get('btih'));
+    if (!magnet && hash && /^[a-zA-Z0-9]{32,40}$/.test(hash)) {
+      magnet = `magnet:?xt=urn:btih:${hash}`;
+    } else if (magnet && /^[a-zA-Z0-9]{32,40}$/.test(magnet)) {
+      magnet = `magnet:?xt=urn:btih:${magnet}`;
+    } else if (magnet && !magnet.toLowerCase().startsWith('magnet:?xt=urn:btih:')) {
       magnet = '';
     }
     const torrentName = cleanStr(params.get('name')) || title;
@@ -9351,6 +9358,35 @@ async function fetchTorrentsForModal(searchTitle, type, mediaObj = {}, isShareMo
   }
 }
 
+function extractCleanMagnet(rawMagnet) {
+  if (!rawMagnet || typeof rawMagnet !== 'string') return '';
+  const trimmed = rawMagnet.trim();
+  if (/^[a-fA-F0-9]{40}$/.test(trimmed)) {
+    return `magnet:?xt=urn:btih:${trimmed.toLowerCase()}`;
+  }
+  const match = trimmed.match(/xt=urn:btih:([a-zA-Z0-9]{32,40})/i);
+  return match ? `magnet:?xt=urn:btih:${match[1]}` : '';
+}
+
+function extractMagnetHash(rawMagnet) {
+  if (!rawMagnet || typeof rawMagnet !== 'string') return '';
+  const trimmed = rawMagnet.trim();
+  if (/^[a-fA-F0-9]{40}$/.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+  const match = trimmed.match(/xt=urn:btih:([a-zA-Z0-9]{32,40})/i);
+  return match ? match[1] : '';
+}
+
+function compressPosterUrl(posterUrl) {
+  if (!posterUrl || typeof posterUrl !== 'string') return '';
+  const tmdbMatch = posterUrl.match(/https?:\/\/image\.tmdb\.org\/t\/p\/(?:w\d+|original)(\/[a-zA-Z0-9_.-]+\.(?:jpg|png|webp))/i);
+  if (tmdbMatch) {
+    return tmdbMatch[1];
+  }
+  return posterUrl;
+}
+
 async function executeTorrentShare(torrent, mediaObj = {}, searchTitle = '') {
   if (!torrent) return;
   const title = mediaObj.title || searchTitle || torrent.name || 'Movie';
@@ -9370,14 +9406,21 @@ async function executeTorrentShare(torrent, mediaObj = {}, searchTitle = '') {
   queryParams.set('share', '1');
   queryParams.set('title', title);
   if (mediaObj.year) queryParams.set('year', mediaObj.year);
-  if (mediaObj.poster) queryParams.set('poster', mediaObj.poster);
+  const compactPoster = compressPosterUrl(mediaObj.poster);
+  if (compactPoster) queryParams.set('poster', compactPoster);
   if (mediaObj.id) queryParams.set('mediaId', mediaObj.id);
-  if (mediaObj.mediaType || mediaObj.type) queryParams.set('mediaType', mediaObj.mediaType || mediaObj.type);
-  if (torrent.magnet) queryParams.set('magnet', torrent.magnet);
-  if (torrent.name) queryParams.set('name', torrent.name);
+  const effectiveType = mediaObj.mediaType || mediaObj.type;
+  if (effectiveType && effectiveType !== 'movie') queryParams.set('mediaType', effectiveType);
+  const magHash = extractMagnetHash(torrent.magnet);
+  if (magHash) {
+    queryParams.set('hash', magHash);
+  } else {
+    const cleanMag = extractCleanMagnet(torrent.magnet);
+    if (cleanMag) queryParams.set('magnet', cleanMag);
+  }
   if (torrent.sizeFormatted || torrent.size) queryParams.set('size', torrent.sizeFormatted || `${(torrent.size / (1024 * 1024 * 1024)).toFixed(2)} GB`);
   if (torrent.qualityBadge || torrent.quality) queryParams.set('quality', torrent.qualityBadge || torrent.quality);
-  if (torrent.seeders !== undefined) queryParams.set('seeds', torrent.seeders);
+  if (torrent.seeders !== undefined && torrent.seeders !== '') queryParams.set('seeds', torrent.seeders);
   if (trailerKey) queryParams.set('trailer', trailerKey);
 
   const shareUrl = `${window.location.origin}/?${queryParams.toString()}`;
@@ -10452,6 +10495,28 @@ async function openShareCardModal(mediaObj = {}, torrentObj = null) {
   }
 
   await refreshShareCardCanvas();
+  scheduleCardBackgroundUpload(document.getElementById('shareCardCanvas'));
+}
+
+function scheduleCardBackgroundUpload(canvas) {
+  if (!canvas || !state.currentShareData) return;
+  try {
+    const title = state.currentShareData.title || 'Movie';
+    const year = state.currentShareData.year || '';
+    const dataUrl = canvas.toDataURL('image/png', 0.85);
+    fetch('/api/share/card', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: dataUrl, title, year })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.cardUrl) {
+          state.cachedCardUrl = data.cardUrl;
+        }
+      })
+      .catch(() => {});
+  } catch (_) {}
 }
 
 function closeShareCardModal() {
@@ -10467,17 +10532,23 @@ function getShareUrlForCurrentData(cardUrl = '') {
   queryParams.set('share', '1');
   queryParams.set('title', current.title || 'Movie');
   if (current.year) queryParams.set('year', current.year);
-  if (current.poster) queryParams.set('poster', current.poster);
+  const compactPoster = compressPosterUrl(current.poster);
+  if (compactPoster) queryParams.set('poster', compactPoster);
   if (cardUrl) queryParams.set('card', cardUrl);
   if (current.mediaId) queryParams.set('mediaId', current.mediaId);
-  if (current.mediaType) queryParams.set('mediaType', current.mediaType);
+  if (current.mediaType && current.mediaType !== 'movie') queryParams.set('mediaType', current.mediaType);
   if (current.torrent) {
     const t = current.torrent;
-    if (t.magnet) queryParams.set('magnet', t.magnet);
-    if (t.name) queryParams.set('name', t.name);
+    const magHash = extractMagnetHash(t.magnet);
+    if (magHash) {
+      queryParams.set('hash', magHash);
+    } else {
+      const cleanMag = extractCleanMagnet(t.magnet);
+      if (cleanMag) queryParams.set('magnet', cleanMag);
+    }
     if (t.sizeFormatted || t.size) queryParams.set('size', t.sizeFormatted || `${(t.size / (1024 * 1024 * 1024)).toFixed(2)} GB`);
     if (t.qualityBadge || t.quality) queryParams.set('quality', t.qualityBadge || t.quality);
-    if (t.seeders !== undefined) queryParams.set('seeds', t.seeders);
+    if (t.seeders !== undefined && t.seeders !== '') queryParams.set('seeds', t.seeders);
   }
   if (current.trailerKey) queryParams.set('trailer', current.trailerKey);
   return `${window.location.origin}/?${queryParams.toString()}`;
@@ -10492,30 +10563,24 @@ async function shareCardToWhatsApp() {
   const year = current.year || '';
   const safeFilename = `${title.replace(/[^a-zA-Z0-9]/g, '_')}_MoodFlix.png`;
 
+  const isMobile = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent || '') || (navigator.maxTouchPoints > 1 && window.innerWidth <= 800);
+  const shareUrl = getShareUrlForCurrentData();
+  const shareMessage = `🎬 Check out "${title}"${year ? ` (${year})` : ''} on MoodFlix!\n${shareUrl}`;
+  const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareMessage)}`;
+
+  // Mobile: Immediately open WhatsApp via top-level location to bypass mobile popup blockers and avoid expired user activation
+  if (isMobile) {
+    showToast('Opening WhatsApp...', 'success');
+    window.location.href = waUrl;
+    return;
+  }
+
   showToast('Preparing WhatsApp share...', 'info');
 
   try {
     const blob = await new Promise((resolve, reject) => {
       canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/png', 1.0);
     });
-
-    // Upload generated card to server in background for WhatsApp Open Graph thumbnail preview
-    let cardUrl = '';
-    try {
-      const dataUrl = canvas.toDataURL('image/png', 0.95);
-      const res = await fetch('/api/share/card', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: dataUrl, title, year })
-      });
-      const data = await res.json();
-      if (data.success && data.cardUrl) {
-        cardUrl = data.cardUrl;
-      }
-    } catch (_) {}
-
-    const shareUrl = getShareUrlForCurrentData(cardUrl);
-    const shareMessage = `🎬 Check out "${title}"${year ? ` (${year})` : ''} on MoodFlix!\n${shareUrl}`;
 
     // Web Share API check for files
     const file = new File([blob], safeFilename, { type: 'image/png' });
@@ -10547,7 +10612,6 @@ async function shareCardToWhatsApp() {
 
     showToast('Card saved to Downloads! Opening WhatsApp...', 'success');
 
-    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareMessage)}`;
     window.open(waUrl, '_blank', 'noopener,noreferrer');
   } catch (err) {
     console.error('WhatsApp share failed:', err);

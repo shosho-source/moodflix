@@ -5730,20 +5730,23 @@ iframe {
 .share-hero-section .cassette-card {
   position: relative;
   z-index: 2;
-  width: 100%;
-  max-width: 400px;
+  width: fit-content;
+  max-width: 100%;
+  height: auto;
   display: flex;
   align-items: center;
   justify-content: center;
+  margin: 0 auto;
 }
 
 .share-hero-section .cassette-img {
-  width: 100%;
-  max-width: 380px;
+  width: auto;
+  height: auto;
+  max-width: min(100%, 380px);
   max-height: clamp(380px, 68vh, 580px);
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
-  background: #FAF8F5;
+  background: transparent;
+  mix-blend-mode: normal;
+  filter: none;
   border: 2.5px solid var(--retro-border, #000000);
   box-shadow: 8px 8px 0px var(--retro-border, #000000);
   display: block;
@@ -5874,8 +5877,10 @@ iframe {
   }
 
   .share-hero-section .cassette-img {
-    max-width: 240px;
-    max-height: 360px;
+    width: auto;
+    height: auto;
+    max-width: min(100%, 260px);
+    max-height: 380px;
   }
 }
 

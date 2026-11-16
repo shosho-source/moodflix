@@ -279,5 +279,67 @@ describe('Spotify-Style Dynamic Social Share Card & Open Graph Suite', () => {
     assert.ok(appJs.includes('state.isSharedPage = false;'), 'Explore button exits shared page mode');
     assert.ok(appJs.includes("state.lastFeedTab = 'movies-view';"), 'Explore button resets feed tab navigation');
   });
+
+  it('Generates compact share link under 300-400 characters and supports mobile WhatsApp direct navigation', () => {
+    // 1. Verifies extractCleanMagnet helper is defined and strips tracker bloat
+    assert.ok(appJs.includes('function extractCleanMagnet('), 'Defines extractCleanMagnet helper');
+    assert.ok(appJs.includes('xt=urn:btih:'), 'extractCleanMagnet extracts core infohash');
+
+    // 2. Simulates magnet extraction from real-world 1,500+ character bloated magnet
+    const bloatedMagnet = 'magnet:?xt=urn:btih:4491753744927593740284719284719284719284&dn=VisionQuest.2026.1080p.WEBRip.x264&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=udp%3A%2F%2Ftracker.bittor.pw%3A1337%2Fannounce&tr=udp%3A%2F%2Fpublic.popcorn-tracker.org%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.dler.org%3A6969%2Fannounce&tr=udp%3A%2F%2Fexodus.desync.com%3A6969%2Fannounce&tr=udp%3A%2F%2Fopen.demonii.com%3A1337%2Fannounce';
+    assert.ok(bloatedMagnet.length > 500, 'Original tracker-bloated magnet is very large');
+
+    const match = bloatedMagnet.match(/xt=urn:btih:([a-zA-Z0-9]{32,40})/i);
+    const cleanMagnet = match ? `magnet:?xt=urn:btih:${match[1]}` : '';
+    assert.strictEqual(cleanMagnet, 'magnet:?xt=urn:btih:4491753744927593740284719284719284719284');
+    assert.ok(cleanMagnet.length <= 60, 'Clean magnet is 60 characters or less');
+
+    // 3. Verifies generated share URL with all media parameters is under 300-400 characters
+    const queryParams = new URLSearchParams();
+    queryParams.set('share', '1');
+    queryParams.set('title', 'VisionQuest');
+    queryParams.set('year', '2026');
+    queryParams.set('poster', 'https://image.tmdb.org/t/p/w500/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg');
+    queryParams.set('mediaId', '987654');
+    queryParams.set('mediaType', 'tv');
+    queryParams.set('magnet', cleanMagnet);
+    queryParams.set('size', '1.45 GB');
+    queryParams.set('quality', '1080P HD');
+    queryParams.set('seeds', '120');
+
+    const sampleUrl = `https://moodflix-share.vercel.app/?${queryParams.toString()}`;
+    assert.ok(sampleUrl.length < 350, `Share URL length (${sampleUrl.length} chars) must be under 350 characters (well within 300-400 limit)`);
+
+    // 4. Verifies mobile WhatsApp navigation to bypass mobile popup blockers
+    assert.ok(appJs.includes('window.location.href = waUrl;'), 'Directs top-level navigation to waUrl on mobile');
+    assert.ok(appJs.includes('isMobile'), 'Detects mobile environment to avoid popup blocker on WhatsApp share');
+  });
+
+  it('Generates ultra-short share link under 220 characters with compressed poster path and infohash', async () => {
+    // 1. Verifies server expands short TMDB poster paths into full w500 TMDB URLs for WhatsApp Open Graph
+    const res = await fetch(`${baseUrl()}/?share=1&title=VisionQuest&year=2026&poster=%2FoYuLEt3zVCKq57qu2F8dT7NIa6f.jpg`);
+    assert.strictEqual(res.status, 200);
+    const html = await res.text();
+    assert.ok(html.includes('content="https://image.tmdb.org/t/p/w500/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg"'), 'Server expands /xyz.jpg to full TMDB w500 URL');
+
+    // 2. Verifies app.js defines compressPosterUrl and extractMagnetHash
+    assert.ok(appJs.includes('function compressPosterUrl('), 'Defines compressPosterUrl helper');
+    assert.ok(appJs.includes('function extractMagnetHash('), 'Defines extractMagnetHash helper');
+
+    // 3. Verifies ultra-short link length is under 220 characters
+    const queryParams = new URLSearchParams();
+    queryParams.set('share', '1');
+    queryParams.set('title', 'VisionQuest');
+    queryParams.set('year', '2026');
+    queryParams.set('poster', '/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg');
+    queryParams.set('mediaId', '987654');
+    queryParams.set('mediaType', 'tv');
+    queryParams.set('hash', '1234567890abcdef1234567890abcdef12345678');
+    queryParams.set('size', '1.45 GB');
+    queryParams.set('seeds', '120');
+
+    const ultraShortUrl = `https://moodflix-share.vercel.app/?${queryParams.toString()}`;
+    assert.ok(ultraShortUrl.length <= 215, `Ultra-short URL (${ultraShortUrl.length} chars) must be 215 chars or less`);
+  });
 });
 

@@ -148,6 +148,8 @@ function renderHtmlWithOpenGraph(rawHtml, req) {
     } else if (poster) {
       if (/^https?:\/\//i.test(poster)) {
         ogImage = poster;
+      } else if (poster.startsWith('/') && (poster.endsWith('.jpg') || poster.endsWith('.png')) && !poster.startsWith('/images/') && !poster.startsWith('/api/')) {
+        ogImage = `https://image.tmdb.org/t/p/w500${poster}`;
       } else {
         ogImage = `${origin}${poster.startsWith('/') ? '' : '/'}${poster}`;
       }
