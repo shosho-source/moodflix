@@ -32,6 +32,7 @@
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
 
   <link rel="stylesheet" href="style.css?v=20261109_trailers_update">
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 
 <body>
@@ -238,6 +239,7 @@
           </div>
         </div>
         <div id="movieTypoBanner" class="typo-notice-banner retro-box hidden"></div>
+        <div id="continueWatchingShelf" class="continue-watching-shelf retro-box hidden is-collapsed"></div>
         <div class="movie-grid" id="movieGrid"></div>
       </section>
 
@@ -465,6 +467,7 @@
             </div>
 
             <div class="detail-actions">
+              <button id="detailStreamBtn" class="retro-btn btn-stream-primary" title="Stream this title immediately in the screening room"><span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 4px;">play_circle</span>STREAM</button>
               <button id="detailTorrentsBtn" class="retro-btn">TORRENTS</button>
               <button id="detailTrailerBtn" class="retro-btn">TRAILER</button>
               <button id="detailGalleryBtn" class="retro-btn"><span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 2px;">photo_library</span>GALLERY</button>
@@ -1527,6 +1530,208 @@
         </div>
         <div id="streamingModalContent" class="streaming-services-container">
           <div class="streaming-loading">Fetching live streaming providers...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stream Access Restriction (Google Login Gate) Modal -->
+  <div id="streamAuthModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Sign in required to stream">
+    <div class="modal-card retro-box stream-auth-modal-card">
+      <div class="modal-header stream-auth-modal-header">
+        <div class="stream-auth-title-deck">
+          <span class="material-symbols-outlined stream-auth-lock-icon">lock</span>
+          <span class="modal-title scramble-text">// STREAMING RESTRICTED</span>
+        </div>
+        <button type="button" id="btnCloseStreamAuthModal" class="modal-close-btn retro-btn" aria-label="Close login dialog">✕</button>
+      </div>
+      <div class="modal-body stream-auth-modal-body">
+        <div class="stream-auth-hero">
+          <div class="stream-auth-shield-badge">
+            <span class="material-symbols-outlined">live_tv</span>
+            <span class="material-symbols-outlined stream-lock-tiny">lock</span>
+          </div>
+          <h3 class="stream-auth-headline scramble-text">GOOGLE SIGN-IN REQUIRED</h3>
+          <p class="stream-auth-desc">
+            Live screening room mirrors, HLS streams, and cross-device playback progress are reserved for authenticated members. Sign in with Google to unlock streaming for <strong id="streamAuthTargetTitle">this title</strong>.
+          </p>
+        </div>
+        <div class="stream-auth-action-box">
+          <button type="button" id="btnStreamAuthGoogleLogin" class="google-login-btn stream-google-login-btn">
+            <div class="google-icon-box">
+              <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20">
+                <path fill="#4285F4"
+                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
+                <path fill="#34A853"
+                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z" />
+                <path fill="#FBBC05"
+                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
+                <path fill="#EA4335"
+                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
+              </svg>
+            </div>
+            <div class="cta-divider"></div>
+            <div class="cta-text-box">
+              <span id="stream-login-btn-text" class="cta-title scramble-text">CONTINUE WITH GOOGLE</span>
+            </div>
+          </button>
+          <button type="button" id="btnDismissStreamAuth" class="retro-btn stream-auth-dismiss-btn">
+            CANCEL
+          </button>
+        </div>
+        <div class="stream-auth-footer-note">
+          <span>Protected by Supabase Auth & Google OAuth SSO • Free forever</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. Archival Screening Room & Live Stream Player Modal (Next.js Stream Feature Port) -->
+  <div id="screeningRoomModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Archival Screening Room Player">
+    <div class="modal-card retro-box screening-room-modal-card">
+      <div class="modal-header screening-modal-header">
+        <div class="screening-title-deck">
+          <span class="material-symbols-outlined screening-hero-icon">live_tv</span>
+          <span class="modal-title scramble-text" id="screeningModalTitle">// SCREENING ROOM: INITIALIZING...</span>
+          <span class="screening-mode-pill" id="screeningStatusBadge">HD MIRROR ONLINE</span>
+        </div>
+        <div class="screening-header-actions">
+          <a id="btnScreeningPopOut" href="#" target="_blank" rel="noopener noreferrer" class="retro-btn screening-popout-btn" title="Open stream in external tab">
+            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">open_in_new</span>
+            <span class="popout-label">POP OUT</span>
+          </a>
+          <button type="button" id="btnToggleScreeningMode" class="retro-btn screening-mode-toggle-btn hidden" title="Toggle between native HLS player and mirror embed">
+            <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">swap_horiz</span>
+            <span id="screeningModeToggleLabel">NATIVE HLS</span>
+          </button>
+          <button type="button" id="btnCloseScreeningRoom" class="modal-close-btn retro-btn" aria-label="Close screening room">✕</button>
+        </div>
+      </div>
+
+      <div class="modal-body screening-modal-body">
+        <!-- Screening Room HUD Deck: Server Selector & Quick Episode Reel -->
+        <div class="screening-controls-bar">
+          <div class="screening-control-group">
+            <label for="screeningSourceSelect" class="screening-control-label">
+              <span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">dns</span>
+              SOURCE:
+            </label>
+            <div class="screening-select-wrap retro-select-container">
+              <select id="screeningSourceSelect" class="screening-source-select" aria-label="Streaming mirror provider">
+                <option value="vidsrcme">VidSrc Official (Fast HD)</option>
+                <option value="vidsrc.to">VidSrc TO (Fast HD)</option>
+                <option value="vidsrc.pm">VidSrc PM (HD Mirror)</option>
+                <option value="vidsrc_buzz">VidSrc Buzz (Ads Multi-Sub)</option>
+                <option value="instaplay">Instaplay (Default · Progress)</option>
+                <option value="multiembed">SuperEmbed (Indonesian & Asian Cinema)</option>
+                <option value="videasy">Videasy (Multi-Sub / Sub Indo)</option>
+                <option value="vidlink">VidLink (1080p · Progress)</option>
+                <option value="vidcore">VidCore (Ads · Progress)</option>
+                <option value="moviesapi">MoviesAPI (1080p · Progress)</option>
+                <option value="peachify">Peachify (1080p · Progress)</option>
+                <option value="vembed">VEmbed (Ads · Progress)</option>
+                <option value="vidnest">VidNest (Ads · Progress)</option>
+                <option value="vidfast">VidFast (Ads · Progress)</option>
+                <option value="vidspark">VidSpark (Progress)</option>
+                <option value="autoembed">AutoEmbed (Multi-Server VIP)</option>
+                <option value="2embed">2Embed (Fast Mirror)</option>
+                <option value="anyembed">AnyEmbed (Smashy Multi-Server)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- TV / Anime Episode Navigation Strip -->
+          <div id="screeningEpisodeBar" class="screening-episode-bar hidden">
+            <div class="screening-control-group">
+              <label for="screeningSeasonSelect" class="screening-control-label">SEASON:</label>
+              <div class="screening-select-wrap retro-select-container">
+                <select id="screeningSeasonSelect" class="screening-season-select" aria-label="Select season"></select>
+              </div>
+            </div>
+            <div class="screening-control-group">
+              <label for="screeningEpisodeSelect" class="screening-control-label">EPISODE:</label>
+              <div class="screening-select-wrap retro-select-container">
+                <select id="screeningEpisodeSelect" class="screening-episode-select" aria-label="Select episode"></select>
+              </div>
+            </div>
+            <button type="button" id="btnScreeningNextEp" class="retro-btn btn-screening-next-ep" title="Jump to next episode">
+              NEXT EP ❯
+            </button>
+          </div>
+        </div>
+
+        <!-- Cinema Stage Viewport -->
+        <div class="screening-viewport-stage" id="screeningViewportStage">
+          <!-- Embed Mirror Iframe -->
+          <iframe
+            id="screeningIframe"
+            src=""
+            title="Archival Screening Room"
+            allowfullscreen
+            referrerpolicy="no-referrer"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            class="screening-video-frame"
+          ></iframe>
+
+          <!-- Native HTML5 / HLS Player (Active when direct stream available) -->
+          <video
+            id="screeningVideo"
+            class="screening-video-element hidden"
+            controls
+            playsinline
+            preload="metadata"
+          ></video>
+
+          <!-- Hotkey Flash Toast -->
+          <div id="screeningFlashMsg" class="screening-flash-toast hidden"></div>
+
+          <!-- AniSkip Floating Action Button (Active during anime OP/ED intervals) -->
+          <button type="button" id="screeningAniSkipBtn" class="screening-aniskip-btn hidden">
+            <span class="material-symbols-outlined">fast_forward</span>
+            <span id="screeningAniSkipLabel">SKIP INTRO [S]</span>
+          </button>
+
+          <!-- Loading Indicator -->
+          <div id="screeningLoader" class="screening-loader-overlay hidden">
+            <div class="screening-loader-badge">
+              <span class="material-symbols-outlined spin-icon">sync</span>
+              <span>[ INITIALIZING ARCHIVAL SCREENING HUD... ]</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screening Guidance & External Verification Footer -->
+        <div class="screening-footer-deck">
+          <div class="screening-tips-row">
+            <span class="material-symbols-outlined screening-info-icon">info</span>
+            <span class="screening-tips-text">
+              <strong>PLAYBACK TIP:</strong> If a mirror buffers or shows <em>&ldquo;No sources yet&rdquo;</em>, toggle the
+              <span class="highlight-txt">SOURCE</span> selector above to alternate mirrors (VidLink, SuperEmbed, Videasy, AutoEmbed, 2Embed, etc.).
+            </span>
+          </div>
+
+          <div class="screening-shortcuts-row">
+            <span class="screening-hotkey-badge">⌨ HOTKEYS:</span>
+            <span class="screening-hotkey-item"><code>SPACE</code> / <code>K</code> Play/Pause</span>
+            <span class="screening-hotkey-item"><code>←</code> / <code>→</code> Seek ±10s</span>
+            <span class="screening-hotkey-item"><code>M</code> Mute</span>
+            <span class="screening-hotkey-item"><code>F</code> Fullscreen</span>
+            <span class="screening-hotkey-item"><code>S</code> Skip AniSkip</span>
+          </div>
+
+          <div class="screening-verify-row" id="screeningVerifyRow">
+            <span class="screening-verify-label">EXTERNAL VERIFICATION:</span>
+            <div class="screening-verify-links">
+              <a id="screeningGoogleLink" href="#" target="_blank" rel="noopener noreferrer" class="retro-btn screening-verify-btn">
+                <span class="material-symbols-outlined" style="font-size: 13px;">search</span>
+                <span>GOOGLE SEARCH</span>
+              </a>
+              <a id="screeningJustWatchLink" href="#" target="_blank" rel="noopener noreferrer" class="retro-btn screening-verify-btn">
+                <span class="material-symbols-outlined" style="font-size: 13px;">open_in_new</span>
+                <span>JUSTWATCH INDEX</span>
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </div>

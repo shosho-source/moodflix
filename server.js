@@ -13,6 +13,7 @@ import { CineBay } from './src/cineBay.js';
 import { Downloader } from './src/downloader.js';
 import { Storage } from './src/storage.js';
 import { TheRottenCine } from './src/rottenCine.js';
+import { getEmbedSources, generateStreamEmbedUrl, resolveStreamSources, fetchAniSkip } from './src/streamProviders.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,7 +85,7 @@ app.use((req, res, next) => {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval'; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' https: data: blob:;"
+    "default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval' blob:; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https: data: blob:; img-src 'self' https: data: blob:; media-src 'self' https: data: blob:; connect-src 'self' https: data: blob:;"
   );
   next();
 });
@@ -1413,6 +1414,263 @@ app.get('/api/providers', async (req, res) => {
     res.json({ success: true, providers });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Live Streaming Resolver Endpoint (Next.js Stream Feature Port)
+app.get('/api/stream', async (req, res) => {
+  try {
+    const mediaType = req.query.type || 'movie';
+    const id = req.query.id;
+    const season = parseInt(req.query.season, 10) || 1;
+    const episode = parseInt(req.query.episode, 10) || 1;
+    const malId = req.query.malId ? parseInt(req.query.malId, 10) : undefined;
+    const imdbId = req.query.imdbId || '';
+
+    if (!id) {
+      return res.status(400).json({ error: "Missing required parameter 'id'" });
+    }
+
+    // Require valid Google authentication session when Supabase auth is active
+    const { isConfigured } = getSupabaseConfig();
+    if (isConfigured) {
+      const authUser = await verifySupabaseAuthToken(req);
+      if (!authUser) {
+        return res.status(401).json({ error: 'Unauthorized: Google authentication session required to stream' });
+      }
+    }
+
+    const streamData = await resolveStreamSources({
+      mediaType,
+      id,
+      season,
+      episode,
+      imdbId,
+      malId
+    });
+
+    if (mediaType === 'anime' && malId) {
+      const skipTimes = await fetchAniSkip(malId, episode);
+      if (skipTimes) {
+        streamData.skipTime = skipTimes;
+      }
+    }
+
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    return res.json(streamData);
+  } catch (err) {
+    console.error('Stream resolver error:', err);
+    return res.status(500).json({ error: 'Failed to resolve stream' });
+  }
+});
+
+// Stream Embed Sources List Endpoint
+app.get('/api/stream/sources', async (req, res) => {
+  try {
+    const type = req.query.type || 'movie';
+    const id = req.query.id;
+    const season = parseInt(req.query.season, 10) || 1;
+    const episode = parseInt(req.query.episode, 10) || 1;
+    const imdbId = req.query.imdbId || '';
+
+    if (!id) {
+      return res.status(400).json({ error: "Missing required parameter 'id'" });
+    }
+
+    // Require valid Google authentication session when Supabase auth is active
+    const { isConfigured } = getSupabaseConfig();
+    if (isConfigured) {
+      const authUser = await verifySupabaseAuthToken(req);
+      if (!authUser) {
+        return res.status(401).json({ error: 'Unauthorized: Google authentication session required to stream' });
+      }
+    }
+
+    const sources = getEmbedSources({ type, id, season, episode, imdbId });
+    return res.json({ success: true, sources });
+  } catch (err) {
+    console.error('Embed sources error:', err);
+    return res.status(500).json({ error: 'Failed to get embed sources' });
+  }
+});
+
+// HLS Manifest and Segment Reverse Proxy
+app.get('/api/proxy/hls', async (req, res) => {
+  const targetUrl = req.query.url;
+  const referer = req.query.referer || 'https://megaplay.buzz/';
+
+  if (!targetUrl) {
+    return res.status(400).json({ error: "Missing 'url' parameter" });
+  }
+
+  try {
+    const upstreamRes = await fetch(targetUrl, {
+      headers: {
+        Referer: referer,
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      }
+    });
+
+    if (!upstreamRes.ok) {
+      return res.status(upstreamRes.status).send(`Upstream error: ${upstreamRes.statusText}`);
+    }
+
+    const contentType = upstreamRes.headers.get('content-type') || '';
+
+    // If it's an m3u8 playlist, rewrite relative URLs to pass through proxy
+    if (
+      contentType.includes('application/x-mpegurl') ||
+      contentType.includes('application/vnd.apple.mpegurl') ||
+      targetUrl.includes('.m3u8')
+    ) {
+      const manifestText = await upstreamRes.text();
+      const baseUrl = targetUrl.substring(0, targetUrl.lastIndexOf('/') + 1);
+
+      const rewritten = manifestText
+        .split('\n')
+        .map(line => {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) {
+            if (trimmed.includes('URI="')) {
+              return trimmed.replace(/URI="([^"]+)"/, (match, uri) => {
+                const fullUri = uri.startsWith('http') ? uri : `${baseUrl}${uri}`;
+                return `URI="/api/proxy/hls?url=${encodeURIComponent(fullUri)}&referer=${encodeURIComponent(referer)}"`;
+              });
+            }
+            return line;
+          }
+
+          const fullSegmentUrl = trimmed.startsWith('http') ? trimmed : `${baseUrl}${trimmed}`;
+          return `/api/proxy/hls?url=${encodeURIComponent(fullSegmentUrl)}&referer=${encodeURIComponent(referer)}`;
+        })
+        .join('\n');
+
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.send(rewritten);
+    }
+
+    // Binary video chunk (.ts, .m4s, etc.)
+    const buffer = await upstreamRes.arrayBuffer();
+    res.setHeader('Content-Type', contentType || 'video/mp2t');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error('HLS Proxy error:', err);
+    return res.status(500).send('HLS Proxy Internal Error');
+  }
+});
+
+// Subtitle Proxy Endpoint
+app.get('/api/proxy/subtitles', async (req, res) => {
+  const targetUrl = req.query.url;
+  const referer = req.query.referer || 'https://megaplay.buzz/';
+
+  if (!targetUrl) {
+    return res.status(400).json({ error: "Missing 'url' parameter" });
+  }
+
+  try {
+    const upstreamRes = await fetch(targetUrl, {
+      headers: {
+        Referer: referer,
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      }
+    });
+
+    if (!upstreamRes.ok) {
+      return res.status(upstreamRes.status).send('Failed to fetch subtitle track');
+    }
+
+    const vtt = await upstreamRes.text();
+    res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.send(vtt);
+  } catch (err) {
+    console.error('Subtitle proxy error:', err);
+    return res.status(500).send('Subtitle Proxy Error');
+  }
+});
+
+// Watch Progress API (Cross-Device & Local)
+app.get('/api/progress', async (req, res) => {
+  try {
+    const user = await verifySupabaseAuthToken(req);
+    const userId = user?.id || req.headers['x-user-id'] || 'guest';
+    const { mediaId, season, episode } = req.query;
+
+    if (mediaId) {
+      const item = Storage.getWatchProgress(userId, mediaId, season, episode);
+      return res.json({ success: true, progress: item });
+    }
+
+    const recent = Storage.getRecentWatchProgress(userId, 20);
+    return res.json({ success: true, recent });
+  } catch (err) {
+    console.error('GET /api/progress error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/progress', async (req, res) => {
+  try {
+    const user = await verifySupabaseAuthToken(req);
+    const userId = user?.id || req.headers['x-user-id'] || req.body?.user_id || 'guest';
+    const record = Storage.saveWatchProgress(userId, req.body);
+
+    // If Supabase is configured and caller is authenticated, sync to Supabase watch_progress
+    if (user && user.id) {
+      try {
+        await supabaseFetch('watch_progress', {
+          method: 'POST',
+          headers: {
+            'Prefer': 'resolution=merge-duplicates'
+          },
+          body: JSON.stringify({
+            user_id: user.id,
+            media_id: String(record.media_id),
+            media_type: record.media_type,
+            title: record.title,
+            poster_path: record.poster_path,
+            season: record.season,
+            episode: record.episode,
+            progress_seconds: record.progress_seconds,
+            duration_seconds: record.duration_seconds,
+            completed: record.completed,
+            updated_at: record.updated_at
+          })
+        });
+      } catch (cloudErr) {
+        // Silently tolerate cloud upsert failure
+      }
+    }
+
+    return res.json({ success: true, progress: record });
+  } catch (err) {
+    console.error('POST /api/progress error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/progress', async (req, res) => {
+  try {
+    const user = await verifySupabaseAuthToken(req);
+    const userId = user?.id || req.headers['x-user-id'] || 'guest';
+    const { mediaId, season, episode } = req.query;
+    if (!mediaId) {
+      return res.status(400).json({ success: false, error: 'mediaId is required' });
+    }
+    const updated = Storage.deleteWatchProgress(userId, mediaId, season, episode);
+    return res.json({ success: true, progress: updated });
+  } catch (err) {
+    console.error('DELETE /api/progress error:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

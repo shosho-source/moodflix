@@ -44,7 +44,16 @@ const state = {
   shareCardShowSpecs: true,
   shareCardShowSoundwave: true,
   currentShareData: null,
-  cachedPosterImg: null
+  cachedPosterImg: null,
+  currentScreeningItem: null,
+  currentScreeningSeason: 1,
+  currentScreeningEpisode: 1,
+  currentScreeningSource: 'vidsrcme',
+  currentScreeningMode: 'embed',
+  screeningStreamData: null,
+  screeningAniSkipActive: null,
+  hlsPlayerInstance: null,
+  screeningProgressTimer: null
 };
 
 // Global HTML entity escaping helper to prevent XSS
@@ -108,11 +117,38 @@ const elements = {
   modalTorrentHeader: document.getElementById('modalTorrentHeader'),
   modalBodyContent: document.getElementById('modalBodyContent'),
   detailTorrentsBtn: document.getElementById('detailTorrentsBtn'),
+  detailStreamBtn: document.getElementById('detailStreamBtn'),
   detailTrailerBtn: document.getElementById('detailTrailerBtn'),
   detailWatchedBtn: document.getElementById('detailWatchedBtn'),
   detailWatchlistBtn: document.getElementById('detailWatchlistBtn'),
   detailAddToListBtn: document.getElementById('detailAddToListBtn'),
   detailShareBtn: document.getElementById('detailShareBtn'),
+
+  // Screening Room & Streaming Elements
+  screeningRoomModal: document.getElementById('screeningRoomModal'),
+  screeningModalTitle: document.getElementById('screeningModalTitle'),
+  screeningStatusBadge: document.getElementById('screeningStatusBadge'),
+  screeningSourceSelect: document.getElementById('screeningSourceSelect'),
+  screeningSeasonSelect: document.getElementById('screeningSeasonSelect'),
+  screeningEpisodeSelect: document.getElementById('screeningEpisodeSelect'),
+  screeningEpisodeBar: document.getElementById('screeningEpisodeBar'),
+  btnScreeningNextEp: document.getElementById('btnScreeningNextEp'),
+  btnToggleScreeningMode: document.getElementById('btnToggleScreeningMode'),
+  screeningModeToggleLabel: document.getElementById('screeningModeToggleLabel'),
+  btnCloseScreeningRoom: document.getElementById('btnCloseScreeningRoom'),
+  screeningIframe: document.getElementById('screeningIframe'),
+  screeningVideo: document.getElementById('screeningVideo'),
+  screeningFlashMsg: document.getElementById('screeningFlashMsg'),
+  screeningAniSkipBtn: document.getElementById('screeningAniSkipBtn'),
+  screeningLoader: document.getElementById('screeningLoader'),
+  continueWatchingShelf: document.getElementById('continueWatchingShelf'),
+  screeningGoogleLink: document.getElementById('screeningGoogleLink'),
+  screeningJustWatchLink: document.getElementById('screeningJustWatchLink'),
+  streamAuthModal: document.getElementById('streamAuthModal'),
+  streamAuthTargetTitle: document.getElementById('streamAuthTargetTitle'),
+  btnStreamAuthGoogleLogin: document.getElementById('btnStreamAuthGoogleLogin'),
+  btnCloseStreamAuthModal: document.getElementById('btnCloseStreamAuthModal'),
+  btnDismissStreamAuth: document.getElementById('btnDismissStreamAuth'),
 
   // Profile & Watchlist Elements
   profileView: document.getElementById('profile-view'),
@@ -322,6 +358,7 @@ async function initSupabaseClient() {
       supabaseClient.auth.onAuthStateChange(async (event, session) => {
         if (session && session.user) {
           await showDashboardView(session.user);
+          checkPendingStreamAfterLogin();
         } else if (event === 'SIGNED_OUT') {
           await showDashboardView(null);
         }
@@ -392,6 +429,7 @@ async function showDashboardView(user) {
 
   // Sync profile view state & watchlist
   renderProfileView();
+  updateDetailButtons();
   await loadWatchlist();
   loadCustomLists();
   loadDiaryEntries();
@@ -441,6 +479,8 @@ async function handleSignOut() {
       console.warn('Sign out warning:', e);
     }
   }
+  closeScreeningRoom();
+  closeStreamAuthModal();
   try {
     localStorage.removeItem('moodflix_watchlist');
   } catch (e) {}
@@ -1046,6 +1086,20 @@ function updateDetailButtons(media) {
       addToListBtn.title = 'Add to custom list or collection';
     }
   }
+
+  // 4. STREAM button (Locked behind Google login)
+  const streamBtn = elements.detailStreamBtn || document.getElementById('detailStreamBtn');
+  if (streamBtn) {
+    if (state.user) {
+      streamBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 4px;">play_circle</span>STREAM';
+      streamBtn.title = 'Stream this title immediately in the screening room';
+      streamBtn.classList.remove('stream-btn-locked');
+    } else {
+      streamBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle; margin-right: 4px;">lock</span>STREAM';
+      streamBtn.title = 'Sign in with Google to unlock streaming';
+      streamBtn.classList.add('stream-btn-locked');
+    }
+  }
 }
 
 function updateDetailWatchlistButton(media) {
@@ -1598,10 +1652,13 @@ function renderWatchlist() {
     });
 
 
-    // Streaming Providers
+    // Streaming Providers & Archival Screening Room
     card.querySelector('.btn-wl-stream')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      openStreamingModal(item);
+      openScreeningRoom(item, {
+        season: item.isSeason ? (item.seasonNumber || 1) : (item.currentSeason || 1),
+        episode: item.currentEpisode ? Math.max(1, item.currentEpisode) : 1
+      });
     });
 
     // Log to Watch Diary
@@ -1760,6 +1817,10 @@ async function loadSeasonEpisodes(seasonNum) {
               <span class="episode-tag">E${epNum}</span>
               <strong class="episode-row-title">${safeEpTitle}</strong>
               ${safeAirDate ? `<span class="episode-row-date">${safeAirDate}</span>` : ''}
+              <button type="button" class="retro-btn btn-stream-episode ${state.user ? '' : 'stream-btn-locked'}" data-ep="${epNum}" title="${state.user ? `Stream Episode ${epNum} in Screening Room` : 'Sign in with Google to stream'}">
+                <span class="material-symbols-outlined" style="font-size: 13px; vertical-align: middle;">${state.user ? 'play_circle' : 'lock'}</span>
+                <span>STREAM</span>
+              </button>
             </div>
             ${safeOverview ? `<p class="episode-row-desc">${safeOverview}</p>` : ''}
           </div>
@@ -1767,9 +1828,13 @@ async function loadSeasonEpisodes(seasonNum) {
       `;
     }).join('');
 
-    // Wire checkbox clicks
+    // Wire checkbox & stream clicks
     listEl.querySelectorAll('.episode-item-row').forEach(row => {
       const epNum = parseInt(row.dataset.ep, 10);
+      row.querySelector('.btn-stream-episode')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openScreeningRoom(activeItem, { season: seasonNum, episode: epNum });
+      });
       row.querySelector('.retro-check-btn')?.addEventListener('click', async (e) => {
         e.stopPropagation();
         const isWatched = row.classList.contains('episode-watched');
@@ -2859,6 +2924,1087 @@ async function loadStreamingProviders(region = 'US') {
     container.innerHTML = `<div class="streaming-empty-box">Failed to fetch streaming availability.</div>`;
   }
 }
+
+// ==========================================================================
+// Archival Screening Room & Live Video Streaming Engine (Next.js Port)
+// ==========================================================================
+const STREAM_MIRROR_SOURCES = [
+  { name: "vidsrcme", label: "VidSrc Official (Fast HD)", url: "https://vidsrc.me/embed" },
+  { name: "vidsrc.to", label: "VidSrc TO (Fast HD)", url: "https://vidsrc.to/embed" },
+  { name: "vidsrc.pm", label: "VidSrc PM (HD Mirror)", url: "https://vidsrc.pm/embed" },
+  { name: "vidsrc_buzz", label: "VidSrc Buzz (Ads Multi-Sub)", url: "https://vidsrc.buzz/embed" },
+  { name: "instaplay", label: "Instaplay (Default · Progress)", url: "https://media.instantplay.click/embed" },
+  { name: "multiembed", label: "SuperEmbed (Indonesian & Asian Cinema)", url: "https://superembed.stream" },
+  { name: "videasy", label: "Videasy (Multi-Sub / Sub Indo)", url: "https://player.videasy.net" },
+  { name: "vidlink", label: "VidLink (1080p · Progress)", url: "https://vidlink.pro" },
+  { name: "vidcore", label: "VidCore (Ads · Progress)", url: "https://vidcore.io" },
+  { name: "moviesapi", label: "MoviesAPI (1080p · Progress)", url: "https://moviesapi.to" },
+  { name: "peachify", label: "Peachify (1080p · Progress)", url: "https://peachify.top/embed" },
+  { name: "vembed", label: "VEmbed (Ads · Progress)", url: "https://vsembed.ru/embed" },
+  { name: "vidnest", label: "VidNest (Ads · Progress)", url: "https://vidnest.fun" },
+  { name: "vidfast", label: "VidFast (Ads · Progress)", url: "https://vidfast.pro" },
+  { name: "vidspark", label: "VidSpark (Progress)", url: "https://vidspark.to" },
+  { name: "autoembed", label: "AutoEmbed (Multi-Server VIP)", url: "https://player.autoembed.co/embed" },
+  { name: "2embed", label: "2Embed (Fast Mirror)", url: "https://www.2embed.cc" },
+  { name: "anyembed", label: "AnyEmbed (Smashy Multi-Server)", url: "https://embed.smashystream.com" }
+];
+
+function generateStreamEmbedUrl({
+  base,
+  type = 'movie',
+  id,
+  season = 1,
+  episode = 1,
+  providerName = '',
+  imdbId = ''
+}) {
+  const isMovie = String(type).toLowerCase() === 'movie';
+  const name = (providerName || '').toLowerCase();
+  const sStr = String(season || 1);
+  const eStr = String(episode || 1);
+  const idStr = String(id);
+
+  // 1. SuperEmbed / MultiEmbed: query parameter convention
+  if (name === 'multiembed' || base.includes('multiembed') || base.includes('superembed')) {
+    const cleanBase = base.includes('multiembed.mov') ? 'https://superembed.stream' : base;
+    const videoParam = imdbId ? `video_id=${imdbId}` : `video_id=${idStr}&tmdb=1`;
+    return isMovie
+      ? `${cleanBase}/?${videoParam}`
+      : `${cleanBase}/?${videoParam}&s=${sStr}&e=${eStr}`;
+  }
+
+  // 2. AnyEmbed (SmashyStream Infrastructure)
+  if (name === 'anyembed' || base.includes('smashystream.com')) {
+    return isMovie
+      ? `${base}/playere.php?tmdb=${idStr}`
+      : `${base}/playere.php?tmdb=${idStr}&season=${sStr}&episode=${eStr}`;
+  }
+
+  // 3. 2Embed: embedtv for series, embed for movies
+  if (name === '2embed' || base.includes('2embed.cc')) {
+    return isMovie
+      ? `${base}/embed/${idStr}`
+      : `${base}/embedtv/${idStr}&s=${sStr}&e=${eStr}`;
+  }
+
+  // 4. VidLink with dark gold theme tokens
+  if (name === 'vidlink' || base.includes('vidlink.pro')) {
+    const url = isMovie
+      ? `${base}/movie/${idStr}`
+      : `${base}/tv/${idStr}/${sStr}/${eStr}`;
+    return `${url}?primaryColor=e09f3e&secondaryColor=151310&iconColor=e09f3e`;
+  }
+
+  // 5. Standard path-based providers (VidSrc Official, Videasy, AutoEmbed, MoviesAPI, etc.)
+  return isMovie
+    ? `${base}/movie/${idStr}`
+    : `${base}/tv/${idStr}/${sStr}/${eStr}`;
+}
+
+// ==========================================================================
+// Stream Access Restriction & Google Login Gate
+// ==========================================================================
+
+function openStreamAuthModal(item, options = {}) {
+  state.pendingStreamTarget = item ? { item, options } : null;
+  if (item) {
+    try {
+      sessionStorage.setItem('moodflix_pending_stream', JSON.stringify({ item, options }));
+    } catch (e) {}
+  }
+  const modal = elements.streamAuthModal || document.getElementById('streamAuthModal');
+  const targetTitle = elements.streamAuthTargetTitle || document.getElementById('streamAuthTargetTitle');
+  if (targetTitle && item) {
+    targetTitle.textContent = `"${item.title || item.name || 'this title'}"`;
+  }
+  if (modal) {
+    modal.classList.remove('hidden');
+  }
+}
+
+function closeStreamAuthModal() {
+  const modal = elements.streamAuthModal || document.getElementById('streamAuthModal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+}
+
+function checkPendingStreamAfterLogin() {
+  try {
+    const raw = sessionStorage.getItem('moodflix_pending_stream');
+    if (raw) {
+      sessionStorage.removeItem('moodflix_pending_stream');
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.item) {
+        showToast(`Signed in! Launching stream for ${parsed.item.title || 'selected title'}...`, 'success');
+        setTimeout(() => {
+          openScreeningRoom(parsed.item, parsed.options || {});
+        }, 350);
+      }
+    }
+  } catch (e) {
+    console.warn('Pending stream restore note:', e);
+  }
+}
+
+// Series seasons and metadata cache for instant retrieval across screening room sessions
+const seriesSeasonsCache = new Map();
+
+async function fetchSeriesSeasonsAndEnrich(id, mediaType, title, year) {
+  const cacheKey = `${mediaType}_${id}`;
+  if (seriesSeasonsCache.has(cacheKey)) {
+    const cached = seriesSeasonsCache.get(cacheKey);
+    if (state.currentScreeningItem && String(state.currentScreeningItem.id) === String(id)) {
+      state.currentScreeningItem.seasons = cached.seasons;
+      state.currentScreeningItem.numberOfSeasons = cached.numberOfSeasons;
+      state.currentScreeningItem.totalSeasons = cached.numberOfSeasons;
+    }
+    return cached.seasons;
+  }
+
+  try {
+    const fetchId = (/^\d+$/.test(String(id || '').trim())) ? id : '';
+    const res = await fetch(`/api/details?id=${fetchId}&type=${mediaType}&title=${encodeURIComponent(title || '')}&year=${year || ''}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.details?.seasons && data.details.seasons.length > 0) {
+      const regular = data.details.seasons.filter(s => (s.season_number ?? s.seasonNumber ?? s.season) > 0);
+      const numSeasons = data.details.numberOfSeasons || regular.length || data.details.seasons.length || 1;
+      const payload = {
+        seasons: data.details.seasons,
+        numberOfSeasons: numSeasons
+      };
+      seriesSeasonsCache.set(cacheKey, payload);
+      if (state.currentScreeningItem && String(state.currentScreeningItem.id) === String(id)) {
+        state.currentScreeningItem.seasons = payload.seasons;
+        state.currentScreeningItem.numberOfSeasons = payload.numberOfSeasons;
+        state.currentScreeningItem.totalSeasons = payload.numberOfSeasons;
+      }
+      return payload.seasons;
+    }
+  } catch (err) {
+    console.warn('[Screening Room] Could not fetch series details:', err.message);
+  }
+  return null;
+}
+
+function populateScreeningSeasonEpisodeSelectors(selectedSeason = 1, selectedEpisode = 1) {
+  const item = state.currentScreeningItem;
+  if (!item || item.mediaType === 'movie') return;
+
+  const seasonSelect = elements.screeningSeasonSelect || document.getElementById('screeningSeasonSelect');
+  const episodeSelect = elements.screeningEpisodeSelect || document.getElementById('screeningEpisodeSelect');
+  if (!seasonSelect || !episodeSelect) return;
+
+  const rawSeasons = Array.isArray(item.seasons) ? item.seasons : [];
+  let regularSeasons = rawSeasons.filter(s => {
+    const num = s.season_number ?? s.seasonNumber ?? s.season;
+    return typeof num === 'number' && num > 0;
+  });
+
+  if (regularSeasons.length === 0 && rawSeasons.length > 0) {
+    regularSeasons = rawSeasons;
+  }
+
+  const totalSeasons = regularSeasons.length > 0
+    ? regularSeasons.length
+    : Math.max(1, parseInt(item.numberOfSeasons || item.totalSeasons || item.total_seasons || 1, 10));
+
+  const targetSeason = Math.min(Math.max(1, parseInt(selectedSeason, 10) || 1), totalSeasons);
+  state.currentScreeningSeason = targetSeason;
+
+  // 1. Populate Season Options
+  seasonSelect.innerHTML = '';
+  if (regularSeasons.length > 0) {
+    regularSeasons.forEach(sObj => {
+      const sNum = sObj.season_number ?? sObj.seasonNumber ?? sObj.season ?? 1;
+      const opt = document.createElement('option');
+      opt.value = sNum;
+      opt.textContent = `S${sNum}`;
+      if (sNum === targetSeason) opt.selected = true;
+      seasonSelect.appendChild(opt);
+    });
+  } else {
+    for (let s = 1; s <= totalSeasons; s++) {
+      const opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = `S${s}`;
+      if (s === targetSeason) opt.selected = true;
+      seasonSelect.appendChild(opt);
+    }
+  }
+  seasonSelect.value = targetSeason;
+
+  // 2. Populate Episode Options for this Season
+  populateScreeningEpisodeOptions(targetSeason, selectedEpisode);
+}
+
+function populateScreeningEpisodeOptions(seasonNum, selectedEpisode = 1) {
+  const item = state.currentScreeningItem;
+  const episodeSelect = elements.screeningEpisodeSelect || document.getElementById('screeningEpisodeSelect');
+  if (!item || !episodeSelect) return;
+
+  const rawSeasons = Array.isArray(item.seasons) ? item.seasons : [];
+  const activeSeasonObj = rawSeasons.find(s => {
+    const sN = s.season_number ?? s.seasonNumber ?? s.season;
+    return sN === seasonNum;
+  });
+
+  let totalEps = 24;
+  if (activeSeasonObj && typeof activeSeasonObj.episode_count === 'number' && activeSeasonObj.episode_count > 0) {
+    totalEps = activeSeasonObj.episode_count;
+  } else if (item.totalEpisodes && (!rawSeasons.length || rawSeasons.length === 1)) {
+    totalEps = item.totalEpisodes;
+  }
+
+  const targetEp = Math.min(Math.max(1, parseInt(selectedEpisode, 10) || 1), totalEps);
+  state.currentScreeningEpisode = targetEp;
+
+  episodeSelect.innerHTML = '';
+  for (let e = 1; e <= totalEps; e++) {
+    const opt = document.createElement('option');
+    opt.value = e;
+    opt.textContent = `E${e}`;
+    if (e === targetEp) opt.selected = true;
+    episodeSelect.appendChild(opt);
+  }
+  episodeSelect.value = targetEp;
+}
+
+async function openScreeningRoom(item, options = {}) {
+  if (!item) return;
+
+  // Gate stream feature behind Google Authentication
+  if (!state.user) {
+    openStreamAuthModal(item, options);
+    return;
+  }
+
+  const rawId = item.tmdbId || item.tmdb_id || item.id;
+  const rawType = (item.mediaType || options.type || (item.isAnime ? 'anime' : (item.isSeason || item.totalSeasons ? 'tv' : 'movie'))).toLowerCase();
+  const mediaType = (rawType === 'anime') ? 'anime' : (rawType === 'tv' ? 'tv' : 'movie');
+  const title = item.title || item.name || 'Untitled';
+  const poster = item.poster || item.poster_path || item.posterPath || 'images/hero.webp';
+  const season = parseInt(options.season ?? (item.seasonNumber || item.currentSeason || 1), 10) || 1;
+  const episode = parseInt(options.episode ?? (item.currentEpisode || 1), 10) || 1;
+  const imdbId = item.imdbId || item.imdb_id || '';
+
+  state.currentScreeningItem = {
+    ...item,
+    id: rawId,
+    tmdbId: rawId,
+    mediaType,
+    title,
+    poster,
+    imdbId
+  };
+  state.currentScreeningSeason = season;
+  state.currentScreeningEpisode = episode;
+  state.currentScreeningMode = 'embed';
+
+  const modal = elements.screeningRoomModal || document.getElementById('screeningRoomModal');
+  const modalTitle = elements.screeningModalTitle || document.getElementById('screeningModalTitle');
+  const statusBadge = elements.screeningStatusBadge || document.getElementById('screeningStatusBadge');
+  const sourceSelect = elements.screeningSourceSelect || document.getElementById('screeningSourceSelect');
+  const episodeBar = elements.screeningEpisodeBar || document.getElementById('screeningEpisodeBar');
+  const seasonSelect = elements.screeningSeasonSelect || document.getElementById('screeningSeasonSelect');
+  const episodeSelect = elements.screeningEpisodeSelect || document.getElementById('screeningEpisodeSelect');
+  const modeToggleBtn = elements.btnToggleScreeningMode || document.getElementById('btnToggleScreeningMode');
+
+  if (!modal) return;
+
+  // Restore preferred mirror provider
+  let preferredSource = 'vidsrcme';
+  try {
+    const saved = localStorage.getItem('moodflix_embed_provider');
+    if (saved && STREAM_MIRROR_SOURCES.some(s => s.name === saved)) {
+      preferredSource = saved;
+    }
+  } catch (e) {}
+  state.currentScreeningSource = preferredSource;
+
+  if (sourceSelect) {
+    sourceSelect.value = preferredSource;
+  }
+
+  // Update header title
+  const seasonEpTag = (mediaType !== 'movie') ? ` [S${String(season).padStart(2, '0')}·E${String(episode).padStart(2, '0')}]` : '';
+  if (modalTitle) {
+    modalTitle.textContent = `// SCREENING ROOM: ${title.toUpperCase()}${seasonEpTag}`;
+  }
+  if (statusBadge) {
+    statusBadge.textContent = 'HD MIRROR ONLINE';
+  }
+  if (modeToggleBtn) {
+    modeToggleBtn.classList.add('hidden');
+  }
+
+  // Setup Season & Episode selectors for series
+  if (mediaType !== 'movie' && episodeBar) {
+    episodeBar.classList.remove('hidden');
+
+    populateScreeningSeasonEpisodeSelectors(season, episode);
+
+    // Asynchronously enrich seasons & episodes if series metadata is not yet populated
+    const rawSeasons = Array.isArray(item.seasons) ? item.seasons : [];
+    const validSeasons = rawSeasons.filter(s => (s.season_number ?? s.seasonNumber ?? s.season) > 0);
+    if (validSeasons.length <= 1) {
+      fetchSeriesSeasonsAndEnrich(rawId, mediaType, title, item.year || options.year)
+        .then(enrichedSeasons => {
+          if (enrichedSeasons && enrichedSeasons.length > 0) {
+            populateScreeningSeasonEpisodeSelectors(state.currentScreeningSeason, state.currentScreeningEpisode);
+          }
+        })
+        .catch(err => {
+          console.warn('[Screening Room] Series enrichment error:', err.message);
+        });
+    }
+  } else if (episodeBar) {
+    episodeBar.classList.add('hidden');
+  }
+
+  // External Verification Links
+  const googleLink = elements.screeningGoogleLink || document.getElementById('screeningGoogleLink');
+  if (googleLink) {
+    googleLink.href = `https://www.google.com/search?q=watch+${encodeURIComponent(title)}+stream`;
+  }
+  const justWatchLink = elements.screeningJustWatchLink || document.getElementById('screeningJustWatchLink');
+  if (justWatchLink) {
+    justWatchLink.href = `https://www.justwatch.com/us/search?q=${encodeURIComponent(title)}`;
+  }
+
+  // Display modal
+  modal.classList.remove('hidden');
+
+  // Load stream
+  await loadScreeningStream();
+
+  // Save initial visit progress
+  saveWatchProgress({
+    mediaId: String(rawId),
+    mediaType,
+    title,
+    posterPath: poster,
+    season: mediaType === 'movie' ? undefined : season,
+    episode: mediaType === 'movie' ? undefined : episode,
+    progressSeconds: options.resumeSeconds || 15,
+    durationSeconds: 100,
+    completed: false
+  });
+}
+
+async function loadScreeningStream() {
+  const item = state.currentScreeningItem;
+  if (!item) return;
+
+  // Gate check
+  if (!state.user) {
+    closeScreeningRoom();
+    openStreamAuthModal(item);
+    return;
+  }
+
+  const loader = elements.screeningLoader || document.getElementById('screeningLoader');
+  const iframe = elements.screeningIframe || document.getElementById('screeningIframe');
+  const video = elements.screeningVideo || document.getElementById('screeningVideo');
+  const modeToggleBtn = elements.btnToggleScreeningMode || document.getElementById('btnToggleScreeningMode');
+
+  if (loader) loader.classList.remove('hidden');
+
+  const mediaType = item.mediaType || 'movie';
+  const id = item.id || item.tmdbId;
+  const season = state.currentScreeningSeason || 1;
+  const episode = state.currentScreeningEpisode || 1;
+  const imdbId = item.imdbId || '';
+
+  try {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(`/api/stream?type=${mediaType}&id=${id}&season=${season}&episode=${episode}&imdbId=${imdbId}`, {
+      headers: authHeaders
+    });
+    if (res.status === 401) {
+      closeScreeningRoom();
+      openStreamAuthModal(item, { season, episode });
+      showToast('Google sign-in required to stream', 'warning');
+      return;
+    }
+    if (res.ok) {
+      const data = await res.json();
+      state.screeningStreamData = data;
+
+      // Check if native direct HLS sources exist
+      if (data.mode === 'direct' && Array.isArray(data.sources) && data.sources.length > 0) {
+        if (modeToggleBtn) modeToggleBtn.classList.remove('hidden');
+      } else if (modeToggleBtn) {
+        modeToggleBtn.classList.add('hidden');
+      }
+    } else if (modeToggleBtn) {
+      modeToggleBtn.classList.add('hidden');
+    }
+  } catch (err) {
+    console.warn('Live stream resolution lookup note:', err.message);
+    if (modeToggleBtn) modeToggleBtn.classList.add('hidden');
+  }
+
+  // Render active playback view
+  if (state.currentScreeningMode === 'direct' && state.screeningStreamData?.sources?.length > 0) {
+    renderNativeHlsPlayback();
+  } else {
+    renderEmbedMirrorPlayback();
+  }
+}
+
+function renderEmbedMirrorPlayback() {
+  const item = state.currentScreeningItem;
+  const iframe = elements.screeningIframe || document.getElementById('screeningIframe');
+  const video = elements.screeningVideo || document.getElementById('screeningVideo');
+  const statusBadge = elements.screeningStatusBadge || document.getElementById('screeningStatusBadge');
+  const modeLabel = elements.screeningModeToggleLabel || document.getElementById('screeningModeToggleLabel');
+  const loader = elements.screeningLoader || document.getElementById('screeningLoader');
+
+  if (!item || !iframe) return;
+
+  // Stop video element if active
+  if (video) {
+    video.pause();
+    video.src = '';
+    video.classList.add('hidden');
+  }
+  if (state.hlsPlayerInstance) {
+    state.hlsPlayerInstance.destroy();
+    state.hlsPlayerInstance = null;
+  }
+
+  const currentProvider = STREAM_MIRROR_SOURCES.find(s => s.name === state.currentScreeningSource) || STREAM_MIRROR_SOURCES[0];
+  const targetUrl = generateStreamEmbedUrl({
+    base: currentProvider.url,
+    type: item.mediaType,
+    id: item.id || item.tmdbId,
+    season: state.currentScreeningSeason,
+    episode: state.currentScreeningEpisode,
+    providerName: currentProvider.name,
+    imdbId: item.imdbId
+  });
+
+  iframe.classList.remove('hidden');
+
+  let loaded = false;
+  const hideLoader = () => {
+    if (loaded) return;
+    loaded = true;
+    if (loader) loader.classList.add('hidden');
+  };
+
+  iframe.onload = hideLoader;
+  // Safety timeout so loader never stays stuck even if cross-origin iframe suppresses onload
+  setTimeout(hideLoader, 1800);
+
+  iframe.src = targetUrl;
+
+  const popOutBtn = document.getElementById('btnScreeningPopOut');
+  if (popOutBtn) {
+    popOutBtn.href = targetUrl;
+    popOutBtn.classList.remove('hidden');
+  }
+
+  if (statusBadge) statusBadge.textContent = 'HD MIRROR ONLINE';
+  if (modeLabel) modeLabel.textContent = 'SWITCH TO HLS';
+}
+
+function renderNativeHlsPlayback() {
+  const item = state.currentScreeningItem;
+  const iframe = elements.screeningIframe || document.getElementById('screeningIframe');
+  const video = elements.screeningVideo || document.getElementById('screeningVideo');
+  const statusBadge = elements.screeningStatusBadge || document.getElementById('screeningStatusBadge');
+  const modeLabel = elements.screeningModeToggleLabel || document.getElementById('screeningModeToggleLabel');
+  const loader = elements.screeningLoader || document.getElementById('screeningLoader');
+  const streamData = state.screeningStreamData;
+
+  if (loader) loader.classList.add('hidden');
+
+  if (!item || !video || !streamData || !streamData.sources || streamData.sources.length === 0) {
+    renderEmbedMirrorPlayback();
+    return;
+  }
+
+  // Hide embed iframe
+  if (iframe) {
+    iframe.src = '';
+    iframe.classList.add('hidden');
+  }
+
+  video.classList.remove('hidden');
+  const activeSource = streamData.sources[0];
+  const proxiedUrl = activeSource.url.startsWith('http')
+    ? `/api/proxy/hls?url=${encodeURIComponent(activeSource.url)}`
+    : activeSource.url;
+
+  if (window.Hls && window.Hls.isSupported() && (activeSource.isM3U8 || activeSource.url.includes('.m3u8'))) {
+    if (state.hlsPlayerInstance) {
+      state.hlsPlayerInstance.destroy();
+    }
+    const hls = new window.Hls({
+      maxBufferLength: 60,
+      enableWorker: true
+    });
+    hls.loadSource(proxiedUrl);
+    hls.attachMedia(video);
+    state.hlsPlayerInstance = hls;
+  } else {
+    video.src = proxiedUrl;
+  }
+
+  video.play().catch(() => {});
+
+  if (statusBadge) statusBadge.textContent = 'DIRECT NATIVE HLS';
+  if (modeLabel) modeLabel.textContent = 'SWITCH TO EMBED';
+
+  // Wire progress and AniSkip monitoring
+  wireNativeVideoEvents(video);
+}
+
+function wireNativeVideoEvents(video) {
+  if (!video) return;
+
+  const skipBtn = elements.screeningAniSkipBtn || document.getElementById('screeningAniSkipBtn');
+  const skipLabel = document.getElementById('screeningAniSkipLabel');
+
+  video.ontimeupdate = () => {
+    const ct = video.currentTime;
+    const dur = video.duration || 0;
+
+    // Check AniSkip Interval
+    const skipData = state.screeningStreamData?.skipTime;
+    let foundSkip = null;
+    if (skipData) {
+      if (skipData.op && ct >= skipData.op.start && ct < skipData.op.end - 1) {
+        foundSkip = skipData.op;
+      } else if (skipData.ed && ct >= skipData.ed.start && ct < skipData.ed.end - 1) {
+        foundSkip = skipData.ed;
+      } else if (skipData.recap && ct >= skipData.recap.start && ct < skipData.recap.end - 1) {
+        foundSkip = skipData.recap;
+      }
+    }
+
+    state.screeningAniSkipActive = foundSkip;
+    if (foundSkip && skipBtn) {
+      skipBtn.classList.remove('hidden');
+      if (skipLabel) skipLabel.textContent = `SKIP ${foundSkip.type.toUpperCase()} [S]`;
+    } else if (skipBtn) {
+      skipBtn.classList.add('hidden');
+    }
+
+    // Auto-save watch progress every 5 seconds
+    const curSec = Math.floor(ct);
+    if (curSec > 5 && dur > 0 && curSec % 5 === 0) {
+      const item = state.currentScreeningItem;
+      if (item) {
+        saveWatchProgress({
+          mediaId: String(item.id || item.tmdbId),
+          mediaType: item.mediaType,
+          title: item.title,
+          posterPath: item.poster,
+          season: item.mediaType === 'movie' ? undefined : state.currentScreeningSeason,
+          episode: item.mediaType === 'movie' ? undefined : state.currentScreeningEpisode,
+          progressSeconds: curSec,
+          durationSeconds: Math.floor(dur),
+          completed: curSec >= dur - 30
+        });
+      }
+    }
+  };
+
+  video.onended = () => {
+    screeningNextEpisode();
+  };
+}
+
+function changeScreeningSource(sourceName) {
+  state.currentScreeningSource = sourceName;
+  try {
+    localStorage.setItem('moodflix_embed_provider', sourceName);
+  } catch (e) {}
+
+  state.currentScreeningMode = 'embed';
+  const loader = elements.screeningLoader || document.getElementById('screeningLoader');
+  if (loader) loader.classList.remove('hidden');
+  renderEmbedMirrorPlayback();
+  triggerScreeningFlash(`MIRROR: ${sourceName.toUpperCase()}`);
+}
+
+function changeScreeningEpisode(season, episode) {
+  const targetSeason = parseInt(season, 10) || 1;
+  const targetEpisode = parseInt(episode, 10) || 1;
+
+  state.currentScreeningSeason = targetSeason;
+  state.currentScreeningEpisode = targetEpisode;
+
+  const seasonSelect = elements.screeningSeasonSelect || document.getElementById('screeningSeasonSelect');
+  if (seasonSelect && parseInt(seasonSelect.value, 10) !== targetSeason) {
+    seasonSelect.value = targetSeason;
+    populateScreeningEpisodeOptions(targetSeason, targetEpisode);
+  }
+
+  const episodeSelect = elements.screeningEpisodeSelect || document.getElementById('screeningEpisodeSelect');
+  if (episodeSelect) {
+    if (episodeSelect.children.length === 0 || !episodeSelect.querySelector(`option[value="${targetEpisode}"]`)) {
+      populateScreeningEpisodeOptions(targetSeason, targetEpisode);
+    }
+    episodeSelect.value = targetEpisode;
+  }
+
+  const modalTitle = elements.screeningModalTitle || document.getElementById('screeningModalTitle');
+  const item = state.currentScreeningItem;
+  if (item && modalTitle) {
+    const seasonEpTag = ` [S${String(targetSeason).padStart(2, '0')}·E${String(targetEpisode).padStart(2, '0')}]`;
+    modalTitle.textContent = `// SCREENING ROOM: ${item.title.toUpperCase()}${seasonEpTag}`;
+  }
+
+  // Update Pop-Out URL immediately
+  if (item) {
+    const currentProvider = STREAM_MIRROR_SOURCES.find(s => s.name === state.currentScreeningSource) || STREAM_MIRROR_SOURCES[0];
+    const targetUrl = generateStreamEmbedUrl({
+      base: currentProvider.url,
+      type: item.mediaType,
+      id: item.id || item.tmdbId,
+      season: targetSeason,
+      episode: targetEpisode,
+      providerName: currentProvider.name,
+      imdbId: item.imdbId
+    });
+    const popOutBtn = document.getElementById('btnScreeningPopOut');
+    if (popOutBtn) {
+      popOutBtn.href = targetUrl;
+    }
+
+    // Save Watch Progress for new episode
+    saveWatchProgress({
+      mediaId: String(item.id || item.tmdbId),
+      mediaType: item.mediaType,
+      title: item.title,
+      posterPath: item.poster || item.posterPath,
+      season: targetSeason,
+      episode: targetEpisode,
+      progressSeconds: 15,
+      durationSeconds: 100,
+      completed: false
+    });
+  }
+
+  triggerScreeningFlash(`EPISODE: S${targetSeason}·E${targetEpisode}`);
+  loadScreeningStream();
+}
+
+function screeningNextEpisode() {
+  const item = state.currentScreeningItem;
+  if (!item || item.mediaType === 'movie') return;
+
+  const currentS = state.currentScreeningSeason || 1;
+  const currentE = state.currentScreeningEpisode || 1;
+
+  const rawSeasons = Array.isArray(item.seasons) ? item.seasons : [];
+  const regularSeasons = rawSeasons.filter(s => (s.season_number ?? s.seasonNumber ?? s.season) > 0);
+  const activeSeasonObj = regularSeasons.find(s => (s.season_number ?? s.seasonNumber ?? s.season) === currentS);
+  const maxEp = activeSeasonObj?.episode_count || 24;
+  const totalSeasonsCount = regularSeasons.length || item.numberOfSeasons || item.totalSeasons || 1;
+
+  if (currentE < maxEp) {
+    changeScreeningEpisode(currentS, currentE + 1);
+  } else if (currentS < totalSeasonsCount) {
+    showToast(`Advancing to Season ${currentS + 1}`, 'info');
+    changeScreeningEpisode(currentS + 1, 1);
+  } else {
+    showToast('Final episode reached', 'info');
+  }
+}
+
+function toggleScreeningMode() {
+  state.currentScreeningMode = (state.currentScreeningMode === 'direct') ? 'embed' : 'direct';
+  if (state.currentScreeningMode === 'direct') {
+    renderNativeHlsPlayback();
+    triggerScreeningFlash('MODE: NATIVE HLS');
+  } else {
+    renderEmbedMirrorPlayback();
+    triggerScreeningFlash('MODE: MIRROR EMBED');
+  }
+}
+
+function triggerAniSkip() {
+  const skip = state.screeningAniSkipActive;
+  const video = elements.screeningVideo || document.getElementById('screeningVideo');
+  if (skip && video) {
+    video.currentTime = skip.end;
+    triggerScreeningFlash(`SKIPPED: ${skip.type.toUpperCase()}`);
+    const skipBtn = elements.screeningAniSkipBtn || document.getElementById('screeningAniSkipBtn');
+    if (skipBtn) skipBtn.classList.add('hidden');
+    state.screeningAniSkipActive = null;
+  }
+}
+
+let screeningFlashTimer = null;
+function triggerScreeningFlash(msg) {
+  const flash = elements.screeningFlashMsg || document.getElementById('screeningFlashMsg');
+  if (!flash) return;
+  if (screeningFlashTimer) clearTimeout(screeningFlashTimer);
+  flash.textContent = msg;
+  flash.classList.remove('hidden');
+  screeningFlashTimer = setTimeout(() => {
+    flash.classList.add('hidden');
+  }, 1500);
+}
+
+function closeScreeningRoom() {
+  const modal = elements.screeningRoomModal || document.getElementById('screeningRoomModal');
+  const iframe = elements.screeningIframe || document.getElementById('screeningIframe');
+  const video = elements.screeningVideo || document.getElementById('screeningVideo');
+  const loader = elements.screeningLoader || document.getElementById('screeningLoader');
+  const skipBtn = elements.screeningAniSkipBtn || document.getElementById('screeningAniSkipBtn');
+
+  if (iframe) {
+    iframe.src = '';
+    iframe.onload = null;
+  }
+  if (video) {
+    video.pause();
+    video.src = '';
+  }
+  if (state.hlsPlayerInstance) {
+    state.hlsPlayerInstance.destroy();
+    state.hlsPlayerInstance = null;
+  }
+
+  if (loader) loader.classList.add('hidden');
+  if (skipBtn) skipBtn.classList.add('hidden');
+  const popOutBtn = document.getElementById('btnScreeningPopOut');
+  if (popOutBtn) popOutBtn.href = '#';
+
+  state.currentScreeningItem = null;
+  state.screeningStreamData = null;
+  state.screeningAniSkipActive = null;
+
+  if (modal) modal.classList.add('hidden');
+
+  // Refresh Continue Watching Shelf
+  loadContinueWatching();
+}
+
+function handleScreeningKeydown(e) {
+  const modal = elements.screeningRoomModal || document.getElementById('screeningRoomModal');
+  if (!modal || modal.classList.contains('hidden')) return;
+
+  const target = e.target;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+
+  const video = elements.screeningVideo || document.getElementById('screeningVideo');
+  const stage = document.getElementById('screeningViewportStage');
+
+  if (e.key === ' ' || e.key === 'k' || e.key === 'K') {
+    e.preventDefault();
+    if (video && !video.classList.contains('hidden')) {
+      if (video.paused) {
+        video.play();
+        triggerScreeningFlash('PLAY');
+      } else {
+        video.pause();
+        triggerScreeningFlash('PAUSE');
+      }
+    }
+  } else if (e.key === 'ArrowLeft' || e.key === 'j' || e.key === 'J') {
+    e.preventDefault();
+    if (video && !video.classList.contains('hidden')) {
+      video.currentTime = Math.max(0, video.currentTime - 10);
+      triggerScreeningFlash('-10s');
+    }
+  } else if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'L') {
+    e.preventDefault();
+    if (video && !video.classList.contains('hidden')) {
+      video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
+      triggerScreeningFlash('+10s');
+    }
+  } else if (e.key === 'm' || e.key === 'M') {
+    e.preventDefault();
+    if (video && !video.classList.contains('hidden')) {
+      video.muted = !video.muted;
+      triggerScreeningFlash(video.muted ? 'MUTED' : 'UNMUTED');
+    }
+  } else if (e.key === 'f' || e.key === 'F') {
+    e.preventDefault();
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+      triggerScreeningFlash('EXIT FULLSCREEN');
+    } else if (stage) {
+      if (stage.requestFullscreen) {
+        stage.requestFullscreen().catch(() => {});
+      } else if (stage.webkitRequestFullscreen) {
+        stage.webkitRequestFullscreen();
+      }
+      triggerScreeningFlash('FULLSCREEN');
+    }
+  } else if (e.key === 's' || e.key === 'S') {
+    if (state.screeningAniSkipActive) {
+      e.preventDefault();
+      triggerAniSkip();
+    }
+  } else if (e.key === 'Escape') {
+    closeScreeningRoom();
+  }
+}
+
+// Watch Progress Store & Continue Watching Shelf
+const PROGRESS_STORAGE_KEY = 'moodflix_progress';
+
+async function saveWatchProgress(record) {
+  if (!record || !record.mediaId) return;
+
+  const item = {
+    ...record,
+    updatedAt: new Date().toISOString()
+  };
+
+  try {
+    const raw = localStorage.getItem(PROGRESS_STORAGE_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    const idx = list.findIndex(p =>
+      String(p.mediaId) === String(item.mediaId) &&
+      (p.season ?? 1) === (item.season ?? 1) &&
+      (p.episode ?? 1) === (item.episode ?? 1)
+    );
+
+    if (idx >= 0) {
+      list[idx] = item;
+    } else {
+      list.unshift(item);
+    }
+    localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(list.slice(0, 50)));
+  } catch (err) {
+    console.warn('LocalStorage progress save note:', err);
+  }
+
+  // Sync to backend / Supabase
+  try {
+    const headers = await getAuthHeaders();
+    headers['Content-Type'] = 'application/json';
+    fetch('/api/progress', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        media_id: item.mediaId,
+        media_type: item.mediaType,
+        title: item.title,
+        poster_path: item.posterPath,
+        season: item.season,
+        episode: item.episode,
+        progress_seconds: item.progressSeconds,
+        duration_seconds: item.durationSeconds,
+        completed: item.completed
+      })
+    }).catch(() => {});
+  } catch (cloudErr) {}
+}
+
+function getWatchProgress(mediaId, season = 1, episode = 1) {
+  try {
+    const raw = localStorage.getItem(PROGRESS_STORAGE_KEY);
+    if (!raw) return null;
+    const list = JSON.parse(raw);
+    return list.find(p =>
+      String(p.mediaId) === String(mediaId) &&
+      (p.season ?? 1) === (season ?? 1) &&
+      (p.episode ?? 1) === (episode ?? 1)
+    ) || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function loadContinueWatching() {
+  const shelf = elements.continueWatchingShelf || document.getElementById('continueWatchingShelf');
+  if (!shelf) return;
+
+  let list = [];
+  try {
+    const raw = localStorage.getItem(PROGRESS_STORAGE_KEY);
+    if (raw) {
+      list = JSON.parse(raw);
+    }
+  } catch (e) {}
+
+  // Filter for active unfinished items
+  const activeItems = (list || []).filter(i => !i.completed && (i.progressSeconds || 0) > 10);
+
+  if (activeItems.length === 0) {
+    shelf.classList.add('hidden');
+    shelf.innerHTML = '';
+    return;
+  }
+
+  // Collapsed by default on desktop and mobile
+  if (typeof state.continueShelfCollapsed !== 'boolean') {
+    state.continueShelfCollapsed = true;
+  }
+  const isCollapsed = state.continueShelfCollapsed;
+
+  if (isCollapsed) {
+    shelf.classList.add('is-collapsed');
+  } else {
+    shelf.classList.remove('is-collapsed');
+  }
+
+  shelf.classList.remove('hidden');
+
+  const toggleText = isCollapsed ? 'EXPAND' : 'COLLAPSE';
+  const toggleIcon = isCollapsed ? 'expand_more' : 'expand_less';
+  const ariaExpanded = isCollapsed ? 'false' : 'true';
+
+  shelf.innerHTML = `
+    <div class="continue-shelf-header" id="continueShelfHeader" role="button" tabindex="0" aria-expanded="${ariaExpanded}" aria-controls="continueShelfGrid" title="${isCollapsed ? 'Expand continue playback' : 'Collapse continue playback'}">
+      <div class="continue-shelf-title">
+        <span class="material-symbols-outlined" style="font-size: 18px; color: var(--retro-accent);">history</span>
+        <span>// CONTINUE PLAYBACK</span>
+      </div>
+      <div class="continue-shelf-actions">
+        <span class="continue-shelf-count">[ ${activeItems.length} ACTIVE REELS ]</span>
+        <button class="continue-shelf-toggle-btn" id="continueShelfToggleBtn" type="button" aria-expanded="${ariaExpanded}" aria-controls="continueShelfGrid" title="${isCollapsed ? 'Expand continue playback' : 'Collapse continue playback'}">
+          <span class="continue-shelf-toggle-text">${toggleText}</span>
+          <span class="continue-shelf-toggle-icon material-symbols-outlined">${toggleIcon}</span>
+        </button>
+      </div>
+    </div>
+    <div class="continue-shelf-grid" id="continueShelfGrid">
+      ${activeItems.slice(0, 6).map(item => {
+        const percent = Math.min(100, Math.floor(((item.progressSeconds || 0) / (item.durationSeconds || 100)) * 100));
+        const safeTitle = escapeHtml(item.title || 'Untitled');
+        const safePoster = escapeHtml(item.posterPath || 'images/hero.webp');
+        const metaTag = item.mediaType === 'movie' ? 'FILM' : `S${String(item.season || 1).padStart(2, '0')}·E${String(item.episode || 1).padStart(2, '0')}`;
+        return `
+          <div class="continue-card" data-media-id="${item.mediaId}" data-season="${item.season || 1}" data-episode="${item.episode || 1}">
+            <div class="continue-card-stage">
+              <img src="${safePoster}" alt="${safeTitle}" class="continue-card-img" onerror="this.src='images/hero.webp'">
+              <div class="continue-card-hover-play">
+                <div class="continue-play-badge">
+                  <span class="material-symbols-outlined" style="font-size: 18px;">play_arrow</span>
+                </div>
+              </div>
+              <div class="continue-progress-track">
+                <div class="continue-progress-fill" style="width: ${percent}%;"></div>
+              </div>
+            </div>
+            <div class="continue-card-info">
+              <span class="continue-card-title">${safeTitle}</span>
+              <div class="continue-card-meta">
+                <span>${metaTag}</span>
+                <span>${percent}%</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+
+  function handleShelfToggle() {
+    state.continueShelfCollapsed = !state.continueShelfCollapsed;
+    const collapsed = state.continueShelfCollapsed;
+    shelf.classList.toggle('is-collapsed', collapsed);
+    const header = shelf.querySelector('#continueShelfHeader');
+    const toggleBtn = shelf.querySelector('#continueShelfToggleBtn');
+    const toggleTextEl = shelf.querySelector('.continue-shelf-toggle-text');
+    const toggleIconEl = shelf.querySelector('.continue-shelf-toggle-icon');
+
+    if (header) {
+      header.setAttribute('aria-expanded', String(!collapsed));
+      header.setAttribute('title', collapsed ? 'Expand continue playback' : 'Collapse continue playback');
+    }
+    if (toggleBtn) {
+      toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+      toggleBtn.setAttribute('title', collapsed ? 'Expand continue playback' : 'Collapse continue playback');
+    }
+    if (toggleTextEl) toggleTextEl.textContent = collapsed ? 'EXPAND' : 'COLLAPSE';
+    if (toggleIconEl) toggleIconEl.textContent = collapsed ? 'expand_more' : 'expand_less';
+  }
+
+  const headerEl = shelf.querySelector('#continueShelfHeader');
+  if (headerEl) {
+    headerEl.addEventListener('click', () => {
+      handleShelfToggle();
+    });
+    headerEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleShelfToggle();
+      }
+    });
+  }
+
+  const toggleBtnEl = shelf.querySelector('#continueShelfToggleBtn');
+  if (toggleBtnEl) {
+    toggleBtnEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handleShelfToggle();
+    });
+  }
+
+  shelf.querySelectorAll('.continue-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const mediaId = card.dataset.mediaId;
+      const s = parseInt(card.dataset.season, 10) || 1;
+      const ep = parseInt(card.dataset.episode, 10) || 1;
+      const found = activeItems.find(i => String(i.mediaId) === String(mediaId) && (i.season || 1) === s && (i.episode || 1) === ep);
+      if (found) {
+        openScreeningRoom({
+          id: found.mediaId,
+          tmdbId: found.mediaId,
+          mediaType: found.mediaType,
+          title: found.title,
+          poster: found.posterPath
+        }, {
+          season: s,
+          episode: ep,
+          resumeSeconds: found.progressSeconds
+        });
+      }
+    });
+  });
+}
+
+// Window Exposures for Testability
+window.openScreeningRoom = openScreeningRoom;
+window.closeScreeningRoom = closeScreeningRoom;
+window.openStreamAuthModal = openStreamAuthModal;
+window.closeStreamAuthModal = closeStreamAuthModal;
+window.generateStreamEmbedUrl = generateStreamEmbedUrl;
+window.loadContinueWatching = loadContinueWatching;
+window.toggleContinueWatchingShelf = function(forceCollapsed) {
+  const shelf = elements.continueWatchingShelf || document.getElementById('continueWatchingShelf');
+  if (!shelf) return;
+  if (typeof forceCollapsed === 'boolean') {
+    state.continueShelfCollapsed = forceCollapsed;
+  } else {
+    state.continueShelfCollapsed = !state.continueShelfCollapsed;
+  }
+  const collapsed = state.continueShelfCollapsed;
+  shelf.classList.toggle('is-collapsed', collapsed);
+  const header = shelf.querySelector('#continueShelfHeader');
+  const toggleBtn = shelf.querySelector('#continueShelfToggleBtn');
+  const toggleTextEl = shelf.querySelector('.continue-shelf-toggle-text');
+  const toggleIconEl = shelf.querySelector('.continue-shelf-toggle-icon');
+
+  if (header) {
+    header.setAttribute('aria-expanded', String(!collapsed));
+    header.setAttribute('title', collapsed ? 'Expand continue playback' : 'Collapse continue playback');
+  }
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+    toggleBtn.setAttribute('title', collapsed ? 'Expand continue playback' : 'Collapse continue playback');
+  }
+  if (toggleTextEl) toggleTextEl.textContent = collapsed ? 'EXPAND' : 'COLLAPSE';
+  if (toggleIconEl) toggleIconEl.textContent = collapsed ? 'expand_more' : 'expand_less';
+  return collapsed;
+};
+window.STREAM_MIRROR_SOURCES = STREAM_MIRROR_SOURCES;
+window.saveWatchProgress = saveWatchProgress;
+window.getWatchProgress = getWatchProgress;
+window.loadContinueWatching = loadContinueWatching;
 
 // ==========================================================================
 // Watchlist Studio: Rapid Title Entry
@@ -4625,6 +5771,17 @@ function setupEventListeners() {
   document.getElementById('btnSaveAssignLists')?.addEventListener('click', saveAssignLists);
   document.getElementById('btnCloseManageListModal')?.addEventListener('click', closeManageListTitlesModal);
 
+  // --- Stream Access Restriction (Google Login Gate) Modal ---
+  document.getElementById('btnStreamAuthGoogleLogin')?.addEventListener('click', () => {
+    closeStreamAuthModal();
+    handleGoogleLogin();
+  });
+  document.getElementById('btnCloseStreamAuthModal')?.addEventListener('click', closeStreamAuthModal);
+  document.getElementById('btnDismissStreamAuth')?.addEventListener('click', closeStreamAuthModal);
+  document.getElementById('streamAuthModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'streamAuthModal') closeStreamAuthModal();
+  });
+
   // --- Regional Streaming Availability Modal ---
   document.getElementById('btnCloseStreamingModal')?.addEventListener('click', closeStreamingModal);
   document.getElementById('btnCloseLightbox')?.addEventListener('click', closeFrameLightbox);
@@ -4636,6 +5793,35 @@ function setupEventListeners() {
   document.getElementById('streamingRegionSelect')?.addEventListener('change', (e) => {
     loadStreamingProviders(e.target.value);
   });
+
+  // --- Archival Screening Room & Live Stream Player ---
+  document.getElementById('btnCloseScreeningRoom')?.addEventListener('click', closeScreeningRoom);
+  document.getElementById('screeningRoomModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'screeningRoomModal') closeScreeningRoom();
+  });
+  document.getElementById('screeningSourceSelect')?.addEventListener('change', (e) => {
+    changeScreeningSource(e.target.value);
+  });
+  document.getElementById('screeningSeasonSelect')?.addEventListener('change', (e) => {
+    const s = parseInt(e.target.value, 10) || 1;
+    const ep = parseInt(document.getElementById('screeningEpisodeSelect')?.value, 10) || 1;
+    changeScreeningEpisode(s, ep);
+  });
+  document.getElementById('screeningEpisodeSelect')?.addEventListener('change', (e) => {
+    const s = parseInt(document.getElementById('screeningSeasonSelect')?.value, 10) || 1;
+    const ep = parseInt(e.target.value, 10) || 1;
+    changeScreeningEpisode(s, ep);
+  });
+  document.getElementById('btnScreeningNextEp')?.addEventListener('click', () => {
+    screeningNextEpisode();
+  });
+  document.getElementById('btnToggleScreeningMode')?.addEventListener('click', () => {
+    toggleScreeningMode();
+  });
+  document.getElementById('screeningAniSkipBtn')?.addEventListener('click', () => {
+    triggerAniSkip();
+  });
+  window.addEventListener('keydown', handleScreeningKeydown);
 
   // --- Data Import & Export Modal ---
   document.getElementById('btnImportExport')?.addEventListener('click', openImportExportModal);
@@ -5776,6 +6962,7 @@ async function loadMovies() {
       state.movies = data.movies || data.media || [];
       renderMediaGrid(elements.movieGrid, state.movies, type === 'all' ? 'movie' : type);
       updateTypoBanner('movieTypoBanner', search, data.correctedQuery);
+      loadContinueWatching();
       if (state.movies.length === 0 && elements.movieGrid) {
         elements.movieGrid.innerHTML = `
           <div class="empty-state-box" style="grid-column: 1 / -1; text-align: center; padding: 48px 16px; font-family: var(--font-mono); color: var(--retro-fg);">
@@ -6123,6 +7310,9 @@ function openDetailView(m, type, isDiagnostic = false) {
   elements.detailMeta.innerText = `★ ${m.rating} / 10  •  ${m.year}  •  ${effectiveType.toUpperCase()}`;
   elements.detailSynopsis.innerText = m.synopsis || 'No synopsis available.';
 
+  if (elements.detailStreamBtn) {
+    elements.detailStreamBtn.onclick = () => openScreeningRoom(m, { type: effectiveType });
+  }
   elements.detailTorrentsBtn.onclick = () => openTorrentModal(m, effectiveType, false);
   const detailTrailerId = m.tmdbId || m.tmdb_id || (/^\d+$/.test(String(m.id || '').trim()) ? m.id : null);
   elements.detailTrailerBtn.onclick = () => playTrailer(detailTrailerId, effectiveType, m.title, m.year);

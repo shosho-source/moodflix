@@ -27,7 +27,8 @@ export class Storage {
     downloads: [],
     watchlist: [],
     customLists: [],
-    watchDiary: []
+    watchDiary: [],
+    watchProgress: []
   };
 
   static ensureDataFile() {
@@ -60,7 +61,8 @@ export class Storage {
             downloads: Array.isArray(parsed.downloads) ? parsed.downloads : [],
             watchlist: Array.isArray(parsed.watchlist) ? parsed.watchlist : [],
             customLists: Array.isArray(parsed.customLists) ? parsed.customLists : [],
-            watchDiary: Array.isArray(parsed.watchDiary) ? parsed.watchDiary : []
+            watchDiary: Array.isArray(parsed.watchDiary) ? parsed.watchDiary : [],
+            watchProgress: Array.isArray(parsed.watchProgress) ? parsed.watchProgress : []
           };
           Storage._cache = state;
           Storage._memoryState = state;
@@ -342,6 +344,95 @@ export class Storage {
     });
     Storage.write(data);
     return data.watchDiary;
+  }
+
+  static getWatchProgress(userId, mediaId, season = 1, episode = 1) {
+    const data = Storage.read();
+    if (!Array.isArray(data.watchProgress)) return null;
+    const targetUserId = userId || 'guest';
+    const s = parseInt(season, 10) || 1;
+    const e = parseInt(episode, 10) || 1;
+    return data.watchProgress.find(p =>
+      (p.user_id || 'guest') === targetUserId &&
+      String(p.media_id) === String(mediaId) &&
+      (parseInt(p.season, 10) || 1) === s &&
+      (parseInt(p.episode, 10) || 1) === e
+    ) || null;
+  }
+
+  static saveWatchProgress(userId, progress) {
+    const data = Storage.read();
+    if (!Array.isArray(data.watchProgress)) data.watchProgress = [];
+    const targetUserId = userId || progress.user_id || 'guest';
+    const mediaId = String(progress.media_id || progress.mediaId);
+    const mediaType = progress.media_type || progress.mediaType || 'movie';
+    const season = parseInt(progress.season, 10) || 1;
+    const episode = parseInt(progress.episode, 10) || 1;
+    const progressSeconds = Math.max(0, parseFloat(progress.progress_seconds || progress.progressSeconds || 0));
+    const durationSeconds = Math.max(0, parseFloat(progress.duration_seconds || progress.durationSeconds || 0));
+    const completed = Boolean(progress.completed || (durationSeconds > 0 && progressSeconds >= durationSeconds - 30));
+
+    const record = {
+      id: progress.id || crypto.randomUUID(),
+      user_id: targetUserId,
+      media_id: mediaId,
+      media_type: mediaType,
+      title: progress.title || 'Untitled',
+      poster_path: progress.poster_path || progress.posterPath || progress.poster || null,
+      season,
+      episode,
+      progress_seconds: progressSeconds,
+      duration_seconds: durationSeconds,
+      completed,
+      updated_at: new Date().toISOString()
+    };
+
+    const existingIdx = data.watchProgress.findIndex(p =>
+      (p.user_id || 'guest') === targetUserId &&
+      String(p.media_id) === mediaId &&
+      (parseInt(p.season, 10) || 1) === season &&
+      (parseInt(p.episode, 10) || 1) === episode
+    );
+
+    if (existingIdx !== -1) {
+      data.watchProgress[existingIdx] = { ...data.watchProgress[existingIdx], ...record };
+    } else {
+      data.watchProgress.unshift(record);
+    }
+
+    // Keep recent 100 entries max
+    if (data.watchProgress.length > 100) {
+      data.watchProgress = data.watchProgress.slice(0, 100);
+    }
+
+    Storage.write(data);
+    return record;
+  }
+
+  static getRecentWatchProgress(userId, limit = 20) {
+    const data = Storage.read();
+    if (!Array.isArray(data.watchProgress)) return [];
+    const targetUserId = userId || 'guest';
+    return data.watchProgress
+      .filter(p => (p.user_id || 'guest') === targetUserId)
+      .sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))
+      .slice(0, limit);
+  }
+
+  static deleteWatchProgress(userId, mediaId, season = 1, episode = 1) {
+    const data = Storage.read();
+    if (!Array.isArray(data.watchProgress)) return [];
+    const targetUserId = userId || 'guest';
+    const s = parseInt(season, 10) || 1;
+    const e = parseInt(episode, 10) || 1;
+    data.watchProgress = data.watchProgress.filter(p => !(
+      (p.user_id || 'guest') === targetUserId &&
+      String(p.media_id) === String(mediaId) &&
+      (parseInt(p.season, 10) || 1) === s &&
+      (parseInt(p.episode, 10) || 1) === e
+    ));
+    Storage.write(data);
+    return data.watchProgress;
   }
 
 }
