@@ -331,6 +331,39 @@ describe('Archival Screening Room & Live Video Streaming Suite', () => {
     assert.ok(styleCss.includes('.btn-stream-primary.stream-btn-locked'), 'CSS defines .btn-stream-primary.stream-btn-locked');
   });
 
+  it('handles Google login on stream auth modal with direct OAuth fallback and feedback', () => {
+    // 1. Google login handles stream auth button text
+    assert.ok(appJs.includes("streamBtnText = document.getElementById('stream-login-btn-text')"), 'app.js references stream-login-btn-text');
+    assert.ok(appJs.includes("btnStreamAuthGoogleLogin"), 'app.js binds btnStreamAuthGoogleLogin');
+    assert.ok(appJs.includes('auth/v1/authorize?provider=google'), 'app.js includes direct Supabase OAuth authorize fallback');
+
+    // 2. stream auth button click does not dismiss modal prematurely before redirect
+    assert.ok(
+      appJs.includes("document.getElementById('btnStreamAuthGoogleLogin')?.addEventListener('click', (e) => {\n    e.preventDefault();\n    handleGoogleLogin();\n  });") ||
+      appJs.includes("document.getElementById('btnStreamAuthGoogleLogin')?.addEventListener('click'") && appJs.includes('handleGoogleLogin()'),
+      'btnStreamAuthGoogleLogin triggers handleGoogleLogin cleanly'
+    );
+  });
+
+  it('populates multiple seasons and dynamic episodes for TV series in screening room', () => {
+    // 1. JS defines season and episode populating and enrichment functions
+    assert.ok(appJs.includes('function populateScreeningSeasonEpisodeSelectors('), 'defines populateScreeningSeasonEpisodeSelectors');
+    assert.ok(appJs.includes('function populateScreeningEpisodeOptions('), 'defines populateScreeningEpisodeOptions');
+    assert.ok(appJs.includes('function fetchSeriesSeasonsAndEnrich('), 'defines fetchSeriesSeasonsAndEnrich');
+
+    // 2. Window exports helpers for testability
+    assert.ok(appJs.includes('window.populateScreeningSeasonEpisodeSelectors ='), 'exports populateScreeningSeasonEpisodeSelectors');
+    assert.ok(appJs.includes('window.populateScreeningEpisodeOptions ='), 'exports populateScreeningEpisodeOptions');
+    assert.ok(appJs.includes('window.fetchSeriesSeasonsAndEnrich ='), 'exports fetchSeriesSeasonsAndEnrich');
+
+    // 3. Changing season repopulates episodes and resets episode to 1
+    assert.ok(
+      appJs.includes("populateScreeningEpisodeOptions(s, 1)") ||
+      appJs.includes("populateScreeningEpisodeOptions(newSeason, 1)"),
+      'repopulates episode options when season is changed'
+    );
+  });
+
   it('makes the continue playback section collapsed by default on mobile and desktop', () => {
     // 1. Initial DOM element includes is-collapsed class
     assert.ok(

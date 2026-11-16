@@ -447,27 +447,65 @@ async function showDashboardView(user) {
 }
 
 async function handleGoogleLogin() {
-  const btnText = document.getElementById('login-btn-text');
-  if (btnText) btnText.textContent = 'LOGGING IN...';
+  const profileBtnText = document.getElementById('login-btn-text');
+  const streamBtnText = document.getElementById('stream-login-btn-text');
+  const streamLoginBtn = document.getElementById('btnStreamAuthGoogleLogin');
+  const profileLoginBtn = document.getElementById('google-login-btn');
+
+  if (profileBtnText) profileBtnText.textContent = 'CONNECTING TO GOOGLE...';
+  if (streamBtnText) streamBtnText.textContent = 'CONNECTING TO GOOGLE...';
+  if (streamLoginBtn) streamLoginBtn.disabled = true;
+  if (profileLoginBtn) profileLoginBtn.disabled = true;
 
   try {
     if (!supabaseClient) {
-      showToast('Authentication service is currently unavailable. Please try again later.', 'error');
-      return;
+      await initSupabaseClient();
     }
-    const { error } = await supabaseClient.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.href }
-    });
-    if (error) {
-      showToast('Google OAuth: ' + error.message, 'error');
+
+    const redirectUrl = window.location.origin + window.location.pathname;
+
+    if (supabaseClient) {
+      const { data, error } = await supabaseClient.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: redirectUrl }
+      });
+
+      if (error) {
+        console.warn('[Google OAuth warning]:', error.message);
+        // Fall back to direct Supabase authorize URL
+        const res = await fetch('/api/config');
+        const config = await res.json();
+        if (config.supabaseUrl) {
+          window.location.href = `${config.supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectUrl)}`;
+          return;
+        }
+        showToast('Google OAuth: ' + error.message, 'error');
+      } else if (data?.url) {
+        window.location.assign(data.url);
+        return;
+      }
+    } else {
+      // Direct OAuth redirect if client was unable to load UMD bundle
+      const res = await fetch('/api/config');
+      const config = await res.json();
+      if (config.supabaseUrl) {
+        window.location.href = `${config.supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectUrl)}`;
+        return;
+      }
+      showToast('Authentication service is currently unavailable. Please try again later.', 'error');
     }
   } catch (err) {
+    console.error('Google login error:', err);
     showToast('Login encountered an issue', 'error');
   } finally {
-    if (btnText) {
-      btnText.textContent = 'CONTINUE WITH GOOGLE';
+    if (profileBtnText) {
+      profileBtnText.textContent = 'CONTINUE WITH GOOGLE';
     }
+    if (streamBtnText) {
+      streamBtnText.textContent = 'CONTINUE WITH GOOGLE';
+    }
+    if (streamLoginBtn) streamLoginBtn.disabled = false;
+    if (profileLoginBtn) profileLoginBtn.disabled = false;
   }
 }
 
@@ -4005,6 +4043,10 @@ window.STREAM_MIRROR_SOURCES = STREAM_MIRROR_SOURCES;
 window.saveWatchProgress = saveWatchProgress;
 window.getWatchProgress = getWatchProgress;
 window.loadContinueWatching = loadContinueWatching;
+window.populateScreeningSeasonEpisodeSelectors = populateScreeningSeasonEpisodeSelectors;
+window.populateScreeningEpisodeOptions = populateScreeningEpisodeOptions;
+window.fetchSeriesSeasonsAndEnrich = fetchSeriesSeasonsAndEnrich;
+window.handleGoogleLogin = handleGoogleLogin;
 
 // ==========================================================================
 // Watchlist Studio: Rapid Title Entry
@@ -4851,25 +4893,19 @@ function renderSharedMovieView(data = {}) {
     };
   }
 
-  // Wire Share Card Generator Button
-  const cardBtn = document.getElementById('shareGenerateCardBtn');
-  if (cardBtn) {
-    cardBtn.onclick = () => {
-      openShareCardModal({
+  // Wire Stream Button (replaced Share Card button on shared landing page)
+  const streamBtn = document.getElementById('shareStreamBtn') || document.getElementById('shareGenerateCardBtn');
+  if (streamBtn) {
+    streamBtn.onclick = () => {
+      openScreeningRoom({
+        id: mediaId || title,
+        tmdbId: mediaId,
         title,
         year,
-        poster,
-        id: mediaId,
         mediaType: mediaType || 'movie',
-        rating: data.rating || '8.5',
+        poster,
         trailerKey: trailer
-      }, {
-        name: torrentName || title,
-        magnet,
-        sizeFormatted: size,
-        qualityBadge: quality,
-        seeders: seeds
-      });
+      }, { type: mediaType || 'movie' });
     };
   }
 
@@ -4923,15 +4959,37 @@ function renderSharedMovieView(data = {}) {
     };
   }
 
-  // Wire Explore Button to Log In Page
+  // Wire Explore Button to Load Full MoodFlix Site & Display Shared Movie/Show Card
   const exploreBtn = document.getElementById('shareExploreBtn');
   if (exploreBtn) {
-    exploreBtn.onclick = () => {
+    exploreBtn.onclick = async () => {
       state.isSharedPage = false;
       try {
         window.history.replaceState({}, document.title, window.location.pathname);
       } catch (e) { }
-      showAuthView();
+
+      // Ensure main movies/feed view is loaded in the background
+      if (!state.movies || state.movies.length === 0) {
+        loadMovies();
+      }
+
+      state.lastFeedTab = 'movies-view';
+      state.previousTab = 'movies-view';
+
+      const mediaObj = {
+        id: mediaId || title,
+        tmdbId: mediaId,
+        title,
+        year,
+        mediaType: mediaType || 'movie',
+        poster,
+        rating: data.rating || '8.5',
+        synopsis: data.synopsis || '',
+        trailerKey: trailer
+      };
+      const effectiveType = mediaType || 'movie';
+
+      openDetailView(mediaObj, effectiveType);
     };
   }
 }
@@ -5772,8 +5830,8 @@ function setupEventListeners() {
   document.getElementById('btnCloseManageListModal')?.addEventListener('click', closeManageListTitlesModal);
 
   // --- Stream Access Restriction (Google Login Gate) Modal ---
-  document.getElementById('btnStreamAuthGoogleLogin')?.addEventListener('click', () => {
-    closeStreamAuthModal();
+  document.getElementById('btnStreamAuthGoogleLogin')?.addEventListener('click', (e) => {
+    e.preventDefault();
     handleGoogleLogin();
   });
   document.getElementById('btnCloseStreamAuthModal')?.addEventListener('click', closeStreamAuthModal);
@@ -5804,11 +5862,11 @@ function setupEventListeners() {
   });
   document.getElementById('screeningSeasonSelect')?.addEventListener('change', (e) => {
     const s = parseInt(e.target.value, 10) || 1;
-    const ep = parseInt(document.getElementById('screeningEpisodeSelect')?.value, 10) || 1;
-    changeScreeningEpisode(s, ep);
+    populateScreeningEpisodeOptions(s, 1);
+    changeScreeningEpisode(s, 1);
   });
   document.getElementById('screeningEpisodeSelect')?.addEventListener('change', (e) => {
-    const s = parseInt(document.getElementById('screeningSeasonSelect')?.value, 10) || 1;
+    const s = parseInt(document.getElementById('screeningSeasonSelect')?.value, 10) || state.currentScreeningSeason || 1;
     const ep = parseInt(e.target.value, 10) || 1;
     changeScreeningEpisode(s, ep);
   });
@@ -7311,7 +7369,7 @@ function openDetailView(m, type, isDiagnostic = false) {
   elements.detailSynopsis.innerText = m.synopsis || 'No synopsis available.';
 
   if (elements.detailStreamBtn) {
-    elements.detailStreamBtn.onclick = () => openScreeningRoom(m, { type: effectiveType });
+    elements.detailStreamBtn.onclick = () => openScreeningRoom(state.currentDetailMedia || m, { type: effectiveType });
   }
   elements.detailTorrentsBtn.onclick = () => openTorrentModal(m, effectiveType, false);
   const detailTrailerId = m.tmdbId || m.tmdb_id || (/^\d+$/.test(String(m.id || '').trim()) ? m.id : null);
@@ -7394,6 +7452,40 @@ async function loadDetailCast(m, type) {
     
     // Check if another movie was opened while this was fetching
     if (state.currentDetailId !== currentId) return;
+
+    if (data?.details) {
+      if (data.details.numberOfSeasons) {
+        m.numberOfSeasons = data.details.numberOfSeasons;
+        m.totalSeasons = data.details.numberOfSeasons;
+      }
+      if (Array.isArray(data.details.seasons) && data.details.seasons.length > 0) {
+        m.seasons = data.details.seasons;
+      }
+      if (state.currentDetailMedia) {
+        if (data.details.numberOfSeasons) {
+          state.currentDetailMedia.numberOfSeasons = data.details.numberOfSeasons;
+          state.currentDetailMedia.totalSeasons = data.details.numberOfSeasons;
+        }
+        if (Array.isArray(data.details.seasons) && data.details.seasons.length > 0) {
+          state.currentDetailMedia.seasons = data.details.seasons;
+        }
+      }
+      if (elements.detailSynopsis && (!m.synopsis || m.synopsis === 'No synopsis available.')) {
+        const enrichedSynopsis = data.details.synopsis || data.details.overview;
+        if (enrichedSynopsis) {
+          elements.detailSynopsis.innerText = enrichedSynopsis;
+          m.synopsis = enrichedSynopsis;
+          if (state.currentDetailMedia) state.currentDetailMedia.synopsis = enrichedSynopsis;
+        }
+      }
+      if (elements.detailMeta && (!m.rating || m.rating === '8.5')) {
+        const score = data.details.vote_average || data.details.rating;
+        if (score) {
+          const vote = score.toFixed ? score.toFixed(1) : score;
+          elements.detailMeta.innerText = `★ ${vote} / 10  •  ${m.year || data.details.year || '2026'}  •  ${mediaType.toUpperCase()}`;
+        }
+      }
+    }
 
     const cast = data?.details?.cast || [];
     const countBadge = document.getElementById('detailCastCount');
@@ -9746,6 +9838,164 @@ function drawRetroCorners(ctx, width, height, inset = 7, len = 7) {
   ctx.restore();
 }
 
+// Film Reel Icon Helper (Matches Top-Left of Archival Pass)
+function drawFilmReelIcon(ctx, x, y, r = 8) {
+  ctx.save();
+  ctx.fillStyle = '#000000';
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Center hole
+  ctx.fillStyle = '#FAF6EF';
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.28, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 6 outer film holes
+  const holeRadius = r * 0.17;
+  const dist = r * 0.62;
+  for (let i = 0; i < 6; i++) {
+    const angle = (i * Math.PI) / 3;
+    const hx = x + Math.cos(angle) * dist;
+    const hy = y + Math.sin(angle) * dist;
+    ctx.beginPath();
+    ctx.arc(hx, hy, holeRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// 4-Point Sparkle Star Helper (Matches Bottom-Right of Reference Pass)
+function drawSparkleStar(ctx, cx, cy, outerR = 6.5, innerR = 1.8, color = '#B83A2A') {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const angle = (i * Math.PI) / 4;
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// Fluid Wave Flourish Helper (Matches Bottom-Left of Reference Pass with squared modern tech corner)
+function drawBottomLeftFlourish(ctx, cardLeft, cardBottom, lineY = null, endX = null, color = '#B83A2A') {
+  if (lineY === null) lineY = cardBottom - 26;
+  if (endX === null) endX = cardLeft + 76;
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(cardLeft, lineY - 24);
+  ctx.quadraticCurveTo(cardLeft + (endX - cardLeft) * 0.45, lineY, endX, lineY);
+  ctx.lineTo(cardLeft, cardBottom);
+  ctx.lineTo(cardLeft, lineY - 24);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// Action Pill Helper (Draws Quality, Stream, and Download Badges with Squared Modern Minimal Tech styling)
+function drawActionPill(ctx, x, y, w, h, bg, border, text, textColor, iconType = null) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.fillStyle = bg;
+  ctx.fill();
+  if (border) {
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = textColor;
+  ctx.font = '800 10px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif';
+  ctx.textBaseline = 'middle';
+
+  const midX = x + w / 2;
+  const midY = y + h / 2;
+
+  if (iconType === 'play') {
+    ctx.textAlign = 'left';
+    const textWidth = ctx.measureText(text).width;
+    const iconW = 8;
+    const gap = 5;
+    const totalW = iconW + gap + textWidth;
+    const startX = x + (w - totalW) / 2;
+
+    ctx.beginPath();
+    ctx.moveTo(startX, midY - 4.5);
+    ctx.lineTo(startX + iconW, midY);
+    ctx.lineTo(startX, midY + 4.5);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillText(text, startX + iconW + gap, midY + 0.5);
+  } else if (iconType === 'download') {
+    ctx.textAlign = 'left';
+    const textWidth = ctx.measureText(text).width;
+    const iconW = 8;
+    const gap = 5;
+    const totalW = iconW + gap + textWidth;
+    const startX = x + (w - totalW) / 2;
+
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = textColor;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    // Arrow shaft
+    ctx.moveTo(startX + 4, midY - 5);
+    ctx.lineTo(startX + 4, midY + 2);
+    // Arrow head
+    ctx.lineTo(startX + 1.5, midY - 0.5);
+    ctx.moveTo(startX + 4, midY + 2);
+    ctx.lineTo(startX + 6.5, midY - 0.5);
+    // Base tray
+    ctx.moveTo(startX + 0.5, midY + 5);
+    ctx.lineTo(startX + 7.5, midY + 5);
+    ctx.stroke();
+
+    ctx.fillText(text, startX + iconW + gap, midY + 0.5);
+  } else {
+    ctx.textAlign = 'center';
+    ctx.fillText(text, midX, midY + 0.5);
+  }
+  ctx.restore();
+}
+
+// Cover image drawer to frame posters accurately
+function drawCoverPosterImage(ctx, img, dx, dy, dw, dh) {
+  if (!img) return;
+  const imgW = img.naturalWidth || img.width;
+  const imgH = img.naturalHeight || img.height;
+  if (!imgW || !imgH) {
+    ctx.drawImage(img, dx, dy, dw, dh);
+    return;
+  }
+  const targetRatio = dw / dh;
+  const imgRatio = imgW / imgH;
+  let sx = 0, sy = 0, sw = imgW, sh = imgH;
+  if (imgRatio > targetRatio) {
+    sw = imgH * targetRatio;
+    sx = (imgW - sw) / 2;
+  } else {
+    sh = imgW / targetRatio;
+    sy = (imgH - sh) * 0.15;
+  }
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(dx, dy, dw, dh);
+  ctx.clip();
+  ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+  ctx.restore();
+}
+
 function renderShareCardToCanvas(canvas, options = {}) {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -9753,16 +10003,13 @@ function renderShareCardToCanvas(canvas, options = {}) {
 
   const format = options.format || 'story';
   const scale = options.scale || 3;
-  const showSpecs = options.showSpecs !== false;
-  const showSoundwave = options.showSoundwave !== false;
 
   const title = (options.title || 'Movie Title').trim();
-  const year = options.year ? String(options.year).trim() : '';
-  const rating = options.rating ? String(options.rating).trim() : '8.5';
-  const mediaType = (options.mediaType || 'movie').toUpperCase();
+  const year = options.year ? String(options.year).trim() : '2026';
+  const rating = options.rating ? String(options.rating).trim() : '7.4';
+  const rawMediaType = (options.mediaType || 'movie').toUpperCase();
+  const mediaType = (rawMediaType === 'TV' || rawMediaType === 'ANIME') ? 'TV' : 'MOVIE';
   const quality = options.quality || (options.torrent && options.torrent.qualityBadge) || '1080P HD';
-  const size = options.size || (options.torrent && (options.torrent.sizeFormatted || options.torrent.size)) || '';
-  const seeds = options.seeds || (options.torrent && options.torrent.seeders) || '';
   const posterImg = options.posterImg || null;
 
   let baseWidth = 360;
@@ -9781,393 +10028,351 @@ function renderShareCardToCanvas(canvas, options = {}) {
   ctx.imageSmoothingQuality = 'high';
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
 
-  // Retro Modern Minimal Paper Background
-  ctx.fillStyle = '#F7F5F0';
+  // 1. Vintage Warm Ivory Paper Tone Background (#FAF6EF)
+  ctx.fillStyle = '#FAF6EF';
   ctx.fillRect(0, 0, baseWidth, baseHeight);
 
-  // Outer brutalist border
-  ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 2.5;
-  ctx.strokeRect(1, 1, baseWidth - 2, baseHeight - 2);
+  // 2. Squared Modern Minimal Tech Card Border (Clean single border, zero curves)
+  const cardInset = 12;
+  const cardW = baseWidth - cardInset * 2;
+  const cardH = baseHeight - cardInset * 2;
+  const cardRadius = 0;
 
-  // Inner architectural hairline frame & corner brackets
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(14, 14, baseWidth - 28, baseHeight - 28);
-  drawRetroCorners(ctx, baseWidth, baseHeight, 7, 7);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(cardInset, cardInset, cardW, cardH);
+  ctx.strokeStyle = '#111111';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+
+  // Technical Minimal Tech Corner Registration Marks
+  drawRetroCorners(ctx, baseWidth, baseHeight, cardInset - 4, 8);
 
   if (format === 'story') {
-    // ---------------- STORY (9:16) ----------------
-    // Top Archival Header
-    ctx.font = '800 8.5px "JetBrains Mono", monospace';
+    // =========================================================================
+    // STORY FORMAT (9:16) - Editorial Archival Pass with Dominant Art
+    // =========================================================================
+
+    // Top Header: Film Reel Icon + Stacked Moodflix Archive
+    const headerY = cardInset + 14;
+    drawFilmReelIcon(ctx, cardInset + 14, headerY + 9, 9);
+
     ctx.fillStyle = '#000000';
     ctx.textAlign = 'left';
-    ctx.fillText('[ MOODFLIX ARCHIVE ]', 20, 32);
+    ctx.font = '900 11.5px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif';
+    ctx.fillText('MOODFLIX', cardInset + 30, headerY + 6);
+    ctx.fillStyle = '#333333';
+    ctx.font = '700 7px "JetBrains Mono", monospace';
+    ctx.fillText('A R C H I V E', cardInset + 30.5, headerY + 16);
+
+    // Top Header: Right Side Curated Pass // 2026
     ctx.textAlign = 'right';
-    ctx.fillText('CURATED PASS // 2026', baseWidth - 20, 32);
+    ctx.fillStyle = '#222222';
+    ctx.font = '700 7.5px "JetBrains Mono", monospace';
+    ctx.fillText('CURATED PASS', baseWidth - cardInset - 14, headerY + 6);
+    ctx.fillText(`// ${year || '2026'}`, baseWidth - cardInset - 14, headerY + 16);
 
-    ctx.beginPath();
-    ctx.moveTo(18, 40);
-    ctx.lineTo(baseWidth - 18, 40);
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Poster Frame with hard brutalist shadow
-    const pW = 210;
-    const pH = 310;
+    // Center Poster: Big, commanding art occupying ~75% width & ~57% height
+    const pW = 268;
+    const pH = 364;
     const pX = (baseWidth - pW) / 2;
-    const pY = 48;
+    const pY = headerY + 28;
 
-    // Hard drop shadow
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(pX + 5, pY + 5, pW, pH);
+    // Graphic Offset Terracotta Blocks (#B83A2A)
+    ctx.fillStyle = '#B83A2A';
+    // Top-left protruding accent block (aligned with inner margin and reel icon)
+    ctx.fillRect(pX - 22, pY + 14, 26, 112);
+    // Bottom-right protruding accent block (extends 30px below poster)
+    ctx.fillRect(pX + pW - 4, pY + pH - 96, 26, 126);
 
+    // Draw Poster Cover Image
     if (posterImg) {
-      ctx.drawImage(posterImg, pX, pY, pW, pH);
+      drawCoverPosterImage(ctx, posterImg, pX, pY, pW, pH);
     } else {
       ctx.fillStyle = '#EAE6DC';
       ctx.fillRect(pX, pY, pW, pH);
-      ctx.fillStyle = '#000000';
+      ctx.fillStyle = '#444444';
       ctx.font = '800 12px "JetBrains Mono", monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('[ NO POSTER PREVIEW ]', baseWidth / 2, pY + pH / 2);
+      ctx.fillText('[ ARCHIVAL POSTER ]', baseWidth / 2, pY + pH / 2);
     }
 
-    // Poster border
+    // Crisp Black Poster Outline
     ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.strokeRect(pX, pY, pW, pH);
 
-    // Title & Info below poster
-    let curY = pY + pH + 28;
-    const titleSize = title.length > 26 ? 16 : (title.length > 18 ? 18 : 20);
-    ctx.font = `800 ${titleSize}px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif`;
-    ctx.fillStyle = '#000000';
+    // Main Title below Poster
+    let curY = pY + pH + 34;
+    const titleLen = title.length;
+    const titleSize = titleLen > 24 ? 19 : (titleLen > 16 ? 22 : 25);
+    ctx.font = `900 ${titleSize}px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif`;
+    ctx.fillStyle = '#111111';
     ctx.textAlign = 'center';
 
     const lines = wrapCanvasText(ctx, title, baseWidth - 44, 2);
     for (const l of lines) {
       ctx.fillText(l, baseWidth / 2, curY);
-      curY += titleSize * 1.25;
+      curY += titleSize * 1.15;
     }
 
-    curY += 2;
-    ctx.font = '700 11px "JetBrains Mono", monospace';
-    ctx.fillStyle = '#222222';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${year || '2026'}  //  ${mediaType}  //  ★ ${rating} / 10`, baseWidth / 2, curY);
+    // Metadata line (2026   /   TV   /   ★  7.4 / 10)
+    curY += 8;
+    ctx.font = '700 11.5px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif';
+    const partYear = `${year || '2026'}`;
+    const partType = `${mediaType}`;
+    const partScore = `${rating} / 10`;
 
-    if (showSpecs) {
-      curY += 12;
-      const specsText = `${quality}${size ? `  •  ${size}` : ''}  •  🌱 ${seeds ? `${seeds} SEEDS` : 'READY'}`;
-      ctx.font = '700 9px "JetBrains Mono", monospace';
-      const m = ctx.measureText(specsText);
-      const pillW = Math.min(baseWidth - 50, m.width + 20);
-      const pillH = 22;
-      const pillX = (baseWidth - pillW) / 2;
-
-      // Brutalist badge with hard shadow
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(pillX + 2, curY + 2, pillW, pillH);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(pillX, curY, pillW, pillH);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(pillX, curY, pillW, pillH);
-
-      ctx.fillStyle = '#000000';
-      ctx.textAlign = 'center';
-      ctx.fillText(specsText, baseWidth / 2, curY + 14.5);
-    }
-
-    if (showSoundwave) {
-      const barY = 534;
-      const barW = 280;
-      const barH = 44;
-      const barX = (baseWidth - barW) / 2;
-
-      // Brutalist audio card container
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(barX + 3, barY + 3, barW, barH);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(barX, barY, barW, barH);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(barX, barY, barW, barH);
-
-      // Play button badge
-      const iconSize = 22;
-      const iconX = barX + 8;
-      const iconY = barY + 11;
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(iconX, iconY, iconSize, iconSize);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.beginPath();
-      ctx.moveTo(iconX + 7, iconY + 5);
-      ctx.lineTo(iconX + iconSize - 5, iconY + iconSize / 2);
-      ctx.lineTo(iconX + 7, iconY + iconSize - 5);
-      ctx.closePath();
-      ctx.fill();
-
-      // Optical waveform bars
-      const barCount = 22;
-      const heights = generateWaveformHeights(title, barCount);
-      const startX = iconX + iconSize + 10;
-      const barWidth = 2.5;
-      const gap = 3;
-      const midY = barY + barH / 2;
-
-      ctx.fillStyle = '#000000';
-      for (let i = 0; i < barCount; i++) {
-        const h = Math.min(barH - 10, Math.max(4, Math.round(heights[i] * 0.85)));
-        const bx = startX + i * (barWidth + gap);
-        const by = midY - h / 2;
-        ctx.fillRect(bx, by, barWidth, h);
-      }
-
-      ctx.font = '800 7px "JetBrains Mono", monospace';
-      ctx.fillStyle = '#000000';
-      ctx.textAlign = 'right';
-      ctx.fillText('SCAN TO STREAM', barX + barW - 10, barY + barH / 2 + 2.5);
-    }
-  } else if (format === 'card') {
-    // ---------------- PORTRAIT CARD (4:5) ----------------
-    // Top Archival Header
-    ctx.font = '800 8px "JetBrains Mono", monospace';
-    ctx.fillStyle = '#000000';
+    const metaParts = [
+      { text: partYear, color: '#111111' },
+      { text: '   /   ', color: '#777777' },
+      { text: partType, color: '#111111' },
+      { text: '   /   ', color: '#777777' },
+      { text: '★ ', color: '#B83A2A' },
+      { text: partScore, color: '#111111' }
+    ];
+    let totalMetaW = 0;
+    metaParts.forEach(p => { totalMetaW += ctx.measureText(p.text).width; });
+    let startMetaX = (baseWidth - totalMetaW) / 2;
     ctx.textAlign = 'left';
-    ctx.fillText('[ MOODFLIX ARCHIVE ]', 20, 24);
-    ctx.textAlign = 'right';
-    ctx.fillText('PASS // 2026', baseWidth - 20, 24);
+    metaParts.forEach(p => {
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, startMetaX, curY);
+      startMetaX += ctx.measureText(p.text).width;
+    });
 
-    ctx.beginPath();
-    ctx.moveTo(18, 30);
-    ctx.lineTo(baseWidth - 18, 30);
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+    // 3 Action Pills: [ 1080P HD ]  [ ▶ STREAM ]  [ ↓ DOWNLOAD ]
+    curY += 24;
+    const pillH = 28;
+    const pill1W = 78;
+    const pill2W = 96;
+    const pill3W = 108;
+    const pillGap = 10;
+    const totalPillsW = pill1W + pill2W + pill3W + (pillGap * 2);
+    const startPillX = (baseWidth - totalPillsW) / 2;
+
+    // Pill 1: Quality (White with black border)
+    drawActionPill(ctx, startPillX, curY, pill1W, pillH, '#FFFFFF', '#000000', quality || '1080P HD', '#000000');
+    // Pill 2: Stream (Terracotta solid #B83A2A with white text & play triangle)
+    drawActionPill(ctx, startPillX + pill1W + pillGap, curY, pill2W, pillH, '#B83A2A', null, 'STREAM', '#FFFFFF', 'play');
+    // Pill 3: Download (White with black border and download icon)
+    drawActionPill(ctx, startPillX + pill1W + pill2W + (pillGap * 2), curY, pill3W, pillH, '#FFFFFF', '#000000', 'DOWNLOAD', '#000000', 'download');
+
+    // Bottom Decorative Flourishes & Continuous Baseline Hairline
+    const cardBottom = baseHeight - cardInset;
+    const lineY = cardBottom - 26;
+    const waveEndX = cardInset + 76;
+    const starX = baseWidth - cardInset - 16;
+
+    // Bottom-Left terracotta wave seamlessly meeting lineY at waveEndX
+    drawBottomLeftFlourish(ctx, cardInset, cardBottom, lineY, waveEndX, '#B83A2A');
+
+    // Continuous baseline hairline from wave tip to star
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.22)';
     ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(waveEndX, lineY);
+    ctx.lineTo(starX - 8, lineY);
     ctx.stroke();
 
-    const pW = 140;
-    const pH = 206;
-    const pX = (baseWidth - pW) / 2;
-    const pY = 38;
+    // Bottom-Right 4-point sparkle star sitting on the baseline
+    drawSparkleStar(ctx, starX, lineY, 6.5, 1.8, '#B83A2A');
+  } else if (format === 'card') {
+    // =========================================================================
+    // PORTRAIT CARD FORMAT (4:5) - Substantial Centerpiece Art
+    // =========================================================================
+    const headerY = cardInset + 12;
+    drawFilmReelIcon(ctx, cardInset + 12, headerY + 8, 8);
 
-    // Hard drop shadow
     ctx.fillStyle = '#000000';
-    ctx.fillRect(pX + 4, pY + 4, pW, pH);
+    ctx.textAlign = 'left';
+    ctx.font = '900 10.5px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif';
+    ctx.fillText('MOODFLIX', cardInset + 26, headerY + 5);
+    ctx.fillStyle = '#333333';
+    ctx.font = '700 6.5px "JetBrains Mono", monospace';
+    ctx.fillText('A R C H I V E', cardInset + 26.5, headerY + 14);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#222222';
+    ctx.font = '700 7px "JetBrains Mono", monospace';
+    ctx.fillText('CURATED PASS', baseWidth - cardInset - 14, headerY + 5);
+    ctx.fillText(`// ${year || '2026'}`, baseWidth - cardInset - 14, headerY + 14);
+
+    const pW = 216;
+    const pH = 258;
+    const pX = (baseWidth - pW) / 2;
+    const pY = headerY + 24;
+
+    // Graphic Offset Terracotta Blocks
+    ctx.fillStyle = '#B83A2A';
+    ctx.fillRect(pX - 18, pY + 10, 22, 80);
+    ctx.fillRect(pX + pW - 4, pY + pH - 80, 22, 100);
 
     if (posterImg) {
-      ctx.drawImage(posterImg, pX, pY, pW, pH);
+      drawCoverPosterImage(ctx, posterImg, pX, pY, pW, pH);
     } else {
       ctx.fillStyle = '#EAE6DC';
       ctx.fillRect(pX, pY, pW, pH);
+      ctx.fillStyle = '#444444';
+      ctx.font = '800 11px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('[ ARCHIVAL POSTER ]', baseWidth / 2, pY + pH / 2);
     }
 
     ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.strokeRect(pX, pY, pW, pH);
 
-    let curY = pY + pH + 20;
-    const titleSize = title.length > 24 ? 14 : 16;
-    ctx.font = `800 ${titleSize}px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif`;
-    ctx.fillStyle = '#000000';
+    let curY = pY + pH + 24;
+    const titleLen = title.length;
+    const titleSize = titleLen > 24 ? 16 : (titleLen > 16 ? 18 : 21);
+    ctx.font = `900 ${titleSize}px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif`;
+    ctx.fillStyle = '#111111';
     ctx.textAlign = 'center';
 
-    const lines = wrapCanvasText(ctx, title, baseWidth - 40, 2);
+    const lines = wrapCanvasText(ctx, title, baseWidth - 44, 2);
     for (const l of lines) {
       ctx.fillText(l, baseWidth / 2, curY);
-      curY += titleSize * 1.25;
+      curY += titleSize * 1.15;
     }
 
-    ctx.font = '700 10px "JetBrains Mono", monospace';
-    ctx.fillStyle = '#222222';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${year || '2026'}  //  ${mediaType}  //  ★ ${rating} / 10`, baseWidth / 2, curY + 2);
+    curY += 6;
+    ctx.font = '700 10.5px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif';
+    const partYear = `${year || '2026'}`;
+    const partType = `${mediaType}`;
+    const partScore = `${rating} / 10`;
+    const metaParts = [
+      { text: partYear, color: '#111111' },
+      { text: '   /   ', color: '#777777' },
+      { text: partType, color: '#111111' },
+      { text: '   /   ', color: '#777777' },
+      { text: '★ ', color: '#B83A2A' },
+      { text: partScore, color: '#111111' }
+    ];
+    let totalMetaW = 0;
+    metaParts.forEach(p => { totalMetaW += ctx.measureText(p.text).width; });
+    let startMetaX = (baseWidth - totalMetaW) / 2;
+    ctx.textAlign = 'left';
+    metaParts.forEach(p => {
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, startMetaX, curY);
+      startMetaX += ctx.measureText(p.text).width;
+    });
 
-    if (showSpecs) {
-      curY += 12;
-      const specsText = `${quality}${size ? `  •  ${size}` : ''}  •  🌱 ${seeds ? `${seeds} SEEDS` : 'READY'}`;
-      ctx.font = '700 8.5px "JetBrains Mono", monospace';
-      const m = ctx.measureText(specsText);
-      const pillW = Math.min(baseWidth - 50, m.width + 16);
-      const pillH = 20;
-      const pillX = (baseWidth - pillW) / 2;
+    curY += 18;
+    const pillH = 24;
+    const pill1W = 68;
+    const pill2W = 84;
+    const pill3W = 94;
+    const pillGap = 8;
+    const totalPillsW = pill1W + pill2W + pill3W + (pillGap * 2);
+    const startPillX = (baseWidth - totalPillsW) / 2;
 
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(pillX + 2, curY + 2, pillW, pillH);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(pillX, curY, pillW, pillH);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(pillX, curY, pillW, pillH);
+    drawActionPill(ctx, startPillX, curY, pill1W, pillH, '#FFFFFF', '#000000', quality || '1080P HD', '#000000');
+    drawActionPill(ctx, startPillX + pill1W + pillGap, curY, pill2W, pillH, '#B83A2A', null, 'STREAM', '#FFFFFF', 'play');
+    drawActionPill(ctx, startPillX + pill1W + pill2W + (pillGap * 2), curY, pill3W, pillH, '#FFFFFF', '#000000', 'DOWNLOAD', '#000000', 'download');
 
-      ctx.fillStyle = '#000000';
-      ctx.textAlign = 'center';
-      ctx.fillText(specsText, baseWidth / 2, curY + 13.5);
-    }
+    const cardBottom = baseHeight - cardInset;
+    const lineY = cardBottom - 18;
+    const waveEndX = cardInset + 68;
+    const starX = baseWidth - cardInset - 14;
 
-    if (showSoundwave) {
-      const barY = 368;
-      const barW = 280;
-      const barH = 38;
-      const barX = (baseWidth - barW) / 2;
-
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(barX + 3, barY + 3, barW, barH);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(barX, barY, barW, barH);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(barX, barY, barW, barH);
-
-      const iconSize = 20;
-      const iconX = barX + 8;
-      const iconY = barY + 9;
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(iconX, iconY, iconSize, iconSize);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.beginPath();
-      ctx.moveTo(iconX + 6, iconY + 5);
-      ctx.lineTo(iconX + iconSize - 5, iconY + iconSize / 2);
-      ctx.lineTo(iconX + 6, iconY + iconSize - 5);
-      ctx.closePath();
-      ctx.fill();
-
-      const barCount = 20;
-      const heights = generateWaveformHeights(title, barCount);
-      const startX = iconX + iconSize + 10;
-      const barWidth = 2.5;
-      const gap = 3;
-      const midY = barY + barH / 2;
-
-      ctx.fillStyle = '#000000';
-      for (let i = 0; i < barCount; i++) {
-        const h = Math.min(barH - 8, Math.max(3, Math.round(heights[i] * 0.75)));
-        const bx = startX + i * (barWidth + gap);
-        const by = midY - h / 2;
-        ctx.fillRect(bx, by, barWidth, h);
-      }
-
-      ctx.font = '800 7px "JetBrains Mono", monospace';
-      ctx.fillStyle = '#000000';
-      ctx.textAlign = 'right';
-      ctx.fillText('SCAN TO STREAM', barX + barW - 10, barY + barH / 2 + 2.5);
-    }
+    drawBottomLeftFlourish(ctx, cardInset, cardBottom, lineY, waveEndX, '#B83A2A');
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.22)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(waveEndX, lineY);
+    ctx.lineTo(starX - 8, lineY);
+    ctx.stroke();
+    drawSparkleStar(ctx, starX, lineY, 5.5, 1.5, '#B83A2A');
   } else {
-    // ---------------- SQUARE (1:1) ----------------
-    // Top Archival Header
-    ctx.font = '800 8px "JetBrains Mono", monospace';
+    // =========================================================================
+    // SQUARE FORMAT (1:1) - Side-by-Side Balanced Pass
+    // =========================================================================
+    const headerY = cardInset + 10;
+    drawFilmReelIcon(ctx, cardInset + 12, headerY + 6, 7.5);
+
     ctx.fillStyle = '#000000';
     ctx.textAlign = 'left';
-    ctx.fillText('[ MOODFLIX ARCHIVE ]', 20, 22);
+    ctx.font = '900 10px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif';
+    ctx.fillText('MOODFLIX', cardInset + 24, headerY + 4);
+    ctx.fillStyle = '#333333';
+    ctx.font = '700 6.5px "JetBrains Mono", monospace';
+    ctx.fillText('A R C H I V E', cardInset + 24.5, headerY + 12);
+
     ctx.textAlign = 'right';
-    ctx.fillText('COLLECTOR PASS', baseWidth - 20, 22);
+    ctx.fillStyle = '#222222';
+    ctx.font = '700 7px "JetBrains Mono", monospace';
+    ctx.fillText('CURATED PASS', baseWidth - cardInset - 12, headerY + 4);
+    ctx.fillText(`// ${year || '2026'}`, baseWidth - cardInset - 12, headerY + 12);
 
-    ctx.beginPath();
-    ctx.moveTo(18, 28);
-    ctx.lineTo(baseWidth - 18, 28);
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    const pW = 144;
+    const pH = 196;
+    const pX = cardInset + 18;
+    const pY = headerY + 20;
 
-    const pW = 116;
-    const pH = 172;
-    const pX = 22;
-    const pY = 36;
-
-    // Hard drop shadow
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(pX + 4, pY + 4, pW, pH);
+    ctx.fillStyle = '#B83A2A';
+    ctx.fillRect(pX - 14, pY + 8, 18, 64);
+    ctx.fillRect(pX + pW - 4, pY + pH - 64, 18, 78);
 
     if (posterImg) {
-      ctx.drawImage(posterImg, pX, pY, pW, pH);
+      drawCoverPosterImage(ctx, posterImg, pX, pY, pW, pH);
     } else {
       ctx.fillStyle = '#EAE6DC';
       ctx.fillRect(pX, pY, pW, pH);
+      ctx.fillStyle = '#444444';
+      ctx.font = '800 10px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('[ ARCHIVAL POSTER ]', pX + pW / 2, pY + pH / 2);
     }
 
     ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.strokeRect(pX, pY, pW, pH);
 
-    const textLeft = 154;
-    let rightY = 48;
-
-    const titleSize = title.length > 20 ? 14 : 16;
-    ctx.font = `800 ${titleSize}px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif`;
-    ctx.fillStyle = '#000000';
+    const textLeft = pX + pW + 18;
+    let rightY = pY + 16;
+    const titleSize = title.length > 20 ? 15 : 18;
+    ctx.font = `900 ${titleSize}px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif`;
+    ctx.fillStyle = '#111111';
     ctx.textAlign = 'left';
-    const lines = wrapCanvasText(ctx, title, baseWidth - textLeft - 22, 2);
+
+    const lines = wrapCanvasText(ctx, title, baseWidth - textLeft - cardInset - 8, 2);
     for (const l of lines) {
       ctx.fillText(l, textLeft, rightY);
-      rightY += titleSize * 1.25;
+      rightY += titleSize * 1.15;
     }
 
-    rightY += 4;
-    ctx.font = '700 10px "JetBrains Mono", monospace';
-    ctx.fillStyle = '#222222';
-    ctx.fillText(`${year || '2026'} // ${mediaType}`, textLeft, rightY);
+    rightY += 8;
+    ctx.font = '700 10px "Plus Jakarta Sans", "Inter", -apple-system, sans-serif';
+    ctx.fillStyle = '#111111';
+    ctx.fillText(`${year || '2026'}   /   ${mediaType}`, textLeft, rightY);
 
     rightY += 16;
-    ctx.font = '800 11px "JetBrains Mono", monospace';
-    ctx.fillStyle = '#000000';
-    ctx.fillText(`★ ${rating} / 10`, textLeft, rightY);
+    ctx.fillStyle = '#B83A2A';
+    ctx.fillText('★ ', textLeft, rightY);
+    ctx.fillStyle = '#111111';
+    ctx.fillText(`${rating} / 10`, textLeft + 14, rightY);
 
-    if (showSpecs) {
-      rightY += 16;
-      ctx.font = '700 8.5px "JetBrains Mono", monospace';
-      ctx.fillStyle = '#000000';
-      ctx.fillText(`[ ${quality} ]  [ 🌱 ${seeds ? `${seeds} Seeds` : 'Ready'} ]`, textLeft, rightY);
-    }
+    rightY += 22;
+    const pillH = 24;
+    drawActionPill(ctx, textLeft, rightY, 74, pillH, '#B83A2A', null, 'STREAM', '#FFFFFF', 'play');
+    drawActionPill(ctx, textLeft + 80, rightY, 86, pillH, '#FFFFFF', '#000000', 'DOWNLOAD', '#000000', 'download');
 
-    if (showSoundwave) {
-      const barY = 244;
-      const barW = 316;
-      const barH = 44;
-      const barX = (baseWidth - barW) / 2;
+    const cardBottom = baseHeight - cardInset;
+    const lineY = cardBottom - 16;
+    const waveEndX = cardInset + 64;
+    const starX = baseWidth - cardInset - 12;
 
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(barX + 3, barY + 3, barW, barH);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(barX, barY, barW, barH);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(barX, barY, barW, barH);
-
-      const iconSize = 22;
-      const iconX = barX + 8;
-      const iconY = barY + 11;
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(iconX, iconY, iconSize, iconSize);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.beginPath();
-      ctx.moveTo(iconX + 7, iconY + 5);
-      ctx.lineTo(iconX + iconSize - 5, iconY + iconSize / 2);
-      ctx.lineTo(iconX + 7, iconY + iconSize - 5);
-      ctx.closePath();
-      ctx.fill();
-
-      const barCount = 26;
-      const heights = generateWaveformHeights(title, barCount);
-      const startX = iconX + iconSize + 10;
-      const barWidth = 2.5;
-      const gap = 3;
-      const midY = barY + barH / 2;
-
-      ctx.fillStyle = '#000000';
-      for (let i = 0; i < barCount; i++) {
-        const h = Math.min(barH - 10, Math.max(4, Math.round(heights[i] * 0.85)));
-        const bx = startX + i * (barWidth + gap);
-        const by = midY - h / 2;
-        ctx.fillRect(bx, by, barWidth, h);
-      }
-
-      ctx.font = '800 7.5px "JetBrains Mono", monospace';
-      ctx.fillStyle = '#000000';
-      ctx.textAlign = 'right';
-      ctx.fillText('MOODFLIX AUDIO CODE', barX + barW - 10, barY + barH / 2 + 2.5);
-    }
+    drawBottomLeftFlourish(ctx, cardInset, cardBottom, lineY, waveEndX, '#B83A2A');
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.22)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(waveEndX, lineY);
+    ctx.lineTo(starX - 8, lineY);
+    ctx.stroke();
+    drawSparkleStar(ctx, starX, lineY, 5, 1.5, '#B83A2A');
   }
 
   ctx.restore();
@@ -10177,24 +10382,11 @@ async function refreshShareCardCanvas() {
   const canvas = document.getElementById('shareCardCanvas');
   if (!canvas || !state.currentShareData) return;
 
-  const dimText = document.getElementById('shareCardDimText');
-  const resText = document.getElementById('shareCardResText');
-
   const scale = 3; // Always render in high resolution (3X Ultra HD)
   state.shareCardScale = 3;
   const format = state.shareCardFormat || 'story';
   const showSpecs = state.shareCardShowSpecs !== false;
   const showSoundwave = state.shareCardShowSoundwave !== false;
-
-  let baseW = 360, baseH = 640;
-  if (format === 'card') { baseW = 360; baseH = 450; }
-  else if (format === 'square') { baseW = 360; baseH = 360; }
-
-  const physW = baseW * scale;
-  const physH = baseH * scale;
-
-  if (dimText) dimText.innerText = `${physW} × ${physH} PX`;
-  if (resText) resText.innerText = '3X ULTRA HD';
 
   renderShareCardToCanvas(canvas, {
     ...state.currentShareData,

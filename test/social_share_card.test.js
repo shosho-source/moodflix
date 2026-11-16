@@ -154,7 +154,7 @@ describe('Spotify-Style Dynamic Social Share Card & Open Graph Suite', () => {
     assert.ok(indexHtml.includes('id="btnCopyShareCardImage"'), 'Copy image button exists');
     assert.ok(indexHtml.includes('id="btnCopyShareCardLink"'), 'Copy link button exists');
     assert.ok(indexHtml.includes('id="btnNativeShare"'), 'Native share button exists');
-    assert.ok(indexHtml.includes('id="shareGenerateCardBtn"'), 'Shared view includes share card generator button');
+    assert.ok(indexHtml.includes('id="shareStreamBtn"'), 'Shared view includes stream button replacing share card button');
   });
 
   it('CSS defines polished retro-brutalist styling for share card studio and WhatsApp button', () => {
@@ -222,6 +222,62 @@ describe('Spotify-Style Dynamic Social Share Card & Open Graph Suite', () => {
     assert.deepStrictEqual(wave1, wave2, 'Same title produces exact identical deterministic waveform');
     assert.notDeepStrictEqual(wave1, wave3, 'Different title produces distinct waveform');
     assert.ok(wave1.every(h => h >= 6 && h <= 26), 'All bar heights within expected range 6px to 26px');
+  });
+
+  it('Renders curated archival pass share card matching reference image without scanning barcode', () => {
+    // 1. Removes the scanning barcode and "SCAN TO STREAM" text
+    assert.ok(!appJs.includes('SCAN TO STREAM'), 'SCAN TO STREAM text completely removed');
+    assert.ok(!appJs.includes('MOODFLIX AUDIO CODE'), 'MOODFLIX AUDIO CODE completely removed');
+
+    // 2. Defines editorial components from reference design
+    assert.ok(appJs.includes('function drawFilmReelIcon'), 'defines drawFilmReelIcon helper');
+    assert.ok(appJs.includes('function drawSparkleStar'), 'defines drawSparkleStar helper');
+    assert.ok(appJs.includes('function drawBottomLeftFlourish'), 'defines drawBottomLeftFlourish helper');
+    assert.ok(appJs.includes('function drawActionPill'), 'defines drawActionPill helper');
+    assert.ok(appJs.includes('function drawCoverPosterImage'), 'defines drawCoverPosterImage helper');
+
+    // 3. Verifies terracotta and cream color palette
+    assert.ok(appJs.includes('#B83A2A'), 'uses terracotta accent #B83A2A');
+    assert.ok(appJs.includes('#FAF6EF'), 'uses vintage archival paper tone #FAF6EF');
+
+    // 4. Verifies 3 action pills (1080P HD, STREAM, DOWNLOAD)
+    assert.ok(appJs.includes("'STREAM'"), 'includes STREAM action pill');
+    assert.ok(appJs.includes("'DOWNLOAD'"), 'includes DOWNLOAD action pill');
+    assert.ok(appJs.includes("'CURATED PASS'"), 'includes CURATED PASS header');
+  });
+
+  it('Generates enlarged art and proper alignments across formats', () => {
+    // 1. Enlarged poster dimensions (commanding presence)
+    assert.ok(appJs.includes('const pW = 268;'), 'Story format uses enlarged 268px poster width');
+    assert.ok(appJs.includes('const pH = 364;'), 'Story format uses enlarged 364px poster height');
+    assert.ok(appJs.includes('const pW = 216;'), 'Card format uses enlarged 216px poster width');
+    assert.ok(appJs.includes('const pH = 258;'), 'Card format uses enlarged 258px poster height');
+
+    // 2. Terracotta block offsets (TL protruding left, BR protruding right and below poster)
+    assert.ok(appJs.includes('ctx.fillRect(pX - 22, pY + 14, 26, 112);'), 'TL block protrudes left');
+    assert.ok(appJs.includes('ctx.fillRect(pX + pW - 4, pY + pH - 96, 26, 126);'), 'BR block protrudes right and extends below poster');
+
+    // 3. Proper rating spacing with space after star
+    assert.ok(appJs.includes("{ text: '★ ', color: '#B83A2A' }"), 'Star has clean trailing space before score');
+
+    // 4. Continuous baseline hairline and wave connection
+    assert.ok(appJs.includes('const waveEndX = cardInset + 76;'), 'Calculates wave transition point');
+    assert.ok(appJs.includes('ctx.moveTo(waveEndX, lineY);'), 'Hairline connects directly from wave tip');
+    assert.ok(appJs.includes('drawSparkleStar(ctx, starX, lineY'), 'Star sits on baseline hairline');
+
+    // 5. Action pills with substantial touch height
+    assert.ok(appJs.includes('const pillH = 28;'), 'Story format uses 28px substantial pill height');
+  });
+
+  it('Shared landing page wires stream button and explore button loads site with shared card', () => {
+    // 1. Stream button replaces share card button in shared view
+    assert.ok(appJs.includes("const streamBtn = document.getElementById('shareStreamBtn')"), 'Wires shareStreamBtn');
+    assert.ok(appJs.includes('openScreeningRoom({'), 'Stream button opens screening room');
+
+    // 2. Explore button loads site and displays shared movie/show card in detail view
+    assert.ok(appJs.includes('openDetailView(mediaObj, effectiveType)'), 'Explore button opens shared title detail card');
+    assert.ok(appJs.includes('state.isSharedPage = false;'), 'Explore button exits shared page mode');
+    assert.ok(appJs.includes("state.lastFeedTab = 'movies-view';"), 'Explore button resets feed tab navigation');
   });
 });
 

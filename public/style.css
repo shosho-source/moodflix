@@ -12693,11 +12693,11 @@ select option {
   display: flex !important;
   justify-content: center !important;
   align-items: center !important;
-  background: #EAE5D8 !important;
-  padding: 16px !important;
-  border: 2px solid #000000 !important;
-  box-shadow: 4px 4px 0px #000000 !important;
-  overflow: hidden !important;
+  background: transparent !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
 }
 
 .share-card-canvas {
@@ -12949,7 +12949,9 @@ select option {
 
   .share-card-canvas-container {
     max-width: 260px !important;
-    padding: 12px !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
   }
 
   .share-card-actions-grid {
